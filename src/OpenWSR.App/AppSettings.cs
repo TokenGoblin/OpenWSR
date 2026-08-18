@@ -12,6 +12,13 @@ public sealed class AppSettings
     /// <summary>Contact info appended to the User-Agent — api.weather.gov requires it.</summary>
     public string Contact { get; set; } = "";
 
+    /// <summary>Home location for proximity alerts; null until the user sets one.</summary>
+    public double? HomeLatDeg { get; set; }
+    public double? HomeLonDeg { get; set; }
+
+    /// <summary>Alert when a storm track or warning comes within this range of home.</summary>
+    public double AlertRadiusKm { get; set; } = 40;
+
     public string UserAgent =>
         string.IsNullOrWhiteSpace(Contact) ? "OpenWSR/0.1" : $"OpenWSR/0.1 ({Contact})";
 

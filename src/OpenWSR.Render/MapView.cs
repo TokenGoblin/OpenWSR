@@ -36,6 +36,15 @@ public sealed class MapView : IDisposable
     public double FramesPerSecond { get; private set; }
     public double LastSweepUploadMs { get; private set; }
 
+    private volatile float _radarOpacity = 0.85f;
+
+    /// <summary>Radar layer opacity, 0–1. Written from the UI thread, read per frame.</summary>
+    public float RadarOpacity
+    {
+        get => _radarOpacity;
+        set => _radarOpacity = Math.Clamp(value, 0f, 1f);
+    }
+
     /// <summary>Raised on the UI thread with the virtual-key code of keys pressed over the map.</summary>
     public event Action<int>? KeyPressed;
 
@@ -268,6 +277,7 @@ public sealed class MapView : IDisposable
                     _sweepClearRequested = false;
                 }
             }
+            radar.Opacity = _radarOpacity;
             radar.Draw(cam);
             LastSweepUploadMs = radar.LastUploadMs;
 

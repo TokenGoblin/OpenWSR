@@ -25,8 +25,16 @@ the same GPU scene as the basemap, in its native polar geometry.
 - **Warnings** — live NWS polygons (tornado red / severe yellow / flash-flood
   green), click for full text.
 - **Storm products** — Level III NST/NHI/NMD overlays: SCIT storm tracks with
-  forecast positions, hail markers sized by severe-hail probability, mesocyclone
-  circles at detected radius. Decoder verified against MetPy.
+  forecast positions and direction arrows, hail markers sized by severe-hail
+  probability, mesocyclone circles at detected radius. Click any cell for details
+  (motion, hail probabilities, meso, closest approach to home). Decoder verified
+  against MetPy.
+- **Layers panel** — radar opacity, per-type warning filters (tornado / severe /
+  flash flood / other), storm-layer filters (past/forecast track, hail, meso,
+  minimum severe-hail probability).
+- **Proximity alerts** — set a home location and radius; OpenWSR alerts (toast +
+  sound) when a storm's forecast track will pass within range (with ETA and cell
+  attributes) or when a warning polygon includes or nears your area.
 - **Multi-pane** — 1/2/4 panes with linked or independent pan/zoom; secondary
   panes default to velocity / ZDR / RhoHV with per-pane product switching.
 - **Tools** — hover inspector (value, azimuth, ranges, beam height), right-drag
@@ -58,7 +66,9 @@ per-sweep stats; `--soak <SITE> <minutes>` runs the live pipeline headless.
 | `↑` / `↓` | Elevation tilt up/down |
 | Hover | Inspector readout in the status bar |
 | Right-drag | Distance/bearing measure |
+| Click a storm marker | Cell details (motion, hail, meso, approach to home) |
 | Click a warning | Detail popup |
+| 📍 Set home on map | Arm proximity alerts at the chosen radius |
 
 ## Layout
 
@@ -70,7 +80,7 @@ src/OpenWSR.Ingest     S3 archive/chunk clients, caches, NWS alerts, site table
 src/OpenWSR.Palettes   Color tables + GR2Analyst .pal import
 src/OpenWSR.App        WPF shell
 src/OpenWSR.Harness    Console decoder harness + live soak
-tests/                 Golden-file, replay, geo, palette, Level III tests (47)
+tests/                 Golden-file, replay, geo, palette, Level III, threat tests (52)
 ```
 
 `OpenWSR-build-plan.md` is the phase-gated implementation brief; `TASKS.md` tracks

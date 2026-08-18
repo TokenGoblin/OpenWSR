@@ -100,6 +100,38 @@ public static class GeoMath
         return inside;
     }
 
+    /// <summary>
+    /// Closest approach of a timed path to a point. Path vertices are
+    /// <paramref name="minutesPerSegment"/> apart (index 0 = now); segments are sampled
+    /// per minute. Returns distance and the minutes until that closest sample.
+    /// </summary>
+    public static (double DistanceKm, double EtaMinutes)? ClosestApproachToPath(
+        IReadOnlyList<(double LatDeg, double LonDeg)> path,
+        double latDeg, double lonDeg, double minutesPerSegment = 15)
+    {
+        if (path.Count == 0) return null;
+        double bestKm = DistanceM(latDeg, lonDeg, path[0].LatDeg, path[0].LonDeg) / 1000.0;
+        double bestMinutes = 0;
+        int steps = Math.Max(1, (int)Math.Round(minutesPerSegment));
+        for (int seg = 1; seg < path.Count; seg++)
+        {
+            var (aLat, aLon) = path[seg - 1];
+            var (bLat, bLon) = path[seg];
+            for (int step = 1; step <= steps; step++)
+            {
+                double t = (double)step / steps;
+                double d = DistanceM(latDeg, lonDeg,
+                    aLat + (bLat - aLat) * t, aLon + (bLon - aLon) * t) / 1000.0;
+                if (d < bestKm)
+                {
+                    bestKm = d;
+                    bestMinutes = (seg - 1) * minutesPerSegment + step * minutesPerSegment / steps;
+                }
+            }
+        }
+        return (bestKm, bestMinutes);
+    }
+
     private static double NormalizeLonDeg(double lonDeg)
     {
         lonDeg %= 360.0;

@@ -26,7 +26,17 @@ public sealed class WarningsController : IDisposable
     /// <summary>Geometry for the currently active warnings; merged by the overlay composer.</summary>
     public OverlayGeometry? Geometry { get; private set; }
 
+    /// <summary>The active alert set (post type-filter); feeds the threat monitor.</summary>
+    public IReadOnlyList<ActiveAlert> ActiveAlerts { get; private set; } = [];
+
+    // ---- layer filters; Rebuild() applies without refetching ----
+    public bool ShowTornado { get; set; } = true;
+    public bool ShowSevereThunderstorm { get; set; } = true;
+    public bool ShowFlashFlood { get; set; } = true;
+    public bool ShowOther { get; set; } = true;
+
     public event Action? GeometryChanged;
+    public event Action<IReadOnlyList<ActiveAlert>>? AlertsUpdated;
     public event Action<string>? StatusChanged;
 
     public WarningsController(MapView mapView, FrameworkElement popupAnchor, string userAgent)
@@ -38,7 +48,22 @@ public sealed class WarningsController : IDisposable
         _timer.Tick += async (_, _) => await RefreshAsync();
         _timer.Start();
         _ = RefreshAsync();
-        mapView.Clicked += OnMapClicked;
+    }
+
+    private bool PassesFilter(ActiveAlert alert) => alert.Event switch
+    {
+        "Tornado Warning" => ShowTornado,
+        "Severe Thunderstorm Warning" => ShowSevereThunderstorm,
+        "Flash Flood Warning" => ShowFlashFlood,
+        _ => ShowOther,
+    };
+
+    /// <summary>Re-render the layer from the cached alert set after a filter change.</summary>
+    public void Rebuild()
+    {
+        BuildGeometry();
+        GeometryChanged?.Invoke();
+        AlertsUpdated?.Invoke(ActiveAlerts);
     }
 
     private static (byte R, byte G, byte B) ColorFor(string eventName) => eventName switch
@@ -62,8 +87,17 @@ public sealed class WarningsController : IDisposable
             return;
         }
 
+        BuildGeometry();
+        GeometryChanged?.Invoke();
+        AlertsUpdated?.Invoke(ActiveAlerts);
+        StatusChanged?.Invoke($"{ActiveAlerts.Count} active warning polygon(s)");
+    }
+
+    private void BuildGeometry()
+    {
+        ActiveAlerts = [.. _alerts.Where(PassesFilter)];
         var geometry = new OverlayGeometry();
-        foreach (var alert in _alerts)
+        foreach (var alert in ActiveAlerts)
         {
             var (r, g, b) = ColorFor(alert.Event);
             uint fill = OverlayGeometry.Pack(r, g, b, 45);
@@ -79,18 +113,19 @@ public sealed class WarningsController : IDisposable
             }
         }
         Geometry = geometry;
-        GeometryChanged?.Invoke();
-        StatusChanged?.Invoke($"{_alerts.Count} active warning polygon(s)");
     }
 
-    private void OnMapClicked(int x, int y)
+    /// <summary>Show the detail popup when the click lands in a warning polygon.</summary>
+    public bool HandleClick(int x, int y)
     {
         var (lat, lon) = _mapView.ScreenToLatLon(x, y);
-        var hit = _alerts.FirstOrDefault(a => a.Polygons.Any(ring => GeoMath.PointInRing(lat, lon, ring)));
+        var hit = ActiveAlerts.FirstOrDefault(a =>
+            a.Polygons.Any(ring => GeoMath.PointInRing(lat, lon, ring)));
         _openPopup?.IsOpen = false;
         _openPopup = null;
-        if (hit is null) return;
+        if (hit is null) return false;
         ShowDetailPopup(hit, x, y);
+        return true;
     }
 
     private void ShowDetailPopup(ActiveAlert alert, int x, int y)

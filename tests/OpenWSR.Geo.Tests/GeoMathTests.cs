@@ -130,6 +130,57 @@ public class PointInRingTests
     }
 }
 
+public class ClosestApproachTests
+{
+    // A storm at OKC moving due east at ~0.25°/15 min (~23 km per step).
+    private static readonly (double, double)[] EastboundPath =
+    [
+        (35.5, -98.0), (35.5, -97.75), (35.5, -97.5), (35.5, -97.25), (35.5, -97.0),
+    ];
+
+    [Fact]
+    public void PointOnPathHitsWithInterpolatedEta()
+    {
+        // Home sits exactly halfway through the second segment: 15 + 7.5 = 22.5 min in.
+        var result = GeoMath.ClosestApproachToPath(EastboundPath, 35.5, -97.625);
+        Assert.NotNull(result);
+        Assert.True(result.Value.DistanceKm < 1.0, $"distance {result.Value.DistanceKm}");
+        Assert.InRange(result.Value.EtaMinutes, 21, 24);
+    }
+
+    [Fact]
+    public void PointAbeamOfPathReportsPerpendicularDistance()
+    {
+        // Home 0.5° south of the track (~55.5 km) — never closer than that.
+        var result = GeoMath.ClosestApproachToPath(EastboundPath, 35.0, -97.5);
+        Assert.NotNull(result);
+        Assert.InRange(result.Value.DistanceKm, 54, 57);
+    }
+
+    [Fact]
+    public void PointBehindStormIsClosestNow()
+    {
+        // Home west of the current position: the storm only moves away.
+        var result = GeoMath.ClosestApproachToPath(EastboundPath, 35.5, -98.3);
+        Assert.NotNull(result);
+        Assert.Equal(0, result.Value.EtaMinutes);
+        Assert.InRange(result.Value.DistanceKm, 26, 29); // 0.3° lon at 35.5N
+    }
+
+    [Fact]
+    public void SinglePointPathStillAnswers()
+    {
+        var result = GeoMath.ClosestApproachToPath([(35.5, -98.0)], 35.5, -98.0);
+        Assert.NotNull(result);
+        Assert.Equal(0, result.Value.DistanceKm, 3);
+        Assert.Equal(0, result.Value.EtaMinutes);
+    }
+
+    [Fact]
+    public void EmptyPathReturnsNull() =>
+        Assert.Null(GeoMath.ClosestApproachToPath([], 35.5, -98.0));
+}
+
 public class MercatorTests
 {
     [Fact]

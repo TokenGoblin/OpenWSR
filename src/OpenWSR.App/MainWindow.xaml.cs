@@ -21,15 +21,21 @@ public partial class MainWindow : Window
     private WarningsController? _warnings;
     private InspectorTools? _inspector;
     private readonly StormOverlayController _storms = new();
+    private readonly ThreatMonitor _threats = new();
     private PaneManager? _panes;
+    private AppSettings? _settings;
     private OverlayGeometry? _measureGeometry;
+    private OverlayGeometry? _homeGeometry;
     private bool _suppressSliderEvents;
+    private bool _settingHome;
+    private Popup? _stormPopup;
+    private Popup? _toast;
 
     public MainWindow()
     {
         InitializeComponent();
 
-        var settings = AppSettings.Load();
+        var settings = _settings = AppSettings.Load();
         var provider = settings.TileProvider == "maptiler" && !string.IsNullOrEmpty(settings.MapTilerKey)
             ? TileProvider.MapTiler(settings.MapTilerKey, settings.UserAgent)
             : TileProvider.Osm(settings.UserAgent);
@@ -75,6 +81,18 @@ public partial class MainWindow : Window
 
         _storms.GeometryChanged += () => Dispatcher.BeginInvoke(ComposeOverlay);
         _storms.StatusChanged += text => Dispatcher.BeginInvoke(() => StatusText.Text = text);
+        _storms.StormsUpdated += storms => Dispatcher.BeginInvoke(() => _threats.EvaluateStorms(storms));
+        _warnings!.AlertsUpdated += alerts => Dispatcher.BeginInvoke(() => _threats.EvaluateWarnings(alerts));
+        _threats.ThreatDetected += threat => Dispatcher.BeginInvoke(() => OnThreat(threat));
+        _mapView.Clicked += RouteMapClick;
+
+        _threats.Configure(settings.HomeLatDeg, settings.HomeLonDeg, settings.AlertRadiusKm);
+        RadiusCombo.SelectedIndex = settings.AlertRadiusKm switch
+        {
+            <= 15 => 0, <= 40 => 1, <= 80 => 2, _ => 3,
+        };
+        RebuildHomeGeometry();
+        UpdateHomeLabels();
 
         _inspector = new InspectorTools(_mapView, _radar);
         _inspector.InspectorChanged += text => Dispatcher.BeginInvoke(() => InspectorText.Text = text);
@@ -228,7 +246,7 @@ public partial class MainWindow : Window
     /// <summary>Merge warning polygons, storm features, and the measure line into one overlay.</summary>
     private void ComposeOverlay()
     {
-        OverlayGeometry?[] sources = [_warnings?.Geometry, _storms.Geometry, _measureGeometry];
+        OverlayGeometry?[] sources = [_warnings?.Geometry, _storms.Geometry, _homeGeometry, _measureGeometry];
         var active = sources.Where(s => s is not null).Cast<OverlayGeometry>().ToArray();
         switch (active.Length)
         {
@@ -257,6 +275,246 @@ public partial class MainWindow : Window
     }
 
     private void StormsToggle_Unchecked(object sender, RoutedEventArgs e) => _storms.Disable();
+
+    // ---- click routing: set-home > storm details > warning details ----
+
+    private void RouteMapClick(int x, int y)
+    {
+        _stormPopup?.IsOpen = false;
+        _stormPopup = null;
+
+        var (lat, lon) = _mapView.ScreenToLatLon(x, y);
+        if (_settingHome)
+        {
+            _settingHome = false;
+            SetHomeButton.Content = "📍 Set home on map";
+            _settings!.HomeLatDeg = lat;
+            _settings.HomeLonDeg = lon;
+            _settings.Save();
+            _threats.Configure(lat, lon, _settings.AlertRadiusKm);
+            RebuildHomeGeometry();
+            UpdateHomeLabels();
+            ComposeOverlay();
+            StatusText.Text = $"Home set to {lat:F3}, {lon:F3} — proximity alerts armed.";
+            return;
+        }
+
+        if (_storms.HitTest(lat, lon) is { } storm)
+        {
+            ShowStormPopup(storm, x, y);
+            return;
+        }
+
+        _warnings?.HandleClick(x, y);
+    }
+
+    private void ShowStormPopup(TrackedStorm storm, int x, int y)
+    {
+        var lines = new List<string>
+        {
+            $"Moving {ThreatMonitor.CompassPoint(storm.BearingDeg)} ({storm.BearingDeg:F0}°) at {storm.SpeedKmh:F0} km/h",
+        };
+        if (storm.ProbabilityOfHail > 0)
+            lines.Add($"Hail {storm.ProbabilityOfHail}% · severe {Math.Max(0, storm.ProbabilityOfSevereHail)}%" +
+                      (storm.MaxHailSizeInches > 0 ? $" · max {storm.MaxHailSizeInches}\"" : ""));
+        if (storm.MesoRadiusKm is { } mesoRadius)
+            lines.Add($"MESOCYCLONE — radius {mesoRadius:F1} km");
+        if (_threats.IsArmed &&
+            ThreatMonitor.ClosestApproach(storm, _threats.HomeLatDeg!.Value, _threats.HomeLonDeg!.Value)
+                is { } approach)
+            lines.Add(approach.DistanceKm <= _threats.RadiusKm
+                ? $"⚠ Passes {approach.DistanceKm:F0} km from home in ~{approach.EtaMinutes:F0} min"
+                : $"Closest approach to home: {approach.DistanceKm:F0} km");
+
+        var panel = new StackPanel { MaxWidth = 340, Margin = new Thickness(10) };
+        panel.Children.Add(new TextBlock
+        {
+            Text = $"Storm {storm.Id}",
+            FontWeight = FontWeights.Bold,
+            Foreground = System.Windows.Media.Brushes.White,
+        });
+        foreach (var line in lines)
+            panel.Children.Add(new TextBlock
+            {
+                Text = line,
+                Foreground = System.Windows.Media.Brushes.Gainsboro,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 3, 0, 0),
+            });
+
+        _stormPopup = new Popup
+        {
+            PlacementTarget = MapHost,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Relative,
+            HorizontalOffset = x + 12,
+            VerticalOffset = y + 12,
+            StaysOpen = false,
+            AllowsTransparency = true,
+            Child = new Border
+            {
+                Background = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromArgb(240, 26, 28, 33)),
+                BorderBrush = System.Windows.Media.Brushes.WhiteSmoke,
+                BorderThickness = new Thickness(1.5),
+                CornerRadius = new CornerRadius(4),
+                Child = panel,
+            },
+            IsOpen = true,
+        };
+    }
+
+    // ---- home area + proximity alerts ----
+
+    private void RebuildHomeGeometry()
+    {
+        if (_settings?.HomeLatDeg is not { } lat || _settings.HomeLonDeg is not { } lon)
+        {
+            _homeGeometry = null;
+            return;
+        }
+        var geometry = new OverlayGeometry();
+        var centre = GeoMath.ToMercator(lat, lon);
+        uint color = OverlayGeometry.Pack(80, 200, 255, 235);
+        // Radius ring drawn in true kilometers; Mercator inflates by 1/cos(lat).
+        double mercatorRadius = _settings.AlertRadiusKm * 1000.0 / Math.Cos(lat * Math.PI / 180.0);
+        StormOverlayController.AddCircle(geometry, (centre.X, centre.Y), mercatorRadius, color, 2f);
+        double s = 700;
+        geometry.FillTriangles.Add((centre.X - s, centre.Y - s, color));
+        geometry.FillTriangles.Add((centre.X, centre.Y + s, color));
+        geometry.FillTriangles.Add((centre.X + s, centre.Y - s, color));
+        _homeGeometry = geometry;
+    }
+
+    private void UpdateHomeLabels()
+    {
+        if (_settings?.HomeLatDeg is { } lat && _settings.HomeLonDeg is { } lon)
+        {
+            HomeLabel.Text = $"Home: {lat:F3}, {lon:F3}";
+            AlertArmedLabel.Text =
+                $"Alerts armed ({_settings.AlertRadiusKm:F0} km). Warning alerts are always on; " +
+                "enable ⛈ Storms for track alerts.";
+        }
+        else
+        {
+            HomeLabel.Text = "Home: not set";
+            AlertArmedLabel.Text = "Set a home location to arm proximity alerts.";
+        }
+    }
+
+    private void OnThreat(Threat threat)
+    {
+        System.Media.SystemSounds.Exclamation.Play();
+        StatusText.Text = $"⚠ {threat.Title}";
+
+        _toast?.IsOpen = false;
+        var panel = new StackPanel { MaxWidth = 360, Margin = new Thickness(12) };
+        panel.Children.Add(new TextBlock
+        {
+            Text = $"⚠ {threat.Title}",
+            FontWeight = FontWeights.Bold,
+            FontSize = 14,
+            Foreground = threat.IsTornado
+                ? System.Windows.Media.Brushes.OrangeRed
+                : System.Windows.Media.Brushes.Gold,
+            TextWrapping = TextWrapping.Wrap,
+        });
+        panel.Children.Add(new TextBlock
+        {
+            Text = threat.Detail,
+            Foreground = System.Windows.Media.Brushes.Gainsboro,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 4, 0, 0),
+        });
+
+        var toast = new Popup
+        {
+            PlacementTarget = MapHost,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.Relative,
+            HorizontalOffset = Math.Max(8, MapHost.ActualWidth - 392),
+            VerticalOffset = Math.Max(8, MapHost.ActualHeight - 130),
+            StaysOpen = true,
+            AllowsTransparency = true,
+            Child = new Border
+            {
+                Background = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromArgb(245, 33, 26, 26)),
+                BorderBrush = threat.IsTornado
+                    ? System.Windows.Media.Brushes.OrangeRed
+                    : System.Windows.Media.Brushes.Gold,
+                BorderThickness = new Thickness(2),
+                CornerRadius = new CornerRadius(6),
+                Child = panel,
+            },
+            IsOpen = true,
+        };
+        _toast = toast;
+        var closeTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
+        closeTimer.Tick += (_, _) =>
+        {
+            closeTimer.Stop();
+            toast.IsOpen = false;
+            if (ReferenceEquals(_toast, toast)) _toast = null;
+        };
+        closeTimer.Start();
+    }
+
+    // ---- layers panel handlers ----
+
+    private void OpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_mapView is not null)
+            _mapView.RadarOpacity = (float)(e.NewValue / 100.0);
+    }
+
+    private void WarningFilter_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_warnings is null) return;
+        _warnings.ShowTornado = FilterTornado.IsChecked == true;
+        _warnings.ShowSevereThunderstorm = FilterSevere.IsChecked == true;
+        _warnings.ShowFlashFlood = FilterFlood.IsChecked == true;
+        _warnings.ShowOther = FilterOtherWarn.IsChecked == true;
+        _warnings.Rebuild();
+    }
+
+    private void StormFilter_Changed(object sender, RoutedEventArgs e) => ApplyStormFilters();
+
+    private void StormFilter_SliderChanged(object sender, RoutedPropertyChangedEventArgs<double> e) =>
+        ApplyStormFilters();
+
+    private void ApplyStormFilters()
+    {
+        // Fires during XAML parse; later-declared controls may not exist yet.
+        if (_storms is null || FilterPastTrack is null || FilterForecastTrack is null ||
+            FilterHail is null || FilterMeso is null || PoshSlider is null) return;
+        _storms.ShowPastTrack = FilterPastTrack.IsChecked == true;
+        _storms.ShowForecastTrack = FilterForecastTrack.IsChecked == true;
+        _storms.ShowHail = FilterHail.IsChecked == true;
+        _storms.ShowMeso = FilterMeso.IsChecked == true;
+        _storms.MinSevereHailProbability = (int)PoshSlider.Value;
+        _storms.Rebuild();
+    }
+
+    private void SetHomeButton_Click(object sender, RoutedEventArgs e)
+    {
+        _settingHome = !_settingHome;
+        SetHomeButton.Content = _settingHome ? "Click the map…" : "📍 Set home on map";
+        if (_settingHome)
+            StatusText.Text = "Click the map to set your home location.";
+    }
+
+    private void RadiusCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_settings is null) return;
+        _settings.AlertRadiusKm = RadiusCombo.SelectedIndex switch
+        {
+            0 => 15, 2 => 80, 3 => 160, _ => 40,
+        };
+        _settings.Save();
+        _threats.Configure(_settings.HomeLatDeg, _settings.HomeLonDeg, _settings.AlertRadiusKm);
+        RebuildHomeGeometry();
+        UpdateHomeLabels();
+        ComposeOverlay();
+    }
 
     private void PaneCombo_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
         _panes?.SetPaneCount(PaneCombo.SelectedIndex switch { 1 => 2, 2 => 4, _ => 1 });
