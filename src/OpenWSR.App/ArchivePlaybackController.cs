@@ -35,6 +35,20 @@ public sealed class ArchivePlaybackController(
     public bool IsPlaying { get; private set; }
     public IReadOnlyList<ArchiveVolumeRef> DayVolumes => _dayVolumes;
 
+    /// <summary>Frames currently prepared for looping; zero when no loop has been built.</summary>
+    public int LoopGeometryCount => _loop?.Count ?? 0;
+
+    /// <summary>Show one loop frame without playing — used when recording a GIF.</summary>
+    public void ShowLoopFrame(int index)
+    {
+        if (_loop is not { Count: > 0 } frames) return;
+        index = Math.Clamp(index, 0, frames.Count - 1);
+        var (time, geometry) = frames[index];
+        mapView.ShowGeometry(geometry, _loopPalette!, _loopPaletteMin, _loopPaletteRange);
+        _loopPosition = index;
+        StatusChanged?.Invoke($"Frame {index + 1}/{frames.Count}  {time:HH:mm:ss}Z");
+    }
+
     public void SetSpeed(double framesPerSecond) =>
         _loopTimer.Interval = TimeSpan.FromMilliseconds(1000.0 / framesPerSecond);
 

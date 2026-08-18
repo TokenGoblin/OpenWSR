@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using OpenWSR.Geo;
 using OpenWSR.Ingest;
 using OpenWSR.Nexrad;
+using OpenWSR.Nexrad.Analysis;
 using OpenWSR.Render;
 using OpenWSR.Render.Tiles;
 
@@ -120,7 +121,11 @@ public partial class MainWindow : Window
 
         _storms.GeometryChanged += () => Dispatcher.BeginInvoke(ComposeOverlay);
         _storms.StatusChanged += text => Dispatcher.BeginInvoke(() => StatusText.Text = text);
-        _storms.StormsUpdated += storms => Dispatcher.BeginInvoke(() => _threats.EvaluateStorms(storms));
+        _storms.StormsUpdated += storms => Dispatcher.BeginInvoke(() =>
+        {
+            _threats.EvaluateStorms(storms);
+            UpdateStormMotion(storms);
+        });
         _warnings!.AlertsUpdated += alerts => Dispatcher.BeginInvoke(() => _threats.EvaluateWarnings(alerts));
         _threats.ThreatDetected += threat => Dispatcher.BeginInvoke(() => OnThreat(threat));
         _mapView.Clicked += RouteMapClick;
@@ -133,6 +138,15 @@ public partial class MainWindow : Window
         RebuildHomeGeometry();
         UpdateHomeLabels();
         EnsureStormWatchForHome(); // startup with a saved home arms the storm watch immediately
+
+        _mapView.MeasureDragged += (sx, sy, x, y, finished) =>
+        {
+            if (!finished || CrossSectionToggle.IsChecked != true) return;
+            var start = _mapView.ScreenToLatLon(sx, sy);
+            var end = _mapView.ScreenToLatLon(x, y);
+            Dispatcher.BeginInvoke(() =>
+                BuildCrossSection(start.LatDeg, start.LonDeg, end.LatDeg, end.LonDeg));
+        };
 
         _inspector = new InspectorTools(_mapView, _radar);
         _inspector.InspectorChanged += text => Dispatcher.BeginInvoke(() => InspectorText.Text = text);
@@ -564,6 +578,33 @@ public partial class MainWindow : Window
         _warnings.Rebuild();
     }
 
+    /// <summary>
+    /// Average the tracked cells into one motion vector for storm-relative velocity.
+    /// Averaging the components rather than the bearings avoids the wrap-around at north.
+    /// </summary>
+    private void UpdateStormMotion(IReadOnlyList<TrackedStorm> storms)
+    {
+        var moving = storms.Where(s => s.SpeedKmh > 3).ToList();
+        if (moving.Count == 0) return;
+
+        double u = moving.Average(s => s.SpeedKmh * Math.Sin(s.BearingDeg * Math.PI / 180.0));
+        double v = moving.Average(s => s.SpeedKmh * Math.Cos(s.BearingDeg * Math.PI / 180.0));
+        double speed = Math.Sqrt(u * u + v * v);
+        double bearing = (Math.Atan2(u, v) * 180.0 / Math.PI + 360.0) % 360.0;
+
+        _radar.StormMotion = (speed, bearing);
+        if (_radar.StormRelative) _radar.Refresh();
+    }
+
+    private void StormRelative_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_radar is null) return;
+        _radar.StormRelative = FilterStormRelative.IsChecked == true;
+        if (_radar.StormRelative && _radar.StormMotion.SpeedKmh <= 0)
+            StatusText.Text = "Storm-relative needs a motion vector — turn on ⛈ Storms so cells are tracked.";
+        _radar.Refresh();
+    }
+
     private void StormFilter_Changed(object sender, RoutedEventArgs e) => ApplyStormFilters();
 
     private void StormFilter_SliderChanged(object sender, RoutedPropertyChangedEventArgs<double> e) =>
@@ -595,6 +636,122 @@ public partial class MainWindow : Window
     {
         if (_mapView is not null)
             _mapView.MosaicOpacity = (float)(e.NewValue / 100.0);
+    }
+
+    // ---- vertical cross-section ----
+
+    private void CrossSectionToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        bool on = CrossSectionToggle.IsChecked == true;
+        CrossSectionPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        if (on)
+            StatusText.Text = "Cross-section mode: right-drag a line across the storm.";
+    }
+
+    /// <summary>
+    /// Turn the measuring line into a slice. Sampling the whole volume takes a moment,
+    /// so it runs off the UI thread.
+    /// </summary>
+    private async void BuildCrossSection(double lat1, double lon1, double lat2, double lon2)
+    {
+        var sweeps = _radar.SweepsForCurrentMoment();
+        if (sweeps.Count == 0)
+        {
+            CrossSectionTitle.Text = "Cross-section — no volume loaded";
+            return;
+        }
+        if (GeoMath.DistanceM(lat1, lon1, lat2, lon2) < 2000)
+            return; // a click, not a line
+
+        CrossSectionTitle.Text = "Cross-section — sampling…";
+        try
+        {
+            var section = await Task.Run(() =>
+                CrossSection.Build(sweeps, lat1, lon1, lat2, lon2));
+
+            CrossSectionView.Source = CrossSectionImage.Render(section, _radar.CurrentTable);
+            CrossSectionTitle.Text =
+                $"Cross-section — {_radar.CurrentMoment}, {Units.Distance(section.LengthKm)} long, " +
+                $"{section.ElevationsUsed.Count} cuts from {section.ElevationsUsed[0]:F1}° " +
+                $"to {section.ElevationsUsed[^1]:F1}°";
+            CrossSectionStart.Text = $"{lat1:F2}, {lon1:F2}";
+            CrossSectionEnd.Text = $"{lat2:F2}, {lon2:F2}";
+        }
+        catch (Exception ex)
+        {
+            CrossSectionTitle.Text = $"Cross-section failed: {ex.Message}";
+        }
+    }
+
+    // ---- capture ----
+
+    private void CaptureButton_Click(object sender, RoutedEventArgs e)
+    {
+        bool haveLoop = _playback?.LoopGeometryCount > 0;
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "Save map",
+            FileName = $"openwsr-{DateTime.Now:yyyyMMdd-HHmmss}",
+            Filter = haveLoop
+                ? "PNG image (*.png)|*.png|Animated GIF of the loop (*.gif)|*.gif"
+                : "PNG image (*.png)|*.png",
+        };
+        if (dialog.ShowDialog(this) != true) return;
+
+        try
+        {
+            if (dialog.FileName.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
+            {
+                StatusText.Text = "Recording the loop…";
+                _ = SaveLoopGifAsync(dialog.FileName);
+            }
+            else
+            {
+                var frame = _mapView.CaptureFrame();
+                if (frame is null)
+                {
+                    StatusText.Text = "Could not read the map surface.";
+                    return;
+                }
+                GifWriter.SavePng(dialog.FileName, frame.Value.Bgra, frame.Value.Width, frame.Value.Height);
+                StatusText.Text = $"Saved {System.IO.Path.GetFileName(dialog.FileName)}";
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Save failed: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Step the loop frame by frame, grabbing the rendered map each time. Capturing what
+    /// is actually on screen means the GIF carries every layer, not just the radar.
+    /// </summary>
+    private async Task SaveLoopGifAsync(string path)
+    {
+        if (_playback is null) return;
+        bool wasPlaying = _playback.IsPlaying;
+        _playback.StopLoop();
+
+        var frames = new List<(byte[] Bgra, int Width, int Height)>();
+        int count = _playback.LoopGeometryCount;
+        for (int i = 0; i < count; i++)
+        {
+            _playback.ShowLoopFrame(i);
+            await Task.Delay(140); // let the render thread present the new frame
+            if (_mapView.CaptureFrame() is { } frame)
+                frames.Add(frame);
+            StatusText.Text = $"Recording the loop… {i + 1}/{count}";
+        }
+
+        if (frames.Count == 0)
+        {
+            StatusText.Text = "Nothing captured.";
+            return;
+        }
+        await Task.Run(() => GifWriter.Save(path, frames, delayCentiseconds: 25));
+        StatusText.Text = $"Saved {System.IO.Path.GetFileName(path)} ({frames.Count} frames)";
+        if (wasPlaying) await _playback.PlayAsync();
     }
 
     private void SatelliteFilter_Changed(object sender, RoutedEventArgs e)

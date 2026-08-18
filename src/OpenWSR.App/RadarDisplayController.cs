@@ -29,6 +29,9 @@ public sealed class RadarDisplayController(MapView mapView)
     /// <summary>The sweep currently on screen — feeds the hover inspector.</summary>
     public Sweep? DisplayedSweep { get; private set; }
 
+    /// <summary>Every sweep of the current moment, for analysis across the whole volume.</summary>
+    public IReadOnlyList<Sweep> SweepsForCurrentMoment() => CutsForMoment(_moment);
+
     /// <summary>Apply an imported .pal table to the current moment and re-render.</summary>
     public void SetCustomTable(ColorTable table)
     {
@@ -38,6 +41,39 @@ public sealed class RadarDisplayController(MapView mapView)
 
     /// <summary>Re-render the current selection, e.g. after a units or palette change.</summary>
     public void Refresh() => Apply();
+
+    /// <summary>Subtract storm motion from velocity, so rotation stands out from translation.</summary>
+    public bool StormRelative { get; set; }
+
+    /// <summary>Storm motion used for the subtraction: speed in km/h and bearing in degrees.</summary>
+    public (double SpeedKmh, double BearingDeg) StormMotion { get; set; }
+
+    /// <summary>
+    /// Storm-relative velocity: remove the component of the cell's own movement along
+    /// each radial. A squall line translating at 50 km/h swamps the rotation signature
+    /// in raw velocity; taking the motion out leaves the couplet visible.
+    /// </summary>
+    private static Sweep ToStormRelative(Sweep sweep, double speedKmh, double bearingDeg)
+    {
+        double speed = speedKmh / 3.6; // m/s
+        double bearing = bearingDeg * Math.PI / 180.0;
+        double u = speed * Math.Sin(bearing); // east
+        double v = speed * Math.Cos(bearing); // north
+
+        var data = new float[sweep.Data.Length];
+        for (int radial = 0; radial < sweep.RadialCount; radial++)
+        {
+            double azimuth = sweep.AzimuthsDeg[radial] * Math.PI / 180.0;
+            float alongBeam = (float)(u * Math.Sin(azimuth) + v * Math.Cos(azimuth));
+            int offset = radial * sweep.GateCount;
+            for (int gate = 0; gate < sweep.GateCount; gate++)
+            {
+                float value = sweep.Data[offset + gate];
+                data[offset + gate] = float.IsNaN(value) ? value : value - alongBeam;
+            }
+        }
+        return sweep with { Data = data };
+    }
 
     public void ShowVolume(RadarVolume volume)
     {
@@ -108,11 +144,18 @@ public sealed class RadarDisplayController(MapView mapView)
         }
         _cutPosition = Math.Clamp(_cutPosition, 0, cuts.Count - 1);
         var sweep = cuts[_cutPosition];
+
+        bool relative = StormRelative && _moment == Moment.Velocity && StormMotion.SpeedKmh > 0;
+        if (relative)
+            sweep = ToStormRelative(sweep, StormMotion.SpeedKmh, StormMotion.BearingDeg);
+
         DisplayedSweepTimeUtc = sweep.ScanTimeUtc;
         DisplayedSweep = sweep;
         mapView.ShowSweep(sweep, CurrentTable);
         StatusChanged?.Invoke(
-            $"{sweep.SiteId}  {sweep.ScanTimeUtc:HH:mm:ss}Z  {_moment}  " +
-            $"{sweep.ElevationAngleDeg:F1}°  (tilt {_cutPosition + 1} of {cuts.Count})");
+            $"{sweep.SiteId}  {sweep.ScanTimeUtc:HH:mm:ss}Z  " +
+            (relative ? "Storm-relative velocity" : _moment.ToString()) + "  " +
+            $"{sweep.ElevationAngleDeg:F1}°  (tilt {_cutPosition + 1} of {cuts.Count})" +
+            (relative ? $"  [motion {StormMotion.SpeedKmh:F0} km/h from {StormMotion.BearingDeg:F0}°]" : ""));
     }
 }

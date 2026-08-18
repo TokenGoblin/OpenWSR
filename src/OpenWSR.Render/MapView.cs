@@ -118,6 +118,68 @@ public sealed class MapView : IDisposable
     /// </summary>
     public void SetImageOverlay(ImageOverlay? overlay) => _imageOverlay = overlay;
 
+    private readonly Lock _captureLock = new();
+    private (byte[] Bgra, int Width, int Height)? _capture;
+    private volatile bool _captureRequested;
+
+    /// <summary>
+    /// Read back what the map is currently showing. The request is served by the render
+    /// thread after the next present, so the caller always gets a complete frame.
+    /// </summary>
+    public (byte[] Bgra, int Width, int Height)? CaptureFrame(int timeoutMs = 1500)
+    {
+        lock (_captureLock) _capture = null;
+        _captureRequested = true;
+
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
+        {
+            lock (_captureLock)
+            {
+                if (_capture is { } ready) return ready;
+            }
+            Thread.Sleep(15);
+        }
+        return null;
+    }
+
+    private unsafe void ServiceCaptureRequest(DeviceResources device)
+    {
+        if (!_captureRequested) return;
+        _captureRequested = false;
+        try
+        {
+            using var backBuffer = device.SwapChain.GetBuffer<Vortice.Direct3D11.ID3D11Texture2D>(0);
+            var desc = backBuffer.Description;
+            desc.Usage = Vortice.Direct3D11.ResourceUsage.Staging;
+            desc.BindFlags = Vortice.Direct3D11.BindFlags.None;
+            desc.CPUAccessFlags = Vortice.Direct3D11.CpuAccessFlags.Read;
+            desc.MiscFlags = Vortice.Direct3D11.ResourceOptionFlags.None;
+
+            using var staging = device.Device.CreateTexture2D(desc);
+            device.Context.CopyResource(staging, backBuffer);
+
+            var mapped = device.Context.Map(staging, 0, Vortice.Direct3D11.MapMode.Read);
+            int width = (int)desc.Width, height = (int)desc.Height;
+            var bytes = new byte[width * height * 4];
+            byte* source = (byte*)mapped.DataPointer;
+            for (int row = 0; row < height; row++)
+            {
+                fixed (byte* destination = &bytes[row * width * 4])
+                    Buffer.MemoryCopy(source + row * mapped.RowPitch, destination, width * 4, width * 4);
+            }
+            device.Context.Unmap(staging, 0);
+
+            // The swapchain ignores alpha; force it opaque so saved images are not blank.
+            for (int i = 3; i < bytes.Length; i += 4) bytes[i] = 0xFF;
+            lock (_captureLock) _capture = (bytes, width, height);
+        }
+        catch (Exception)
+        {
+            lock (_captureLock) _capture = null;
+        }
+    }
+
     private sealed record LegendSpec(byte[] Rgba, float Min, float Max, string Title);
 
     private LegendSpec? _legend;
@@ -400,6 +462,7 @@ public sealed class MapView : IDisposable
             DrawLegend(cam, quads, device);
 
             device.SwapChain.Present(1);
+            ServiceCaptureRequest(device);
 
             fpsFrames++;
             if (now - fpsWindowStart >= Stopwatch.Frequency)

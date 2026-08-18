@@ -216,3 +216,15 @@ phase is done only when its **gate** passes. Check items off as they land.
 ### Still open from the parity scan
 - MRMS native rendering (reader works and is golden-tested; the tile mosaic covers the visual today)
 - NetCDF/GLM lightning, vertical cross-section, SRM, velocity dealiasing, placefiles, GIF export
+
+## Phase 04 — depth (2026-08-18)
+
+- [x] **Vertical cross-section** — the standout gap across the open-source field. For each (distance, height) cell it solves the 4/3-earth geometry for the elevation angle whose beam passes through that point, then blends the two bracketing cuts. Docked WPF panel below the map, driven by a right-drag on the map in cross-section mode. 4 physics tests (cone of silence overhead, beams rising with range, storm found on a slice through it).
+- [x] **Storm-relative velocity** — subtracts the tracked cells' mean motion along each radial; motion averaged as components so it does not wrap at north.
+- [x] **Frame capture** — backbuffer readback serviced by the render thread after present, saved as PNG.
+- [x] **Animated GIF export** of the loop: steps frames, captures each, then patches the Netscape looping block and per-frame delays into WPF's GIF output (which otherwise writes a still).
+
+**Gate:** 67/67 tests; verified live — cross-section through the Moore volume sampled all 17 cuts from 0.5° to 19.4°; PNG capture produced a 1492x989 image with every layer and the colour scale.
+
+### Still open
+Placefiles, velocity dealiasing, azimuthal shear, MRMS native render, NetCDF/GLM lightning, drawing tools, VWP.

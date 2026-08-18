@@ -20,6 +20,12 @@
                     <ToggleButton x:Name="LinkToggle" Style="{StaticResource RailToggle}" Content="⛓"
                                   IsChecked="True" Checked="LinkToggle_Changed" Unchecked="LinkToggle_Changed"
                                   ToolTip="Link pan and zoom across panes" />
+                    <ToggleButton x:Name="CrossSectionToggle" Style="{StaticResource RailToggle}" Content="⌇"
+                                  Checked="CrossSectionToggle_Changed" Unchecked="CrossSectionToggle_Changed"
+                                  ToolTip="Cross-section mode — right-drag a line on the map to slice the storm vertically" />
+                    <Button x:Name="CaptureButton" Style="{StaticResource RailButton}" Content="📷"
+                            Click="CaptureButton_Click"
+                            ToolTip="Save the map as a PNG, or the loaded loop as an animated GIF" />
                     <Button x:Name="PaletteButton" Style="{StaticResource RailButton}" Content="🎨"
                             Click="PaletteButton_Click"
                             ToolTip="Import a GR2Analyst .pal colour table for the current product" />
@@ -111,6 +117,48 @@
                            Text="—" />
             </Grid>
         </Border>
+        <!-- Vertical cross-section. WPF, docked below the map, so airspace is not an issue. -->
+        <Border x:Name="CrossSectionPanel" DockPanel.Dock="Bottom" Height="248" Visibility="Collapsed"
+                Background="{StaticResource Rail}" BorderBrush="#FF272C35" BorderThickness="0,1,0,0">
+            <Grid Margin="10,6,10,8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="46" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock x:Name="CrossSectionTitle" Grid.ColumnSpan="2" FontWeight="SemiBold" FontSize="12"
+                           Text="Cross-section — right-drag a line on the map" Margin="0,0,0,5" />
+
+                <!-- Height axis -->
+                <Grid Grid.Row="1" Grid.Column="0">
+                    <TextBlock Text="15 km" FontSize="10" Foreground="{StaticResource TextDim}"
+                               VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,-6,6,0" />
+                    <TextBlock Text="7.5" FontSize="10" Foreground="{StaticResource TextDim}"
+                               VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,6,0" />
+                    <TextBlock Text="0" FontSize="10" Foreground="{StaticResource TextDim}"
+                               VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,6,-4" />
+                </Grid>
+
+                <Border Grid.Row="1" Grid.Column="1" BorderBrush="#FF313742" BorderThickness="1"
+                        Background="#FF1B1F27">
+                    <Image x:Name="CrossSectionView" Stretch="Fill"
+                           RenderOptions.BitmapScalingMode="Linear" />
+                </Border>
+
+                <Grid Grid.Row="2" Grid.Column="1" Margin="0,3,0,0">
+                    <TextBlock x:Name="CrossSectionStart" Text="" FontSize="10"
+                               Foreground="{StaticResource TextDim}" HorizontalAlignment="Left" />
+                    <TextBlock x:Name="CrossSectionEnd" Text="" FontSize="10"
+                               Foreground="{StaticResource TextDim}" HorizontalAlignment="Right" />
+                </Grid>
+            </Grid>
+        </Border>
+
         <Border x:Name="LayersPanel" DockPanel.Dock="Right" Background="{StaticResource Chrome}" Width="238"
                 BorderBrush="#FF272C35" BorderThickness="1,0,0,0">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -171,6 +219,9 @@
                               Checked="StormFilter_Changed" Unchecked="StormFilter_Changed" />
                     <CheckBox x:Name="FilterMeso" Content="Mesocyclones" IsChecked="True" Foreground="#FFE066"
                               Checked="StormFilter_Changed" Unchecked="StormFilter_Changed" />
+                    <CheckBox x:Name="FilterStormRelative" Content="Storm-relative velocity"
+                              ToolTip="Subtract the tracked storm motion from velocity so rotation stands out"
+                              Checked="StormRelative_Changed" Unchecked="StormRelative_Changed" />
                     <TextBlock Text="Min severe-hail prob." Margin="0,6,0,0" />
                     <Slider x:Name="PoshSlider" Minimum="0" Maximum="100" Value="0" TickFrequency="10"
                             IsSnapToTickEnabled="True" ValueChanged="StormFilter_SliderChanged" />
