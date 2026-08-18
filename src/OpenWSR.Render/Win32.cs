@@ -18,6 +18,7 @@ internal static class Win32
     public const uint WM_RBUTTONDOWN = 0x0204;
     public const uint WM_RBUTTONUP = 0x0205;
     public const uint WM_MOUSEWHEEL = 0x020A;
+    public const uint WM_KEYDOWN = 0x0100;
 
     public const int CS_DBLCLKS = 0x0008;
     public const int CS_HREDRAW = 0x0002;
@@ -71,6 +72,9 @@ internal static class Win32
 
     [DllImport("user32.dll")]
     public static extern bool ReleaseCapture();
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr SetFocus(IntPtr hWnd);
 
     [DllImport("user32.dll")]
     public static extern IntPtr LoadCursorW(IntPtr hInstance, IntPtr cursorName);

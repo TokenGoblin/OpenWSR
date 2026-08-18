@@ -1,5 +1,8 @@
 using System.Diagnostics;
 using OpenWSR.Geo;
+using OpenWSR.Nexrad;
+using OpenWSR.Palettes;
+using OpenWSR.Render.Radar;
 using OpenWSR.Render.Tiles;
 using Vortice.Mathematics;
 
@@ -30,6 +33,37 @@ public sealed class MapView : IDisposable
     private long _lastMoveTicks;
 
     public double FramesPerSecond { get; private set; }
+    public double LastSweepUploadMs { get; private set; }
+
+    /// <summary>Raised on the UI thread with the virtual-key code of keys pressed over the map.</summary>
+    public event Action<int>? KeyPressed;
+
+    internal void RaiseKeyPressed(int virtualKey) => KeyPressed?.Invoke(virtualKey);
+
+    private readonly Lock _sweepLock = new();
+    private (SweepGeometry Geometry, byte[] Palette, float Min, float Range)? _pendingSweep;
+    private bool _sweepClearRequested;
+
+    /// <summary>Stage a sweep for display; geometry prep runs on the calling thread.</summary>
+    public void ShowSweep(Sweep sweep, ColorTable palette)
+    {
+        var geometry = SweepGeometry.Build(sweep);
+        var rgba = palette.BuildRgba256();
+        lock (_sweepLock)
+        {
+            _pendingSweep = (geometry, rgba, palette.MinValue, palette.Range);
+            _sweepClearRequested = false;
+        }
+    }
+
+    public void ClearSweep()
+    {
+        lock (_sweepLock)
+        {
+            _pendingSweep = null;
+            _sweepClearRequested = true;
+        }
+    }
 
     public MapView(TileProvider provider)
     {
@@ -121,6 +155,7 @@ public sealed class MapView : IDisposable
         using var device = new DeviceResources(_hwnd, _pendingWidth, _pendingHeight);
         using var textures = new TileTextureCache(device.Device);
         using var quads = new QuadRenderer(device.Device, device.Context);
+        using var radar = new RadarSweepRenderer(device.Device, device.Context);
 
         var clearColor = new Color4(0.10f, 0.11f, 0.13f, 1f);
         long lastTicks = Stopwatch.GetTimestamp();
@@ -151,6 +186,25 @@ public sealed class MapView : IDisposable
 
             quads.Begin();
             DrawTiles(cam, textures, quads);
+
+            lock (_sweepLock)
+            {
+                if (_pendingSweep is not null)
+                {
+                    var (geometry, palette, min, range) = _pendingSweep.Value;
+                    radar.SetSweep(geometry, palette, min, range);
+                    _pendingSweep = null;
+                }
+                else if (_sweepClearRequested)
+                {
+                    radar.Clear();
+                    _sweepClearRequested = false;
+                }
+            }
+            radar.Draw(cam);
+            LastSweepUploadMs = radar.LastUploadMs;
+
+            quads.Begin();
             DrawMarkers(cam, quads);
 
             device.SwapChain.Present(1);

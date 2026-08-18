@@ -91,8 +91,12 @@ public sealed class D3DHostControl : HwndHost
                 return IntPtr.Zero;
             case Win32.WM_ERASEBKGND:
                 return 1; // the swapchain covers everything
+            case Win32.WM_KEYDOWN:
+                view.RaiseKeyPressed((int)(long)wParam);
+                return IntPtr.Zero;
             case Win32.WM_LBUTTONDOWN:
             {
+                Win32.SetFocus(hWnd); // keyboard focus follows the map click
                 Win32.SetCapture(hWnd);
                 var (x, y) = Win32.ClientPoint(lParam);
                 view.OnMouseDown(x, y);

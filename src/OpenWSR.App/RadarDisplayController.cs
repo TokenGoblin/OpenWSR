@@ -1,0 +1,86 @@
+using OpenWSR.Nexrad;
+using OpenWSR.Palettes;
+using OpenWSR.Render;
+
+namespace OpenWSR.App;
+
+/// <summary>
+/// Holds the displayed volume and the current moment/elevation selection, and pushes
+/// the selected sweep to the map. Product switching is a texture swap in the renderer;
+/// this class just picks which sweep to stage.
+/// </summary>
+public sealed class RadarDisplayController(MapView mapView)
+{
+    private RadarVolume? _volume;
+    private Moment _moment = Moment.Reflectivity;
+    private int _cutPosition; // index into the ordered list of cuts carrying the moment
+
+    public event Action<string>? StatusChanged;
+
+    public void ShowVolume(RadarVolume volume)
+    {
+        _volume = volume;
+        _cutPosition = 0;
+        Apply();
+    }
+
+    /// <summary>Map keyboard: R/V/W/D/P/C select the moment, Up/Down move through cuts.</summary>
+    public void OnKey(int virtualKey)
+    {
+        switch (virtualKey)
+        {
+            case 0x52: SetMoment(Moment.Reflectivity); break;            // R
+            case 0x56: SetMoment(Moment.Velocity); break;                // V
+            case 0x57: SetMoment(Moment.SpectrumWidth); break;           // W
+            case 0x44: SetMoment(Moment.DifferentialReflectivity); break; // D
+            case 0x50: SetMoment(Moment.DifferentialPhase); break;       // P
+            case 0x43: SetMoment(Moment.CorrelationCoefficient); break;  // C
+            case 0x26: MoveCut(+1); break;                               // Up
+            case 0x28: MoveCut(-1); break;                               // Down
+        }
+    }
+
+    private void SetMoment(Moment moment)
+    {
+        if (_moment == moment) return;
+        var currentElevation = CutsForMoment(_moment).ElementAtOrDefault(_cutPosition)?.ElevationAngleDeg;
+        _moment = moment;
+        var cuts = CutsForMoment(moment);
+        // Stay at the nearest elevation angle when the new moment lives on different cuts.
+        _cutPosition = currentElevation is null || cuts.Count == 0
+            ? 0
+            : cuts.IndexOf(cuts.OrderBy(s => Math.Abs(s.ElevationAngleDeg - currentElevation.Value)).First());
+        Apply();
+    }
+
+    private void MoveCut(int direction)
+    {
+        int count = CutsForMoment(_moment).Count;
+        if (count == 0) return;
+        _cutPosition = Math.Clamp(_cutPosition + direction, 0, count - 1);
+        Apply();
+    }
+
+    private List<Sweep> CutsForMoment(Moment moment) =>
+        _volume?.Sweeps.Where(s => s.Moment == moment)
+            .OrderBy(s => s.ElevationIndex)
+            .ToList() ?? [];
+
+    private void Apply()
+    {
+        var cuts = CutsForMoment(_moment);
+        if (cuts.Count == 0)
+        {
+            mapView.ClearSweep();
+            StatusChanged?.Invoke($"{_moment}: no data in this volume");
+            return;
+        }
+        _cutPosition = Math.Clamp(_cutPosition, 0, cuts.Count - 1);
+        var sweep = cuts[_cutPosition];
+        mapView.ShowSweep(sweep, BuiltinTables.For(_moment));
+        StatusChanged?.Invoke(
+            $"{sweep.SiteId}  {sweep.ScanTimeUtc:yyyy-MM-dd HH:mm:ss}Z  {_moment}  " +
+            $"{sweep.ElevationAngleDeg:F1}°  (cut {sweep.ElevationIndex}, {_cutPosition + 1}/{cuts.Count})  " +
+            $"[R/V/W/D/P/C moment, ↑/↓ tilt]");
+    }
+}

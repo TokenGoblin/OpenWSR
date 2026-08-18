@@ -1,5 +1,7 @@
+using System.IO;
 using System.Windows;
 using System.Windows.Threading;
+using OpenWSR.Nexrad;
 using OpenWSR.Render;
 using OpenWSR.Render.Tiles;
 
@@ -9,6 +11,7 @@ public partial class MainWindow : Window
 {
     private readonly MapView _mapView;
     private readonly DispatcherTimer _statusTimer;
+    private readonly RadarDisplayController _radar;
 
     // Alignment check markers for the Phase 3 acceptance test: radar site positions
     // must land on the right cities. Replaced by the full site table in Phase 5.
@@ -41,17 +44,60 @@ public partial class MainWindow : Window
         _mapView.SetMarkers(DebugSites.Select(s => (s.Lat, s.Lon)));
         MapHost.Child = new D3DHostControl(_mapView);
 
+        _radar = new RadarDisplayController(_mapView);
+        _radar.StatusChanged += text => Dispatcher.BeginInvoke(() => StatusText.Text = text);
+        _mapView.KeyPressed += key => _radar.OnKey(key);
+        KeyDown += (_, e) => _radar.OnKey(System.Windows.Input.KeyInterop.VirtualKeyFromKey(e.Key));
+
         _statusTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
             Interval = TimeSpan.FromMilliseconds(500),
         };
-        _statusTimer.Tick += (_, _) => FpsText.Text = $"{_mapView.FramesPerSecond:F0} fps";
+        _statusTimer.Tick += (_, _) =>
+            FpsText.Text = $"{_mapView.FramesPerSecond:F0} fps · sweep upload {_mapView.LastSweepUploadMs:F1} ms";
         _statusTimer.Start();
+
+        Loaded += async (_, _) => await LoadStartupVolumeAsync();
 
         Closed += (_, _) =>
         {
             _statusTimer.Stop();
             _mapView.Dispose();
         };
+    }
+
+    /// <summary>
+    /// Phase 4 acceptance setup: decode a volume (command-line path, or the committed
+    /// Moore 2013 test volume) off the UI thread and center the map on its radar.
+    /// Phase 5 replaces this with archive browsing.
+    /// </summary>
+    private async Task LoadStartupVolumeAsync()
+    {
+        string? path = Environment.GetCommandLineArgs().Skip(1).FirstOrDefault();
+        if (path is null)
+        {
+            var dir = new DirectoryInfo(AppContext.BaseDirectory);
+            while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "OpenWSR.slnx")))
+                dir = dir.Parent!;
+            if (dir is not null)
+                path = Path.Combine(dir.FullName, "assets", "testdata", "KTLX20130520_201643_V06.gz");
+        }
+        if (path is null || !File.Exists(path))
+        {
+            StatusText.Text = "No volume to display — pass an Archive II file on the command line.";
+            return;
+        }
+
+        StatusText.Text = $"Decoding {Path.GetFileName(path)}…";
+        try
+        {
+            var volume = await Task.Run(() => ArchiveFile.DecodeFile(path));
+            _mapView.Camera.MoveTo(volume.LatDeg, volume.LonDeg, 250);
+            _radar.ShowVolume(volume);
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Decode failed: {ex.Message}";
+        }
     }
 }

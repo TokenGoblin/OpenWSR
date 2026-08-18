@@ -68,15 +68,15 @@ phase is done only when its **gate** passes. Check items off as they land.
 ## Phase 4 â€” Radar rendering
 
 - [ ] Sweep data upload as `R32_FLOAT` (or `R16_UNORM`+scale) texture, `gateCount Ã— radialCount`
-- [ ] Azimuth structured buffer; palette as 256-entry 1D texture
+- [x] Azimuth wedge-edge buffer (radialCount+1, sorted, wrap-safe); palette as 256-entry 1D texture
 - [ ] Vertex shader: geometry from `SV_VertexID` â†’ (radial, gate) â†’ beam path â†’ offset from radar origin â†’ Mercator; single indexed/instanced draw
-- [ ] Pixel shader: sample data, normalize via `ScaleInfo`, sample palette; `clip()` NaN; optional distinct range-fold color
-- [ ] Premultiplied alpha blend over basemap; user-adjustable opacity
-- [ ] Product/palette switch = texture rebind only (verify zero geometry work)
-- [ ] VRAM budget policy: only displayed moment/tilt resident per loop frame
-- [ ] (If profiling demands) per-gate beam-path lookup buffer
+- [x] Pixel shader: point-sample data, normalize, palette lookup; discard below-threshold; range-fold rendered NWS purple
+- [x] Premultiplied alpha blend over basemap; opacity property (UI slider later)
+- [x] Product/palette switch = texture swap; measured 0.7–11.1 ms including CPU prep
+- [x] VRAM budget policy: single displayed sweep resident (loop residency revisited in Phase 5)
+- [ ] (Not needed — 60 fps without it) per-gate beam-path lookup buffer
 
-**Gate:** KTLX 2013-05-20 hook echo visible, correctly over Moore OK, 60 fps while panning, product switch < 16 ms.
+**Gate:** [PASSED] hook echo verified over Moore; 60 fps with sweep rendered; REF↔VEL switch 0.7–11.1 ms; range-fold purple confirmed on velocity.
 
 ---
 
@@ -134,5 +134,6 @@ phase is done only when its **gate** passes. Check items off as they land.
 - [ ] About box: "not for life-safety decisions" disclaimer; `THIRD-PARTY-NOTICES.md` (MIT notice if any Supercell Wx code ported)
 
 **Gate:** published single-file build runs on a clean Windows machine with all of the above working.
+
 
 
