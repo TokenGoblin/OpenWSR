@@ -26,6 +26,8 @@
                 <Separator />
                 <Button x:Name="PaletteButton" Content="Palette…" Margin="4,0" Click="PaletteButton_Click"
                         ToolTip="Import a GR2Analyst .pal color table for the current product" />
+                <Separator />
+                <Button x:Name="AboutButton" Content="About" Margin="4,0" Click="AboutButton_Click" />
             </ToolBar>
         </ToolBarTray>
         <StatusBar DockPanel.Dock="Bottom" Background="#22252B" Foreground="#C8CCD4">

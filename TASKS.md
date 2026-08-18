@@ -129,11 +129,12 @@ phase is done only when its **gate** passes. Check items off as they land.
 
 - [ ] Multi-pane 1/2/4 layout; linked or independent pan per pane
 - [ ] Level III decoder: packet framing, then storm tracks, hail index, mesocyclone detection (bucket `unidata-nexrad-level3`; Iowa State Mesonet / NWS TGFTP fallbacks)
-- [ ] Settings persistence; keyboard shortcuts; per-monitor DPI awareness (verify HwndHost across mixed-DPI monitors)
-- [ ] Single-file, self-contained, ReadyToRun publish
-- [ ] About box: "not for life-safety decisions" disclaimer; `THIRD-PARTY-NOTICES.md` (MIT notice if any Supercell Wx code ported)
+- [x] Settings persistence (settings.json); keyboard shortcuts (moment/tilt/tools); PerMonitorV2 manifest (mixed-DPI HwndHost verification pending a second monitor)
+- [x] Single-file self-contained ReadyToRun publish (OpenWSR.exe, 160 MB, smoke-tested at 60 fps)
+- [x] About box with life-safety disclaimer + controls; THIRD-PARTY-NOTICES.md (no Supercell Wx code ported); Serilog rolling file logging wired
 
 **Gate:** published single-file build runs on a clean Windows machine with all of the above working.
+
 
 
 

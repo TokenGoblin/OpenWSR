@@ -254,6 +254,29 @@ public partial class MainWindow : Window
         }
     }
 
+    private void AboutButton_Click(object sender, RoutedEventArgs e)
+    {
+        var version = GetType().Assembly.GetName().Version?.ToString(3) ?? "dev";
+        MessageBox.Show(this,
+            $"""
+            OpenWSR {version}
+            An open-source native NEXRAD Level II radar viewer.
+
+            NOT FOR LIFE-SAFETY DECISIONS.
+            This software is provided for informational and educational use only.
+            Never rely on it for warnings or protective action — use official
+            National Weather Service products and local warning systems.
+
+            Data: NOAA NEXRAD via AWS Open Data (NSF Unidata), NWS api.weather.gov.
+            Basemap © OpenStreetMap contributors.
+            See THIRD-PARTY-NOTICES.md for component licenses.
+
+            Keys over the map: R/V/W/D/P/C moment · ↑/↓ tilt
+            Right-drag: measure distance/bearing · Hover: inspector
+            """,
+            "About OpenWSR", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
     private void ToolBar_Loaded(object sender, RoutedEventArgs e)
     {
         // Hide the toolbar overflow chevron; everything fits.
