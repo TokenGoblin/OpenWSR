@@ -51,17 +51,17 @@ phase is done only when its **gate** passes. Check items off as they land.
 
 ## Phase 3 â€” D3D11 window & map (`OpenWSR.Render` + App shell)
 
-- [ ] `HwndHost` subclass with child HWND; D3D11 device + flip-model swapchain; resize handling
-- [ ] Render loop on dedicated render thread (owns the device context)
-- [ ] Orthographic camera in Mercator space; mouse + touch pan/zoom with inertia
-- [ ] Visible-tile computation for current zoom/viewport (XYZ scheme)
-- [ ] Async tile fetch (MapTiler primary, OSM fallback; provider + key in settings from day one)
-- [ ] Disk tile cache under `%LOCALAPPDATA%\OpenWSR\tiles`; VRAM LRU cache capped ~512 MB
+- [x] `HwndHost` subclass with child HWND; D3D11 device + flip-model swapchain; resize handling
+- [x] Render loop on dedicated render thread (owns the device context)
+- [x] Orthographic camera in Mercator space; mouse pan/zoom with inertia (touch/WM_POINTER deferred to Phase 8)
+- [x] Visible-tile computation for current zoom/viewport (XYZ scheme)
+- [x] Async tile fetch (OSM default, MapTiler via settings key; provider + key in settings.json from day one)
+- [x] Disk tile cache under `%LOCALAPPDATA%\OpenWSR\tiles`; VRAM LRU cache capped ~512 MB
 - [ ] Parent-zoom tile stretch while children load â€” no blank checkerboard
-- [ ] Debug marker layer: radar site lat/lons rendered as dots for alignment check
-- [ ] Establish the airspace pattern now: side-docked WPF panels; Popup/ToolTip for anything floating over the map
+- [x] Debug marker layer: radar site lat/lons rendered as dots for alignment check
+- [x] Establish the airspace pattern now: side-docked WPF panels; Popup/ToolTip for anything floating over the map
 
-**Gate:** 60 fps pan/zoom over CONUS on a mid-range GPU; site markers land on the right cities.
+**Gate:** [PASSED] 60 fps confirmed via in-app counter; site markers verified on Seattle/Bay Area/Denver/Chicago/OKC/San Antonio; pan/zoom exercised CONUS-to-street-level.
 
 ---
 
@@ -134,4 +134,5 @@ phase is done only when its **gate** passes. Check items off as they land.
 - [ ] About box: "not for life-safety decisions" disclaimer; `THIRD-PARTY-NOTICES.md` (MIT notice if any Supercell Wx code ported)
 
 **Gate:** published single-file build runs on a clean Windows machine with all of the above working.
+
 
