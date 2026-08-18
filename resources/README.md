@@ -54,19 +54,43 @@ Load it from the layers panel to check the render path end to end. Real server-g
 placefiles for parser testing are committed under `assets/testdata/placefiles/`, and
 `tools/fetch-testdata.ps1` re-fetches them.
 
+`fetch-spec-page.py` lives here too, and is not a cross-check script — it is the fetcher
+that gets around specification sites which reject automated clients. grlevelx.com returns
+**403 to any non-browser User-Agent**, so `WebFetch` and `curl` defaults both fail on the
+placefile and colour-table specs. This sends a browser User-Agent and flattens the result
+to text:
+
+```
+python resources/crosscheck/fetch-spec-page.py https://www.grlevelx.com/manuals/gis/files_places.htm
+```
+
 ## `reference/`
 
 `nexrad-stations.txt` — the NCEI HOMR station table: all 163 WSR-88D sites with
 coordinates and elevations. The table the app ships is embedded in `OpenWSR.Ingest`; this
 is the source it was derived from, kept so it can be regenerated or audited.
 
+## `research/`
+
+Source material behind [docs/parity.md](../docs/parity.md). Kept because it is either
+hard to re-fetch or was expensive to gather, and because a ranked gap list is much less
+useful without the evidence under it.
+
+| File | Provenance |
+|---|---|
+| `supercell-wx-open-issues.txt` | Full enumeration of Supercell Wx's open GitHub issues. Public issue-tracker text, and a user-validated list of what people miss versus GRLevel3 and RadarScope |
+| `grlevelx-color-tables.txt` | GR colour table documentation — behind the 403 |
+| `grlevelx-algorithms-menu.txt` | GR2Analyst algorithms menu — behind the 403 |
+| `gr2analyst-2-user-guide.txt` | GR2Analyst 2 user guide index — behind the 403 |
+
+Third-party excerpts retained for reference, not redistribution.
+
 ---
 
-## Deliberately not committed
+## Kept outside the repository
 
-- **NOAA RPG Operator's Guide PDFs** — large, public, and stable. Linked from
-  [docs/data-sources.md](../docs/data-sources.md) instead.
-- **Supercell Wx documentation and issue exports** — third-party, separately licensed.
-  They informed [docs/parity.md](../docs/parity.md); the findings are recorded there.
-- **GRLevelX manual pages** — third-party. Note that they reject non-browser
-  User-Agents with a 403, so `WebFetch`-style tools fail on them.
+`../../OpenWSR-reference/` (a sibling of the repo, not under git) holds bulky third-party
+material: the RadarOmega user guide PDFs (~48 MB of commercial vendor documentation) and
+a clone of the Supercell Wx docs. Both informed the parity scan; neither is ours to
+redistribute, and neither belongs in git history where it could never be removed. See
+that folder's own README. Nothing there is needed to build, test or run OpenWSR.

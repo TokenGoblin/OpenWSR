@@ -1,0 +1,528 @@
+﻿===== #685 :: SPS Suppprt :: [enhancement]
+**Is your feature request related to a problem? Please describe.**
+I would like another layer dedicated to SPS (like TOR, SVR, Snow Squall, Marine, and FF), instead of having to find/create a placefile that draws them.
+
+**Describe the solution you'd like**
+Another layer like TOR/SVR/etc.
+
+<img width="633" height="98" alt="Image" src="https://github.com/user-attachments/assets/3c963264-78eb-4ca9-9c4f-fd04c555158b" />
+===== #675 :: Export/Import Not Working :: [bug, need more info]
+**Describe the bug**
+I set up on my primary system the settings, config, maps, placefiles, etc as I like it. When I export, it successfully writes the export files. However the placefiles, radar presets files are 5 bytes, none of the placefiles export, same with radar presets. Has anyone else seen this behaviour?
+===== #655 :: KML/KMZ support? :: [enhancement]
+Finding a tornadoes track through its rotation, CC drop (IF it has a CC drop), and reflectivity (if its a hook echo, QLCS could work too, but not all the time) is easy, what if you don't know when it had lifted? KML's and KMZ's usually show the path, I have no idea if they are in the app already, but I dont think so, as when i tried to drag a KMZ in, it didn't work. Possibly adding these would be a great idea!
+===== #641 :: Hey Dan, I got a handful of CrashDumps for the latest version. :: [bug, need more info]
+Do you want them or is it overkill?
+
+===== #640 :: Offer More Mapping Services :: [enhancement]
+I don't know too much about mapping data in Supercell Wx, so I could be completely wrong, but I was wondering why you have to use MapTiler or Mapbox as map sources. Is it not possible to use free layers with MapLibre such as [CARTO's](https://docs.carto.com/carto-for-developers/carto-for-react/guides/basemaps)?
+===== #639 :: Cache Color Tables :: [bug]
+When using the Supercell Wx Flatpak, if you use custom color tables you have to re-select them from storage every time you open the app after you login.
+===== #638 :: Plotting GeoJSON data alongside placefiles :: [enhancement]
+I was wondering if it would be possible to implement GeoJSON plotting inside of Supercell Wx. I know there is already placefiles, but being able to also use GeoJSON data would be amazing!
+===== #637 :: Follow alerts :: [enhancement]
+**Is your feature request related to a problem? Please describe.**
+It is not an issue and is lowest priority
+
+**Describe the solution you'd like**
+Alerts are useful, would be nice to see a feature to auto zoom into new warnings/alerts.
+===== #629 :: Warnings, Placefille, Level 2 display :: [bug, need more info]
+I've noticed a few placefiles do not display. I've used some from Allison House and Placefile nation and cant get them to display. I have checked the box E and left the threshold box unchecked. I also cant see any warnings being displayed. Its left to the default weather.cod. And level 2 products do not display at all. Level 3 works fine. 
+===== #617 :: [Feature request] an option to make sound go off only when tornado polygon is only upgraded :: [enhancement]
+currently right now when a polygon of a tornado warning is updated or moved the sound plays if you have it set up but I think there should be a option to only have sounds play when there when a tornado warning have been updated (like radar indicated to observed, pds etc) while also leaving the option to also turn on the option to make sounds play when the polygon is made shorter if that make any sense. It can get annoying when sounds play constantly over and over and the only changed that have been made is the polygon made shorter (this can also apply to other warnings if its not set to tornados warning)
+===== #616 :: Map cursor info on multiple panes :: [enhancement]
+When holding shift and hovering over the map,  I would like to view data for that specific point in all panes.
+
+===== #615 :: Laggy :: [bug, need more info]
+**Describe the bug**
+I seem to have an issue where even setting the loop speed to 99x it is if I only set it to 10x
+
+**To Reproduce**
+Steps to reproduce the behavior:
+1. Open the program
+2. Select a weather radar
+3. Set loop speed to 99x
+4. Speed doesnt change.
+
+**Expected behavior**
+I expect the loop speed to change.
+**Screenshots**
+If applicable, add screenshots to help explain your problem.
+
+**Desktop (please complete the following information):**
+ - OS: Windows 10 Pro [22H2]
+ - Graphics hardware: NVIDIA Quadro K2000M (2GB)
+ - Memory usage: 32 GB, 37% used
+ - Network speed and latency: 200Mbps 
+ - Version: 0.5.6
+
+Seems to have this issue, especially with KDYX, TDAL, TDFW, KFWS
+===== #614 :: [Feature Request] Placefile Improvements :: [enhancement]
+1) The ability to rename the Placefiles - sometimes the name that comes from the link is not a good name.
+
+2) A panel in the Radar toolbox that allows for quickly toggling on and off place files I would recommend adding a new option (Q) that when checked puts it in the quick panel in the toolbox that way it can be set to only frequently used placefile layers.
+
+3) Being able to resize placefile icons on a per placefile basis, sometimes certain icons come too small, sometimes they are enormous. It would be nice to adjust manually so they can be less distracting OR pull attention if they are important markers.
+===== #613 :: [Feature Request] Caching radar site data :: [enhancement]
+I noticed when switching between radar sites that it completely dumps the data. Is it possible to implement caching so if I am flipping through 2-3 sites it doesn't have that initial long load time to get the previous radar data. It also seems wasteful to keep re-downloading the same data.
+
+This would make loading quicker even when switching multiple radar sites rapidly on the latest frame, but I think more importantly it will have a greater impact when looping a live view. It can grab the most recent frame or two while it is playing the older frames first 
+
+A bonus would be configurable caching in the settings, Example
+Cache previous radar sites: X
+Cache frames per radar site: Y (or maybe it should be in minutes? possibly an option to tie this to live view settings?)
+===== #611 :: [Feature Request] Ability to move panels in the Radar Toolbox :: [enhancement]
+It would be a nice QOL to be able to arrange the panels in the Radar Toolbox to an order that suites me. I hardly use the Map Settings or Level 2 products so being able to arrange it so that the buttons I use the most are up top would be nice. 
+
+I think it is also important to have the program remember the order of the panels I set and their show/hide status so I don't have to set it each time I open the program.
+
+A point of frustration that I frequently run into with the current setup is when I scroll through the Radar Toolbox is, if my cursor runs over a box or setting that accepts scroll input I end up changing settings instead of scrolling. ie accidentally changing the map Style, or adjusting timeline settings.
+
+===== #590 :: Advanced Drawing Tools :: [enhancement]
+I'd love to see marking and annotation tools added to Supercell Wx. Currently there's no way to draw on the
+   map while tracking storms, which would be incredibly useful for storm chasers and weather enthusiasts.
+
+  Suggested Tools
+
+  - Freehand drawing - Quick sketches to outline areas of interest
+  - Lines/arrows - Mark projected storm tracks or movement
+  - Circles/polygons - Highlight areas of concern
+  - Text labels - Add notes directly on the map
+  - Measurement tool - Distance between points
+
+  Use Case
+
+  When actively tracking severe weather (like tonight in Oklahoma), being able to mark up the radar display
+  helps with:
+  - Tracking storm movement over time
+  - Noting areas of rotation or interest
+  - Planning chase routes
+  - Sharing annotated screenshots with others
+
+  Additional Context
+
+  Even basic drawing that persists during a session (without needing to save/load) would be a huge
+  improvement for real-time storm tracking.
+David Vickers
+===== #581 :: Lightning Alert :: [enhancement]
+I'd love to see a lighting alert feature with an audio functionality to it.  Maybe a voice that tells you how far away the lightning strike was.    With the ability to add a delay in between alerts 
+
+
+
+===== #514 :: [Feature Request] Shapefiles as Layers :: [enhancement]
+**Is your feature request related to a problem? Please describe.**
+I really enjoy SupercellWX, it's better than any of the web based radars for sure, but I would like it if I could better display a certain area with easier to see boundaries and labels.
+
+**Describe the solution you'd like**
+I would like to be able to import a shapefile (generated in QGIS for example) as a map layer, so I can have a visible border around, say my hometown, above the actual radar data.
+
+**Describe alternatives you've considered**
+I have thought I could make my own placefiles for this, however the documentation for creating placefiles is either non-existent or just really hard to find.
+
+===== #505 :: Radar Range / Beam Height Tooltip :: [enhancement]
+The radar beam height tooltip is a great addition! But I did notice that it seems to be factoring in the height of the radar site above sea level, which means that the beam height displayed isn't the height of the beam _above ground level_ but the height of the beam _above sea level_ which is not what I expected. 
+
+In the screenshots, the location that I'm sampling is very close to the radar, so the beam is not very high off the ground yet, but it's displaying as being at several thousand feet already. I included the last screenshot to show that a radar site in a higher elevation (KGJX in Colorado) displays a much higher altitude number closer to the radar which seems to indicate that maybe the elevation of the radar site above sea level is being factored in. 
+
+<img width="960" height="506" alt="Image" src="https://github.com/user-attachments/assets/fe73bf16-2c07-4f82-afc4-2e8b0d9c60e7" />
+
+<img width="959" height="509" alt="Image" src="https://github.com/user-attachments/assets/51277170-f982-4f08-80a8-f294e1a448b1" />
+===== #491 :: Add support for OpenStreetMap :: [enhancement]
+While the currently supported Map providers are good, I feel OpenStreetMap would be a good choice for those that would not like to create an account on an external service. 
+
+I also feel that it's permissive license makes it better choice for an open source application.
+
+===== #490 :: [Request] Updated Icon :: [enhancement]
+The current icon doesn't really look that great with a majority of icon sets on Linux.
+
+Ideally, we could update the icon to something new, that looks great at all sizes and represents the project well!
+
+For now, I have updated my computer to use an icon I designed. It would be great to see it become part of this project, but honestly, any new icon would be an improvement.
+
+Here is the icon I did, feel free to use it if you like!
+
+<img width="513" height="512" alt="Image" src="https://github.com/user-attachments/assets/d532ca29-f6d3-4e20-ab25-0bbe3d02aad1" />
+===== #481 :: Mobile Atlas Creator Atlas support :: [enhancement]
+It seems the days of free API access is coming to a close.  We can't use OpenStreetMaps to get map tiles, and Mapbox and Maptiler have either scooped up their competitors or have decided to make what was once free restricted.
+
+There is one app I think we could use to supply maps: [Mobile Atlas Creator (MOBAC)](https://mobac.sourceforge.io/).  Sure, the program is janky as hell, written in Java, but here me out.
+
+1. **Create a new atlas with the name of the area you are collecting tiles from. Save it in Osmdroid ZIP format.**
+2. If this is your first time using MOBAC, go to the Tools menu (top right) and select Settings. Select the Directories tab and set Atlas output directory to where you want the Zip file that we are creating will go. (e.g. `/home/jrcharney/MOBAC/atlases`.) You may need to create this directory.
+2. **Use USGS National Map Topo or USGS National Map Satellite & Topo.** (At least if you are in America...assuming Donnie hasn't killed free government maps. It was bad enough that he's mangled a huge body of water for his ego.) Other countries will have other sources.
+3. **Zoom into the area you want map tiles.** It helps to turn on the Grid Zoom. Grit Zoom 10 seems ideal. I probably should have used the WGS 84 Grid, but live and learn.
+4. **Select the Tiles**. Ideally, grab something as close to the grid lines as possible. 
+5. Create a profile, Name it something like `USGS_Topo_Chicago` if you are selecting the Chicago area. Just type in the name and click "Save".
+6. Since we are using Osmdroid Zip, in the layer setting, check the "Recreate/adjust map tiles (CPU intensive)" checkbox. Tile format should be "PNG". Not the other two "PNG" options, just "PNG".
+7. Time for the meat-and-potatoes part. Create a layer for each zoom level you plan on using. In the Z ...[TRUNC]
+===== #480 :: Reflectivity Gate Filter & Other Features :: [enhancement]
+This is a really great tool and love the chance of adding your own placefiles. A couple of requests/questions
+
+- is there a way to alter the reflectivity gate filter? There is a lot of clutter around radar sites (typical, I know) but it would be great to get that out of the way to clean up the view. 
+
+- 3d integration would be fantastic in future versions to see hail cores, rotation, updrafts, etc. 
+
+- The option to fill placefile polygons - ex. uploading an SPC placefile but only the lines are shown being able to shade in the polylines would be great. 
+
+This product is great, thanks! 
+===== #439 :: The API Issue :: [enhancement]
+Listen, Open-source and free should remain free. So should the API usage therein. Only 2 options for API are given, both with a(n) (eventual) pricetag. I get that you guys probably get that sweet-sweet commission, the no down-time guarantee, and "scaling". This also creates an unfair market for small, open projects like OpenStreetMap, which I really want to use instead of big tech or cloud computers. Your open-source freedom isn't free if you're required to pay. Thanks for your time.
+===== #435 :: Some more feature requests :: [enhancement]
+First of all I want to say that all of these feature requests I've been bringing up aren't because I don't like SupercellWX. It's probably the best archive tool I know of at the moment, and the placefile support makes it a useful tool even if you have apps like RadarScope. But I did have a few features that would be really neat to see...
+
+- Ability to disable placefiles and current warnings when in archive mode. I've noticed that this is not currently happening and it clutters up the archive view with unrelated data 
+
+- I was wondering if possibly the solution for the lack of resolution as far as storm-relative velocity would be a GR2Analyst-style manually computed SRM, where you can set the storm motion and the program will compute storm relative velocity depending on what you set 
+
+- A search box for cities (like Radar Omega or WeatherWise) would be cool 
+
+- Storm reports- I know there's a placefile for this, but the icons aren't as visible as those in GR3 or RadarScope for example
+
+- Warning mouseover tooltips go out of the pane / window so you can't read the full text; this depends on where you hover the cursor on the warning box but it happens pretty frequently 
+
+- Some sort of dealiasing for Level II data 
+
+- A customizable color / icon for the multi-panel cursor marker 
+
+- Placefiles appear to be scaled differently than GR3; not sure exactly how to explain this other than that the placefile contents (icons, etc.) are bigger relative to the map than with that same placefile loaded into GR3. This makes lightning and station plot icons a little annoying since they cover a lot of the radar data 
+
+- And just a fun and outside the box thing- it would be kind of neat if there was some kind of WarnGen simulator that you could optionally turn on just to play around with.  ...[TRUNC]
+===== #433 :: Support Alerts from api.weather.gov :: [enhancement]
+> I live in Oklahoma and as everyone knows weather is a thing here, I love the program so far, as I was using this for the first time the other day I was curious why I did not see watches in the list of alerts, and it looks like CoD doesn't do watches only warnings so I started looking to see if I could configure a different source and I figured why not go straight to the source, NWS, I found they offer an API, if you want to call it that, where the data is listed in JSON, but as you mentioned in this post, SupercellWx doesn't read it.
+> 
+> So my suggestion as you move forward with modding the alert providers is to include a parser for the JSON data format the NWS posts, and possibly allow us to select watches vs. warnings and/or the "area" for our alerts.
+> 
+> Thank you for an awesome program, it has proven very helpful as I continue to learn more about weather patterns and how to interpret the various data that SupercellWx makes easily available.
+> 
+> https://api.weather.gov/alerts/active
+> https://api.weather.gov/alerts/active?area={state}
+> e.g  https://api.weather.gov/alerts/active?area=OK 
+
+ _Originally posted by @Ace768 in [#333](https://github.com/dpaulat/supercell-wx/issues/333#issuecomment-2844077550)_
+===== #414 :: Still & GIF Export :: [enhancement]
+Pretty self explanatory I think. It's not uncommon to want to share something, and it's not always convenient to take a screenshot or especially a screen recording.
+
+It would be more convenient if there were a dedicated capture/export tool, with options to capture a still or GIF of one or multiple panes, and ideally the option to also save to clipboard for easy sharing.
+===== #403 :: Color Key and Vertical Cross Section :: [enhancement]
+I'm coming from using GR2 to using supercellwx so I may be biased. Reason I switched is because I like the ability to go back to past events without having to pull a file. As well as it just is more simpler to use. Things I've seen missing that I wish I had back were a key that showed me how much the dBZ has dropped, or at least a way to hover over a particular area in a cell and see what the dBZ is like what radarscope does. 
+
+Secondly adding a vertical cross section chart like GR2 has would be nice for seeing rotation in storms and the echo tops rather than going tilt by tilt. This would significantly improve the amount of data you can get out of a storm and see things like potential rotation, how high debris has been lofted, etc.
+
+Thirdly I don't know if this is a bug or a missing feature but I don't see TVS warning triangles on my radar scope.
+
+One other potential suggestion would be to add mesoscale discussions or SPC reports to the program, sort of making it an "all in one" for potential weather data. On the road if I was able to have all information avialable in one place this would be my go to app every time, and I think many other fellow chasers would agree.
+
+Really love the solid work you're doing with this!
+===== #401 :: Sounding Analysis :: [enhancement]
+Would it be possible to add a tab or box or anything that would allow users to view the latest (and maybe historical) sounding analysis for each observation site within the software? It's one feature I haven't seen many, if any software contain except the mobile app Wx and a plugin for Windy I'm hearing about. 
+===== #383 :: VWP display? :: [enhancement]
+I'm not sure if anyone else has requested this, but is it possible to add a VWP / VAD display in the future like on GRLevel3? 
+
+![Image](https://github.com/user-attachments/assets/28048caa-3bc5-4443-bd89-92f90e8f6930)
+===== #375 :: Improve AWS Nexrad Error Handling :: [bug]
+**Describe the bug**
+Error conditions do not always propagate up from the AWS NEXRAD data provider.
+
+```
+[warning] [scwx::provider::aws_nexrad_data_provider] Could not list objects: XML_ERROR_PARSING_ELEMENT
+[info] [scwx::qt::manager::radar_product_manager] [KMOB, L3, N0G] No data found
+[debug] [scwx::qt::manager::radar_product_manager] [KMOB, L3, N0G] Scheduled refresh in 02:00
+```
+
+**To Reproduce**
+There are no set steps to reproduce. Network transmission errors, other causes of data corruption, and packet loss could potentially induce this issue.
+
+**Expected behavior**
+In this example, a refresh should be scheduled in 15 seconds, rather than 2 minutes.
+===== #369 :: Additional super res products :: [enhancement]
+First off I'm enjoying the program and I'm happy to see that work continues. Can't wait to see what's coming. I did have a couple of requests of my own though. 
+
+1. Storm relative velocity - the current resolution on Supercell WX is very coarse. It also doesn't update as often as the other level 3 products. Adding super-res, or the classic resolution like on GRLevel3 would be nice. 
+2. Correlation coefficient - Sometimes debris signatures don't pop out quite as well without super res CC. They do show up, just not as clearly. 
+
+![Image](https://github.com/user-attachments/assets/e00b83dd-e766-45ba-a2fa-e222b827d5e1)
+This is the current storm relative velocity I was referring to. 
+
+
+
+===== #367 :: Add ability to connect directly to GPSD instance over a network :: [enhancement]
+**Is your feature request related to a problem? Please describe.**
+I use GPSD on a RaspberryPi to serve multiple positioning needs when storm chasing. To use Supercell-WX with it would require using a special com port bridge application I wrote that serves NMEA sentences on a COM port after connecting to a GPSD instance.
+
+**Describe the solution you'd like**
+I would like the ability to select GPS Plugin: GPSD and enter into the source field a network address (hostname or IP) which then connects to and begins receiving and parsing location information from GPSD.
+
+**Describe alternatives you've considered**
+As stated above, I wrote a program that serves as a bridge between applications that need to connect to a COM port. The program connects to GPSD, then sends NMEA sentences out on one end of a virtual COM Port pair. In order to use Supercell-WX along with my other applications, I would have to have two instances of my program running.
+
+===== #352 :: Alert Toggle and Text-to-Speech (TTS) Functionality :: [enhancement]
+**Is your feature request related to a problem? Please describe.** No.
+
+**Describe the solution you'd like**
+a feature that allows users to customize the weather alerts they receive through a toggle system within the settings menu. This functionality would enable users to selectively enable or disable specific alert types that can be viewed in the Alert tab, providing a more personalized experience, similar to the system used by RadarOmega.
+
+Additionally, an TTS feature implementation to announce issued alerts, when enabled in settings. the TTS system would state, "A [alert type] has been issued." should be disabled by default to avoid disruptions unless explicitly activated by the user.,
+
+**Describe alternatives you've considered**
+An alternative approach could involve implementing a notification system without TTS, relying solely on visual alerts to inform users.
+
+**Additional context**
+This feature would improve user experience by offering greater flexibility in alert management and providing an additional layer of notification through audible alerts.
+
+===== #296 :: a couple of suggestions. :: [enhancement]
+Thank you for making such an awesome free program, I had trouble finding good weather radar options for Linux mint until this one. I just have a couple of feature suggestions,
+
+The ability to 2 finger zoom on devices with a touchscreen or at least some zoom buttons on the map.
+
+A distance feature similar to the one on Radarscope.
+
+![Distance](https://github.com/user-attachments/assets/ec074a24-2777-4f1d-b2e1-c7b3de04e57f)
+
+Current satellite imagery layer similar to [https://weather.cod.edu/satrad/?parms=continental-conus-truecolor-24-0-100-1&checked=map&colorbar=undefined](url)
+
+ A NOAA SPC layer from [https://www.spc.noaa.gov/](url)
+
+These last two are already available outside of Supercell-wx so they aren't that necessary but it would be awesome to have them all in one place.
+
+Also, I don't know if this is just a problem for me but the theme switching from default to fusion does not do anything and the program stays in light mode.
+===== #290 :: Level 2 Velocity Dealiasing :: [enhancement]
+When viewing level 2 velocity data, higher wind speeds show the wrong direction.
+
+In order for proper velocity values to be displayed, the view should be dealiased. There should be an option in the radar toolbox to toggle the dealiasing on and off.
+
+This can be done in PyART using the following method: https://arm-doe.github.io/pyart/notebooks/dealiasing_velocity.html
+===== #248 :: ios / android app maybe?? :: [enhancement, help wanted]
+i was wondering if it will be possible to make a ios or android app of supercell wx
+===== #242 :: Outstanding work, just a few requests if possible :: [enhancement]
+. Possible to further compact the top of the radar toolbox where it lists the site ID, location and VCP information to use less space? Also, it would be nice to show whether SAILS/MRLE and AVSET are active in the VCP or not.
+
+. If you are able to add a radar elevation field to the NEXRAD Site database, you could use the elevation angle from the radar site to show the beam height centerline in feet AGL when the user presses the Shift key to sample the return data (eg. 55.4 dBZ at 14,526 ft AGL)
+
+. If shapefiles could be supported, it would further reduce the dependence on using a map service for geographic information. Otherwise, placefiles can be derived from GIS shapefiles to plot coastlines and states, counties/parishes are probably too much to handle.
+
+. Distance from cursor to radar site (user selected units) on the toolbar beside the lat/lon readout
+
+. Alarms that support more than one county or lat/lon would be helpful
+===== #221 :: PTDS information :: [enhancement]
+https://ams.confex.com/ams/27SLS/webprogram/Handout/Paper255954/ptds3.pdf 
+===== #214 :: A few suggestions... :: [enhancement]
+Couple things I would like to see:
+
+Option for MRMS Radar (this comes in handy for nationwide views)
+
+Settings to change the color/appearance of the warning polygons, possibility to have them flashing as well?  I have been seeing this more lately on news radars, especially when the warning first appears.
+
+Multiple site/view rotation automations.  Show say Tampa Bay area for 20sec then Miami for 20sec, then Florida for 20, then back to beginning of automated loop.
+
+Overall, I like this product!  Thank You.
+===== #212 :: Archive View: needs additional field :: [enhancement]
+Archive View needs to have it's own radar station drop down list. When Archive View is activated it will default to the radar site shown in it's drop down list field.
+
+The four panel view -- or whatever number of panels are up 1,2,4 -- will be set to the products that were chosen as normal.
+Products will be chained to panels and not to the view types i.e. Live or Archive.
+===== #209 :: Some more useful information on Mesoscale Detection :: [enhancement]
+https://x.com/ou_sams/status/1102368481251598347
+===== #207 :: Add climavision radar sites :: [enhancement]
+If it is possible, I would like to request the addition of Climavision patch radar sites used by the NWS. We have one of these radars in our county seat and haven't found a way to view the data yet.
+===== #206 :: NROT/Azimuthal Shear :: [enhancement]
+http://www.cimms.ou.edu/~smith/pubs/aram2004_tmsmith_andklelmore.pdf
+===== #183 :: Alternative Palettes by Pane instead of Product :: [enhancement]
+Each panel / grid quadrant should be able to have it's own palette entry assigned to the arbitrary current product that it displays. Palettes should be panel-dependent instead of radar product dependent, so that two displays of BV, BR, ...etc etc --with different palettes each-- can be shown.
+===== #176 :: Is there a way to export the level 2 files that I load in SupercellWX? :: [enhancement]
+I was wondering if this was possible so that I could load them into other programs. The SupercellWX historical feature makes it so easy to look at the data, so being able to export it would be awesome too.
+===== #168 :: Radar Data needs opacity control :: [enhancement]
+The radar data that is shown i.e. BR, BV, CC, etc etc all needs to have an opacity that can be changed on the fly.
+This allows the satellite map with streets to be seen thru the radar graphics.
+Map layers need a opacity component adjustable by slider or input field.
+Map style maps will stay opaque.
+===== #167 :: Support for Hail, Mesocyclone and Tornadic Vortex Signature (59, 60/141, 61) :: [enhancement]
+Include compatibility with icon sheets.
+===== #164 :: OpenStorm Integration :: [enhancement]
+If possible, enable some level of integration with OpenStorm.
+
+Requested by acidhorse1972:
+> And if you were to make a bounding box selection capability you could switch it over to OpenStorm for a 3D visualization.
+https://github.com/JordanSchlick/OpenStorm
+===== #163 :: Wind Visualization :: [enhancement]
+> However, I'd really like to see a wind visualization the same way that MyRadar does it but with a XOVER option for displaying surface and jet stream together to show locations of shear. WX by Joshua Tee pulls down the NWS SPC graphs for that in it's section for wind shear.
+
+Requested by acidhorse1972.
+
+A similar shader effect can also be seen in Windy, among other applications.
+
+This will require GRIB2 support in #162.
+
+HREF and other data is available here:
+
+- https://nomads.ncep.noaa.gov/pub/data/nccf/com/
+- https://registry.opendata.aws/collab/noaa/
+- https://www.nco.ncep.noaa.gov/pmb/products/
+===== #162 :: Enable GRIB2 Support :: [enhancement]
+Enable GRIB2 support.
+
+- Support for the GRIB2 format
+- Provide a GRIB2 manager / library to display GRIB2 files from different sources
+===== #161 :: Radar Tornado Intensity Estimation :: [enhancement]
+Add Radar Tornado Intensity Estimation, as described in [1].  This will take into account rotational velocity from a VEL product, CC, reflectivity, and ZDR.
+
+[1] A skill assessment of techniques for real-time diagnosis and short-term prediction of tornado intensity using the WSR-88D
+https://repository.library.noaa.gov/view/noaa/16157
+===== #160 :: Rotational Velocity :: [enhancement]
+Add the capability to identify rotational velocity.
+
+![image](https://github.com/dpaulat/supercell-wx/assets/2886605/d5abd278-a40e-4a4c-9208-37ea27c89d22)
+
+Source: A skill assessment of techniques for real-time diagnosis and short-term prediction of tornado intensity using the WSR-88D
+https://repository.library.noaa.gov/view/noaa/16157
+===== #145 :: Customizable Lines and Icons :: [enhancement]
+Lines and icons should be customizable, including, but not limited to:
+
+- Alerts/Warnings
+- Storm Tracks
+- Location
+
+For lines, the following should be customizable:
+
+- Width
+- Border width
+- Color
+- Highlight
+- Pattern
+- Flash
+
+For icons, the following should be customizable:
+
+- Image
+- Color
+===== #122 :: Radar with Precipitation Type Display :: [enhancement]
+A Radar with Precipitation Type display should be provided.
+
+**Method 1**
+If it exists, this may be able to be solved using a grib2 source.
+
+**Method 2**
+Implement an open source algorithm
+- The wxdata library should include a derived product generator
+- Retrieve existing level 3 data
+  - Reflectivity
+  - Melting layer
+- Retrieve vertical temperature profile (RAP, NAM, GFS, another source?)
+- Possible algorithms
+  - https://journals.ametsoc.org/view/journals/wefo/36/2/WAF-D-20-0118.1.xml (CC BY)
+- Can accuracy be increased by using surface observations?
+
+Depending on data sources required to implement the derived product, an archive view may not be able to be provided. Model data and surface observations may limit this to live products only (or recent history).
+===== #91 :: Dependency Dashboard :: []
+This issue lists Renovate updates and detected dependencies. Read the [Dependency Dashboard](https://docs.renovatebot.com/key-concepts/dashboard/) docs to learn more.<br>[View this repository on the Mend.io Web Portal](https://developer.mend.io/github/dpaulat/supercell-wx).
+
+## Config Migration Needed
+
+ - [ ] <!-- create-config-migration-pr --> Select this checkbox to let Renovate create an automated Config Migration PR.
+
+## Open
+
+The following updates have all been created. To force a retry/rebase of any, click on a checkbox below.
+
+ - [ ] <!-- rebase-branch=renovate/gtest-1.x -->[Update dependency gtest to v1.18.0](../pull/681)
+ - [ ] <!-- rebase-branch=renovate/openssl-4.x -->[Update dependency openssl to v4](../pull/666)
+ - [ ] <!-- rebase-all-open-prs -->**Click on this checkbox to rebase all open PRs at once**
+
+## PR Closed (Blocked)
+
+The following updates are blocked by an existing closed PR. To recreate the PR, click on a checkbox below.
+
+ - [ ] <!-- recreate-branch=renovate/range-v3-0.x -->[Update dependency range-v3 to v0.12.0](../pull/583)
+
+## Detected Dependencies
+
+<details><summary>conan (1)</summary>
+<blockquote>
+
+<details><summary>conanfile.py (20)</summary>
+
+ - `boost 1.91.0`
+ - `cpr 1.14.2`
+ - `fontconfig 2.17.1`
+ - `geographiclib 2.6`
+ - `geos 3.14.1`
+ - `glm 1.0.3`
+ - `gtest 1.17.0` → [Updates: `1.18.0`]
+ - `libcurl 8.21.0`
+ - `libjpeg 9f`
+ - `libpng 1.6.58`
+ - `libxml2 2.15.3`
+ - `libzip 1.11.4`
+ - `openssl 3.6.3` → [Updates: `4.0.1`]
+ - `range-v3 cci.20240905` → [Updates: `0.12.0`]
+ - `re2 20251105`
+ - `spdlog 1.17.0`
+ - `vulkan-loader 1.4.350.0`
+ - `zlib 1.3.2`
+ - `onetbb 2023.0.0`
+ - `freetype 2.14.3`
+
+</details>
+
+</blockquote>
+</details>
+
+<details><summary>github-actions (6)</summary>
+<blockquote>
+
+<details><summary>.github/workflows/ci.yml (13)< ...[TRUNC]
+===== #88 :: Placefile Cleanup :: [enhancement]
+A few items were not completed as part of the initial Placefile implementation:
+- [ ] Support placefiles with entries over the antimeridian
+- [ ] Disabled/removed placefiles should not populate images in the texture atlas
+- [ ] Fix texture sizing artifacts
+- [ ] Refresh placefiles only when enabled on at least one map
+===== #85 :: Move constructor safety :: [bug]
+Several classes are not move-safe. There are two potential problems;
+- Implementation has a reference to the interface that does not get updated on move
+- Lambdas capture "this", which becomes invalid after a move
+
+The above issues should be addressed where possible, or move constructors deleted.
+
+This is not currently causing any functional issues, as most classes are never moved, and move constructors are never called.
+===== #80 :: Support Drawing Over Map :: [enhancement]
+From AustinDevvania on [Discord](https://discord.com/channels/1021112836316995715/1138501377404969100/1138501377404969100):
+
+> Drawing on the radar image is such an important feature for teaching and demonstrating, so this would be very nice to include. I would prefer it to have an outline (white or black) surronding a distinctive and noticable color (eg: red, blue). Smoothing would be very nice but might not be easy. Having the drawing sync between panels would also be nice, but being able to disable that on the fly would be nice (perhaps Alt + LMB draws on one panel only).
+===== #78 :: Support MRMS / National Mosaic :: [enhancement]
+From Lancer:
+> WCT has an option to display "Current NEXRAD" over the entire US through its Background Layers. IDK if its somehow combining multiple data sources, but seeing as its seamless on the edges I wonder if there is a Data File accessible that has this full image already put together available. Any chance we can get this to display in some way. Would be nice to see everything even if it isn't in as much detail as individual sites. sort of an overall picture.
+
+MRMS is detailed here:
+https://mrms.nssl.noaa.gov/
+
+The data is available in GRIB2 format. Supporting GRIB2 is likely the path forward.
+===== #77 :: Allow panels to be independent from one another :: [enhancement]
+This would allow things such as multiple radar sites viewed from different panels without the need to open a 2nd instance. 
+
+I attached the discord conversation regarding this.
+![Screenshot_20230728_114438](https://github.com/dpaulat/supercell-wx/assets/96398274/609c33fa-f518-4590-b44a-bef800c8344e)
+![Screenshot_20230728_114453](https://github.com/dpaulat/supercell-wx/assets/96398274/d7b02475-85de-4285-a3a4-76a20110aea4)
+
+===== #17 :: Support Additional NEXRAD Providers :: [enhancement]
+Support for additional NEXRAD providers is needed, including:
+- [x] ONDAS (AllisonHouse)
+- [ ] THREDDS
+- [x] NWS HTTP Archive
+- [x] Iowa State Mesonet (https://mesonet-nexrad.agron.iastate.edu/level2/raw/)
+===== #14 :: Add County Boundaries :: [enhancement]
+County boundaries are needed on the map. This should be a selectable option. Layer ordering of boundaries vs. radar image seems appropriate, but coastlines are not visible underneath a radar image.
+===== #8 :: Color Table Legend :: [enhancement]
+The color table displayed on the map should have a legend. Consider flipping from horizontal to vertical with an inset. This is likely to uncover scaling issues with various products.
+===== #6 :: Level 3 Product Support :: [enhancement]
+This epic is intended to capture overall progress on support for level 3 products.
+
+- [x] #7
+- [ ] #167
+- [x] #148
+- [x] #154
+- [x] Super Resolution Reflectivity Data Array (153)
+- [x] Super Resolution Reflectivity Velocity Array (154)
+- [x] #123
+- [x] #149
+
+See the following for the latest status: https://supercell-wx.readthedocs.io/en/stable/features/nexrad-l3.html

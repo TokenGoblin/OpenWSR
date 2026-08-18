@@ -1,0 +1,75 @@
+==================== https://www.grlevelx.com/manuals/gr2analyst/menu_algorithms.htm
+Algorithms Menu
+
+
+
+
+Environment Settings...
+
+Displays the Environmental Data dialog box.
+
+Algorithm Settings...
+
+Displays the Algorithm Settings dialog box.
+==================== https://www.grlevelx.com/manuals/gr2analyst/volume_toolbar.htm
+Volume Toolbar Window
+
+
+
+
+
+Save Image to File
+
+Displays the Save Image dialog box:
+
+
+
+
+
+
+Animation Buffer Control
+
+These buttons control which volume is 
+displayed. The first button jumps to the oldest volume, the second button steps 
+backwards one volume, the next steps forward one volume, the right button jumps 
+to the latest complete radar volume.
+
+
+
+Refresh
+
+Refreshes the 
+current volume display and the volume animation buffer contents. 
+
+
+
+Volume 
+Settings
+
+Displays the Volume Settings dialog box:
+
+
+
+
+The Volume Settings dialog sets the number of samples along the x/y and z 
+axes. The default values are 92 and 64 and offer reasonable display quality 
+and performance. On high performance graphics adapters, these numbers can be 
+raised to 128 or higher. Note: memory usage increases geometrically with the 
+sampling settings. For example, at 128x128x64 each viewing axis uses 12MB of 
+system and video memory.
+
+
+
+
+Light Settings
+
+Push 
+button that controls visibility of the Volume 
+Light tool window
+
+
+
+Volume Alpha Settings
+
+Push button that controls visibility of the Volume Alpha 
+tool window

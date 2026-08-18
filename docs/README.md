@@ -11,6 +11,7 @@ for users) or [CLAUDE.md](../CLAUDE.md) (which is the working brief).
 | [parity.md](parity.md) | Competitive gap analysis, annotated with what's since been closed |
 | [parity-scan.html](parity-scan.html) | The original presentation version of that analysis — open in a browser |
 | [evidence-live-soak-30min.log](evidence-live-soak-30min.log) | Raw log from the 30-minute live ingestion soak |
+| [screenshots/build-log/](screenshots/build-log/) | Working captures from the build, including the symptoms of bugs worth recognising again |
 
 Related: [`resources/`](../resources/) holds the runnable inputs — cross-check scripts,
 sample placefiles, reference tables.

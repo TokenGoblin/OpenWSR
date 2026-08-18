@@ -1,0 +1,184 @@
+==================== https://www.grlevelx.com/manuals/gr2analyst_2/
+GR2Analyst 2.00 User Guide
+
+
+
+
+Getting Started
+
+The 
+main window contains a main menu along the top, toolbar underneath, color table on the left, radar display window in the center, and the status bar along the bottom. Many layers 
+of information are shown in the radar display window (from back to front order): 
+background color, automatic background imagery, radar graphical data, county outlines, 
+state outlines, roads, city labels, radar labels, LSR icons, warning outlines, 
+storm tracks, hail icons, NMD/MESO icons, and finally TVS icons. If the 
+automatic background is enabled (via GIS->Show Background) you will see 
+increasing levels of detail as you zoom into the radar display. See the
+Automatic Background page for more details.
+
+
+Radar Display Window
+
+The radar display window is the centerpiece of GR2Analyst. By 
+default it contains a single display panel but can display one, two, or four 
+panels. Each display panel shows radar data, LSRs, warnings, and other graphical 
+information. All of the panels are linked together, so panning and zooming 
+occurs simultaneously in all of them. In the screenshot above, BR 0.5� is the 
+product shown in Panel #1 on the left and SRV 0.5� is the product shown in Panel 
+#2 on the right.
+
+To change the number of display panels shown, click the 
+"Panels" main menu item and select "One Panel", "Two Panels", or "Four Panels". 
+Below those items are the saved Favorite Panel configurations. There are eight saved Favorite 
+Panel configurations available and they default to a variety of useful 
+combinations. There are two ways to switch to a saved Favorite Panel 
+configuration: select it from the Panels menu or press the corresponding number 
+key on your keyboard. To replace a saved Favorite Panel configuration with the 
+current displayed panels, select Panels->Save Current Panels as->Favorite #N, 
+where N is the saved configuration to replace. 
+
+
+Navigation in a Radar Display Panel
+
+To pan the display, click and drag with the left mouse 
+button. To zoom in, roll your mousewheel forward or click on the + magnifying 
+glass button in the toolbar. To zoom out, roll your mousewheel backwards or 
+click on the - magnifying glass button in the toolbar. To zoom in on a specific 
+area, right-click on the location you want centered and drag outwards. A zoom 
+box will appear showing the extent of the new view area. Release the right mouse 
+button to activate the new zoom area. To cancel the right-click zoom operation, 
+press the Esc key before releasing the right mouse button.
+
+
+Changing Radar Sites
+
+GR2Analyst defaults to KFFC (Atlanta's NEXRAD) on first run. There are two ways to change to a different radar site:
+
+
+If the 
+radar site is shown in the radar display window, you can hover your mouse 
+pointer over the site's location and when the mouse pointer turns to a "hand" 
+cursor, click the left mouse button.
+
+Select the 
+Site->Select... item from the main menu. The "Select Radar" dialog will appear, showing 
+a list of all the supported radars.
+
+
+You can change the 
+startup site by selecting Site->Settings... to display the Site Settings 
+dialog box. Click on the "Change" button in the 
+"Startup Site" section and select your new startup site.
+
+Radar sites can also be added to a "Favorites" list at the bottom of the 
+"Site" main menu item. To add a new site to your Favorites, go to the site and 
+then select Site->Add To Favorites. To change to a Favorite site, simply select 
+it from the Site menu. To remove a site from your Favorites, select 
+Site->Settings and remove it from the Favorites list.
+
+
+
+Warnings
+
+GR2Analyst downloads warnings for the entire nation. Only severe weather 
+warnings are supported: Special Marine, Flash Flood, Severe Thunderstorm, and 
+Tornado. A priority-sorted list of warnings is shown in the "Active Warnings" window 
+and the warning outline in the radar display window. You can see the statements 
+for a warning in two ways: click on the warning outline in the radar display or 
+right-click on the warning's entry in the Active Warnings window. To 
+automatically change to the closest radar site to a warning, double-click on the 
+warning's entry in the Active Warnings window. See the Warning System page for more information.
+
+
+Local Storm Reports (LSRs)
+
+GR2Analyst downloads Local Storm Reports from the public NWS server. Icons 
+representing the type and magnitude of an LSR are shown in the radar display. 
+Hover your mouse pointer over an LSR icon to see details of the report. Only LSRs issued 
+within 60 minutes of the currently displayed product's volume scan time are 
+shown.
+
+
+
+Status Bar
+
+The GR2Analyst status bar contains mouse pointer information and the current zoom 
+level. The mouse 
+pointer information changes with movement of the pointer. 
+
+
+
+The individual items on the status bar are:
+
+
+Name of the base road underneath the pointer -or- the status text for 
+any shapefile element underneath the pointer
+
+Azimuth and Range from the currently selected marker to the pointer, in 
+degrees and nautical miles
+
+Data value of the radar tilt underneath the pointer, units are product 
+dependent
+
+Beam center height above the radar level in feet
+
+Latitude and Longitude of the pointer
+
+Current view zoom level in meters/pixel
+
+Time until next poll for new data
+
+
+
+
+Hail and Mesocyclone Icons
+
+GR2Analyst processes radar volumes to generate hail and mesocyclone storm 
+attributes. Here is a description of the iconsheets for those attributes:
+
+
+
+
+
+| 
+GR-MDA Icons
+
+The GR-MDA iconsheet has two rows of four icons. 
+The top row is shown when the mesocyclone base is above 5kft. From left 
+to right, the icons indicate 1.0, 1.5, 2.0, and 2.5 average NROT 
+strength for a mesocyclone, which correspond to weak, moderate, strong, 
+and extreme levels of rotation.
+
+| 
+
+
+
+
+
+
+| 
+Hail IconsThe 
+Hail iconsheet has five rows of four icons. Each row corresponds to the 
+inches in the estimated hail size. Each column represents 0.25" 
+increments. | 
+
+
+GR-MDA attributes are updated every time a new base velocity tilt is 
+received. Hail attributes are updated every time a new base reflectivity tilt is 
+received. Both attributes are updated when the Storm Motion Vector is changed.
+
+
+
+How to Change Iconsheets
+
+You can change any of the iconsheets in GR2Analyst to your own customized 
+versions. See the following page: Iconsheets 
+in GR Programs.
+
+
+
+How to Change Color Tables
+
+You can change any of the color tables used by GR2Analyst to your own custom 
+versions. See the following page: Color 
+Tables in GR Programs.

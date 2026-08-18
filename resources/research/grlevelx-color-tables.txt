@@ -1,0 +1,35 @@
+==================== https://www.grlevelx.com/manuals/color_tables/index.htm
+Color Tables in GR Programs
+
+Color tables are simple text files that you can create. See the
+Color Table File Specification 
+for more information on the file format and contents. You should never modify 
+the color tables included in your program's installation directory. You should 
+always create your own directory on your hard disk for your custom color table 
+files. 
+
+
+How to Change Color Tables
+
+There are two ways to change the color tables used by your GR program:
+
+
+1. Select View->Color Table Settings...
+
+This displays the "Color Table 
+Settings" dialog box:
+
+
+
+
+Select the product you want to change in the "Product Category" listbox. You 
+will see the current settings to the right along with some of the product's 
+details. Click the "Change" button to select a new color table file or click the 
+"Use Default" button to revert back to the default color table.
+
+
+2. Use drag-and-drop from Windows Explorer.
+
+You can drag and drop a .pal file 
+onto the radar display window. The product specified in the color table's "Product:" statement 
+is used to vector the file to the appropriate radar product.
