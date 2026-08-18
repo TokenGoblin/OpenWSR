@@ -24,14 +24,16 @@ the same GPU scene as the basemap, in its native polar geometry.
   order-independent assembly, adaptive polling, data-age indicator.
 - **Warnings** — live NWS polygons (tornado red / severe yellow / flash-flood
   green), click for full text.
-- **Storm products** — Level III NST/NHI/NMD overlays: SCIT storm tracks with
-  forecast positions and direction arrows, hail markers sized by severe-hail
+- **Storm products** — Level III NST/NHI/NMD/NSS overlays: SCIT storm tracks with
+  WunderMap-style projection cones (motion vector + ±15° swept area over the next
+  hour), on-map cell labels with max dBZ, hail markers sized by severe-hail
   probability, mesocyclone circles at detected radius. Click any cell for details
-  (motion, hail probabilities, meso, closest approach to home). Decoder verified
-  against MetPy.
-- **Layers panel** — radar opacity, per-type warning filters (tornado / severe /
-  flash flood / other), storm-layer filters (past/forecast track, hail, meso,
-  minimum severe-hail probability).
+  (motion, max dBZ / echo top / VIL, hail probabilities, meso, closest approach
+  to home). Decoders verified against MetPy.
+- **Layers panel** — radar opacity, radar smoothing toggle (soft consumer-style
+  blending between cells vs raw gates), per-type warning filters (tornado /
+  severe / flash flood / other), storm-layer filters (past/forecast track,
+  projection cones, cell labels, hail, meso, minimum severe-hail probability).
 - **Proximity alerts** — set a home location and radius; OpenWSR alerts (toast +
   sound) when a storm's forecast track will pass within range (with ETA and cell
   attributes) or when a warning polygon includes or nears your area.

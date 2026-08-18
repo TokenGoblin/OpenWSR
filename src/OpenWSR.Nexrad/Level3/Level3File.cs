@@ -39,6 +39,7 @@ public static class Level3File
         var storms = new List<StormCell>();
         var hail = new List<HailIndicator>();
         var mesos = new List<MesocycloneDetection>();
+        var structures = new List<StormCellStructure>();
 
         if (symbologyOffset > 0 && symbologyOffset < msg.Length)
         {
@@ -46,9 +47,17 @@ public static class Level3File
             ParseSymbology(symbology, storms, hail, mesos);
         }
 
+        // Stand-alone tabular products (NSS) carry the tabular block at the
+        // symbology-offset slot; others use the dedicated tabular offset.
+        int tabularOffset = checked((int)(Be.U32(msg, 116) * 2));
+        if (tabularOffset <= 0)
+            tabularOffset = symbologyOffset;
+        if (productCode == 62 && tabularOffset > 0 && tabularOffset < msg.Length)
+            ParseStormStructureTable(ReadTabularLines(msg[tabularOffset..]), structures);
+
         return new Level3Product(
             productCode, siteId, lat, lon, heightFt, vcp, mode,
-            volumeTime, productTime, storms, hail, mesos);
+            volumeTime, productTime, storms, hail, mesos, structures);
     }
 
     public static Level3Product DecodeFile(string path) => Decode(File.ReadAllBytes(path));
@@ -83,8 +92,9 @@ public static class Level3File
         ReadOnlySpan<byte> s,
         List<StormCell> storms, List<HailIndicator> hail, List<MesocycloneDetection> mesos)
     {
+        // Some products carry no symbology; the offset then lands on another block type.
         if (s.Length < 10 || Be.I16(s, 0) != -1 || Be.I16(s, 2) != 1)
-            throw new NexradFormatException("Symbology block header malformed.");
+            return;
         int layerCount = Be.I16(s, 8);
         int pos = 10;
 
@@ -231,4 +241,70 @@ public static class Level3File
 
     private static KmPoint Point(ReadOnlySpan<byte> s, int offset) =>
         new(Be.I16(s, offset) * 0.25, Be.I16(s, offset + 2) * 0.25);
+
+    // ---- tabular alphanumeric block ----
+
+    /// <summary>
+    /// Tabular block: divider, id=3, length, an embedded message-header + PDB copy,
+    /// then a divider, page count, and pages of [charCount][chars] lines, each page
+    /// terminated by a -1 divider.
+    /// </summary>
+    private static List<string> ReadTabularLines(ReadOnlySpan<byte> block)
+    {
+        var lines = new List<string>();
+        if (block.Length < 8 || Be.I16(block, 0) != -1)
+            return lines;
+
+        int pages, pos;
+        if (Be.I16(block, 2) == 3)
+        {
+            // Attached tabular block: id=3, length, embedded message header + PDB copy.
+            pos = 8 + 18 + 102;
+            if (pos + 4 > block.Length || Be.I16(block, pos) != -1)
+                return lines;
+            pages = Be.I16(block, pos + 2);
+            pos += 4;
+        }
+        else
+        {
+            // Stand-alone tabular (e.g. NSS): divider, page count, pages directly.
+            pages = Be.I16(block, 2);
+            pos = 4;
+        }
+        if (pages is <= 0 or > 64)
+            return lines;
+
+        for (int page = 0; page < pages && pos + 2 <= block.Length; page++)
+        {
+            while (pos + 2 <= block.Length)
+            {
+                int count = Be.I16(block, pos);
+                pos += 2;
+                if (count == -1) break; // end of page
+                if (count < 0 || pos + count > block.Length) return lines;
+                lines.Add(Be.Ascii(block, pos, count));
+                pos += count;
+            }
+        }
+        return lines;
+    }
+
+    /// <summary>NSS rows: "R5  182/ 95  &lt;11.1  50.1  37  52  32.5" (id, azran, base, top, VIL, max dBZ, height).</summary>
+    private static void ParseStormStructureTable(List<string> lines, List<StormCellStructure> structures)
+    {
+        var row = new System.Text.RegularExpressions.Regex(
+            @"^\s*([A-Z][0-9])\s+\d+/\s*\d+\s+[<>]?\s*([\d.]+)\s+[<>]?\s*([\d.]+)\s+([\d.]+)\s+(\d+)\s+([\d.]+)\s*$");
+        foreach (var line in lines)
+        {
+            var match = row.Match(line);
+            if (!match.Success) continue;
+            structures.Add(new StormCellStructure(
+                match.Groups[1].Value,
+                int.Parse(match.Groups[5].Value),
+                double.Parse(match.Groups[4].Value, System.Globalization.CultureInfo.InvariantCulture),
+                double.Parse(match.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture),
+                double.Parse(match.Groups[3].Value, System.Globalization.CultureInfo.InvariantCulture),
+                double.Parse(match.Groups[6].Value, System.Globalization.CultureInfo.InvariantCulture)));
+        }
+    }
 }

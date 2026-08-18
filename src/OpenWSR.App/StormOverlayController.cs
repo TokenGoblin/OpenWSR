@@ -17,7 +17,8 @@ public sealed record TrackedStorm(
     IReadOnlyList<(double LatDeg, double LonDeg)> PastPath,
     double SpeedKmh, double BearingDeg,
     int ProbabilityOfHail, int ProbabilityOfSevereHail, int MaxHailSizeInches,
-    double? MesoRadiusKm);
+    double? MesoRadiusKm,
+    int? MaxDbz, double? CellBasedVil, double? EchoTopKft);
 
 /// <summary>
 /// Fetches the newest NST/NHI/NMD Level III products for a site, joins them into
@@ -36,17 +37,20 @@ public sealed class StormOverlayController : IDisposable
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMinutes(2) };
     private string? _site;
     private int _fetchGeneration;
-    private Level3Product? _nst, _nhi, _nmd;
+    private Level3Product? _nst, _nhi, _nmd, _nss;
 
     // ---- layer filters (WunderMap-style); Rebuild() applies without refetching ----
     public bool ShowPastTrack { get; set; } = true;
     public bool ShowForecastTrack { get; set; } = true;
+    public bool ShowCones { get; set; } = true;
+    public bool ShowLabels { get; set; } = true;
     public bool ShowHail { get; set; } = true;
     public bool ShowMeso { get; set; } = true;
     /// <summary>Hide hail markers below this probability-of-severe-hail percentage.</summary>
     public int MinSevereHailProbability { get; set; }
 
     public OverlayGeometry? Geometry { get; private set; }
+    public IReadOnlyList<MapView.MapLabel> Labels { get; private set; } = [];
     public IReadOnlyList<TrackedStorm> Storms { get; private set; } = [];
     public bool IsEnabled => _site is not null;
 
@@ -71,8 +75,9 @@ public sealed class StormOverlayController : IDisposable
         _timer.Stop();
         _site = null;
         _fetchGeneration++;
-        _nst = _nhi = _nmd = null;
+        _nst = _nhi = _nmd = _nss = null;
         Storms = [];
+        Labels = [];
         Geometry = null;
         GeometryChanged?.Invoke();
         StormsUpdated?.Invoke(Storms);
@@ -112,12 +117,14 @@ public sealed class StormOverlayController : IDisposable
             var nst = _client.GetLatestAsync(site, "NST");
             var nhi = _client.GetLatestAsync(site, "NHI");
             var nmd = _client.GetLatestAsync(site, "NMD");
-            await Task.WhenAll(nst, nhi, nmd);
+            var nss = _client.GetLatestAsync(site, "NSS");
+            await Task.WhenAll(nst, nhi, nmd, nss);
             if (generation != _fetchGeneration) return; // toggled off or site changed
 
             _nst = nst.Result;
             _nhi = nhi.Result;
             _nmd = nmd.Result;
+            _nss = nss.Result;
             BuildStorms();
             BuildGeometry();
             GeometryChanged?.Invoke();
@@ -178,10 +185,12 @@ public sealed class StormOverlayController : IDisposable
 
                 var hail = FindHail(cell);
                 var meso = FindMeso(nst, cell);
+                var structure = _nss?.CellStructures.FirstOrDefault(s => s.Id == cell.Id);
                 storms.Add(new TrackedStorm(
                     cell.Id, current.LatDeg, current.LonDeg, forecast, past, speed, bearing,
                     hail?.ProbabilityOfHail ?? 0, hail?.ProbabilityOfSevereHail ?? 0,
-                    hail?.MaxHailSizeInches ?? 0, meso));
+                    hail?.MaxHailSizeInches ?? 0, meso,
+                    structure?.MaxReflectivityDbz, structure?.CellBasedVil, structure?.TopKft));
             }
         }
         Storms = storms;
@@ -213,12 +222,22 @@ public sealed class StormOverlayController : IDisposable
     private void BuildGeometry()
     {
         var geometry = new OverlayGeometry();
+        var labels = new List<MapView.MapLabel>();
         if (_nst is { } nst)
         {
             foreach (var cell in nst.StormCells)
             {
                 var current = ToMercator(nst, cell.Position);
                 AddDiamond(geometry, current, 900, TrackColor);
+
+                var tracked = Storms.FirstOrDefault(s => s.Id == cell.Id);
+                if (ShowCones && tracked is { SpeedKmh: > 3 })
+                    AddProjectionCone(geometry, tracked);
+                if (ShowLabels)
+                {
+                    string text = tracked?.MaxDbz is { } dbz ? $"{cell.Id} {dbz}" : cell.Id;
+                    labels.Add(new MapView.MapLabel(current.X, current.Y, text, 10, 4));
+                }
 
                 if (ShowPastTrack)
                 {
@@ -274,7 +293,57 @@ public sealed class StormOverlayController : IDisposable
                 }
             }
         }
+        Labels = labels;
         Geometry = geometry;
+    }
+
+    /// <summary>
+    /// WunderMap-style projection cone: apex at the cell, opening along the motion
+    /// vector out to the 60-minute forecast distance, ±15° spread — the storm's
+    /// projected direction and swept area in one glance. A solid centerline marks
+    /// the vector itself.
+    /// </summary>
+    private static void AddProjectionCone(OverlayGeometry g, TrackedStorm storm)
+    {
+        double lengthM = storm.ForecastPath.Count > 0
+            ? GeoMath.DistanceM(storm.LatDeg, storm.LonDeg,
+                storm.ForecastPath[^1].LatDeg, storm.ForecastPath[^1].LonDeg)
+            : storm.SpeedKmh * 1000.0; // no forecast: one hour at current speed
+        if (lengthM < 2000) return;
+
+        const double halfAngleDeg = 15;
+        double bearingRad = storm.BearingDeg * Math.PI / 180.0;
+        var apex = GeoMath.ToMercator(storm.LatDeg, storm.LonDeg);
+
+        // Arc across the far end of the cone, apex-first fan for the fill.
+        const int arcSamples = 6;
+        var arc = new List<(double X, double Y)>(arcSamples + 1);
+        for (int i = 0; i <= arcSamples; i++)
+        {
+            double offsetDeg = -halfAngleDeg + 2 * halfAngleDeg * i / arcSamples;
+            var (lat, lon) = GeoMath.Offset(storm.LatDeg, storm.LonDeg,
+                bearingRad + offsetDeg * Math.PI / 180.0, lengthM);
+            var m = GeoMath.ToMercator(lat, lon);
+            arc.Add((m.X, m.Y));
+        }
+
+        uint fill = OverlayGeometry.Pack(255, 255, 255, 26);
+        uint edge = OverlayGeometry.Pack(255, 255, 255, 150);
+        for (int i = 0; i < arcSamples; i++)
+        {
+            g.FillTriangles.Add((apex.X, apex.Y, fill));
+            g.FillTriangles.Add((arc[i].X, arc[i].Y, fill));
+            g.FillTriangles.Add((arc[i + 1].X, arc[i + 1].Y, fill));
+            g.Lines.Add((arc[i].X, arc[i].Y, arc[i + 1].X, arc[i + 1].Y, edge, 1.5f));
+        }
+        g.Lines.Add((apex.X, apex.Y, arc[0].X, arc[0].Y, edge, 1.5f));
+        g.Lines.Add((apex.X, apex.Y, arc[^1].X, arc[^1].Y, edge, 1.5f));
+
+        // The motion vector: solid centerline to the cone's midpoint range.
+        var (vLat, vLon) = GeoMath.Offset(storm.LatDeg, storm.LonDeg, bearingRad, lengthM);
+        var tip = GeoMath.ToMercator(vLat, vLon);
+        g.Lines.Add((apex.X, apex.Y, tip.X, tip.Y,
+            OverlayGeometry.Pack(255, 255, 255, 200), 2f));
     }
 
     private static void AddArrowHead(OverlayGeometry g, StormCell cell, Level3Product p)

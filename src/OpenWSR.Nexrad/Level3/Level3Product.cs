@@ -27,6 +27,13 @@ public sealed record MesocycloneDetection(
     IReadOnlyList<KmPoint> PastPositions,
     IReadOnlyList<KmPoint> ForecastPositions);
 
+/// <summary>Per-cell storm structure from an NSS (product 62) tabular block.</summary>
+public sealed record StormCellStructure(
+    string Id,
+    int MaxReflectivityDbz,
+    double CellBasedVil,     // kg/m²
+    double BaseKft, double TopKft, double MaxRefHeightKft);
+
 /// <summary>A decoded Level III product: header metadata plus whichever feature lists apply.</summary>
 public sealed record Level3Product(
     int ProductCode,
@@ -40,4 +47,5 @@ public sealed record Level3Product(
     DateTime ProductTimeUtc,
     IReadOnlyList<StormCell> StormCells,
     IReadOnlyList<HailIndicator> HailIndicators,
-    IReadOnlyList<MesocycloneDetection> Mesocyclones);
+    IReadOnlyList<MesocycloneDetection> Mesocyclones,
+    IReadOnlyList<StormCellStructure> CellStructures);

@@ -81,6 +81,29 @@ public class Level3Tests
     }
 
     [Fact]
+    public void Nss_CellStructuresWithMaxDbz()
+    {
+        var p = Load("NSS");
+        Assert.Equal(62, p.ProductCode);
+        // The header reports 54 detections but the table lists the 40 strongest cells.
+        Assert.Equal(40, p.CellStructures.Count);
+
+        var r5 = p.CellStructures.Single(c => c.Id == "R5");
+        Assert.Equal(52, r5.MaxReflectivityDbz);
+        Assert.Equal(37, r5.CellBasedVil);
+        Assert.Equal(11.1, r5.BaseKft);
+        Assert.Equal(50.1, r5.TopKft);
+        Assert.Equal(32.5, r5.MaxRefHeightKft);
+
+        var o4 = p.CellStructures.Single(c => c.Id == "O4");
+        Assert.Equal(58, o4.MaxReflectivityDbz);
+        Assert.Equal(35, o4.CellBasedVil);
+
+        var n6 = p.CellStructures.Single(c => c.Id == "N6");
+        Assert.Equal(56, n6.MaxReflectivityDbz);
+    }
+
+    [Fact]
     public void Nmd_MesocycloneDetections()
     {
         var p = Load("NMD");

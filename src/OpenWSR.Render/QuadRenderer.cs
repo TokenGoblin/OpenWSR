@@ -115,13 +115,14 @@ public sealed class QuadRenderer : IDisposable
         (float X0, float Y0, float X1, float Y1) clipRect,
         (float U0, float V0, float U1, float V1) uvRect,
         ID3D11ShaderResourceView texture,
-        float opacity = 1f)
+        float opacity = 1f,
+        float tintR = 1f, float tintG = 1f, float tintB = 1f)
     {
         var data = new PerQuad
         {
             X0 = clipRect.X0, Y0 = clipRect.Y0, X1 = clipRect.X1, Y1 = clipRect.Y1,
             U0 = uvRect.U0, V0 = uvRect.V0, U1 = uvRect.U1, V1 = uvRect.V1,
-            R = 1, G = 1, B = 1, A = opacity,
+            R = tintR, G = tintG, B = tintB, A = opacity,
         };
         _context.UpdateSubresource(data, _constants);
         _context.PSSetShader(_psTextured);

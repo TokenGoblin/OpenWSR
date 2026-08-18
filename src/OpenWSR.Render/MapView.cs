@@ -37,12 +37,20 @@ public sealed class MapView : IDisposable
     public double LastSweepUploadMs { get; private set; }
 
     private volatile float _radarOpacity = 0.85f;
+    private volatile bool _radarSmoothing;
 
     /// <summary>Radar layer opacity, 0–1. Written from the UI thread, read per frame.</summary>
     public float RadarOpacity
     {
         get => _radarOpacity;
         set => _radarOpacity = Math.Clamp(value, 0f, 1f);
+    }
+
+    /// <summary>Bilinear-smoothed radar (the friendly consumer look) vs raw gates.</summary>
+    public bool RadarSmoothing
+    {
+        get => _radarSmoothing;
+        set => _radarSmoothing = value;
     }
 
     /// <summary>Raised on the UI thread with the virtual-key code of keys pressed over the map.</summary>
@@ -84,6 +92,15 @@ public sealed class MapView : IDisposable
 
     private readonly Lock _overlayLock = new();
     private OverlayGeometry? _overlay;
+    private readonly GlyphAtlas _glyphAtlas = new(); // built on the UI thread (WPF)
+    private IReadOnlyList<MapLabel> _labels = [];
+
+    /// <summary>A short text label anchored at a Mercator position, offset in pixels.</summary>
+    public readonly record struct MapLabel(
+        double MercX, double MercY, string Text, int OffsetXPx, int OffsetYPx);
+
+    /// <summary>Replace the label layer (storm IDs, dBZ). Swapped atomically.</summary>
+    public void SetLabels(IReadOnlyList<MapLabel> labels) => _labels = labels;
 
     /// <summary>Replace the overlay layer (warning polygons, measure lines). Null clears.</summary>
     public void SetOverlay(OverlayGeometry? overlay)
@@ -278,6 +295,7 @@ public sealed class MapView : IDisposable
                 }
             }
             radar.Opacity = _radarOpacity;
+            radar.Smoothing = _radarSmoothing;
             radar.Draw(cam);
             LastSweepUploadMs = radar.LastUploadMs;
 
@@ -291,6 +309,7 @@ public sealed class MapView : IDisposable
 
             quads.Begin();
             DrawMarkers(cam, quads);
+            DrawLabels(cam, quads, device);
 
             device.SwapChain.Present(1);
 
@@ -302,6 +321,13 @@ public sealed class MapView : IDisposable
                 fpsWindowStart = now;
             }
         }
+
+        // The glyph texture belongs to this loop's device; drop it so a restarted
+        // loop rebuilds against its own device.
+        _glyphView?.Dispose();
+        _glyphView = null;
+        _glyphTexture?.Dispose();
+        _glyphTexture = null;
     }
 
     private void DrawTiles(CameraSnapshot cam, TileTextureCache textures, QuadRenderer quads)
@@ -335,6 +361,71 @@ public sealed class MapView : IDisposable
                 float v0 = (key.Y - (ancestor.Y << levels)) * size;
                 quads.DrawTextured(clip, (u0, v0, u0 + size, v0 + size), ancestorView);
                 break;
+            }
+        }
+    }
+
+    private Vortice.Direct3D11.ID3D11Texture2D? _glyphTexture;
+    private Vortice.Direct3D11.ID3D11ShaderResourceView? _glyphView;
+
+    private unsafe void DrawLabels(CameraSnapshot cam, QuadRenderer quads, DeviceResources device)
+    {
+        var labels = _labels;
+        if (labels.Count == 0) return;
+
+        if (_glyphView is null)
+        {
+            fixed (byte* p = _glyphAtlas.Bgra)
+            {
+                var desc = new Vortice.Direct3D11.Texture2DDescription
+                {
+                    Width = (uint)_glyphAtlas.TextureWidth,
+                    Height = (uint)_glyphAtlas.TextureHeight,
+                    MipLevels = 1,
+                    ArraySize = 1,
+                    Format = Vortice.DXGI.Format.B8G8R8A8_UNorm,
+                    SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
+                    Usage = Vortice.Direct3D11.ResourceUsage.Immutable,
+                    BindFlags = Vortice.Direct3D11.BindFlags.ShaderResource,
+                };
+                _glyphTexture = device.Device.CreateTexture2D(desc,
+                    [new Vortice.Direct3D11.SubresourceData((IntPtr)p, (uint)(_glyphAtlas.TextureWidth * 4))]);
+                _glyphView = device.Device.CreateShaderResourceView(_glyphTexture);
+            }
+        }
+
+        const float glyphHeightPx = 15f;
+        float glyphWidthPx = glyphHeightPx * GlyphAtlas.CellWidth / GlyphAtlas.CellHeight;
+        float pxToClipX = 2f / cam.ViewportWidth;
+        float pxToClipY = 2f / cam.ViewportHeight;
+        double halfW = cam.ViewportWidth * cam.MetersPerPixel / 2.0;
+        double halfH = cam.ViewportHeight * cam.MetersPerPixel / 2.0;
+
+        foreach (var label in labels)
+        {
+            float anchorX = (float)((label.MercX - cam.CenterX) / halfW);
+            float anchorY = (float)((label.MercY - cam.CenterY) / halfH);
+            if (anchorX < -1.1f || anchorX > 1.1f || anchorY < -1.1f || anchorY > 1.1f)
+                continue;
+
+            for (int pass = 0; pass < 2; pass++) // dark halo first, then white text
+            {
+                float dx = pass == 0 ? 1.2f * pxToClipX : 0;
+                float dy = pass == 0 ? -1.2f * pxToClipY : 0;
+                float x = anchorX + label.OffsetXPx * pxToClipX + dx;
+                float y = anchorY + label.OffsetYPx * pxToClipY + dy;
+                foreach (var c in label.Text)
+                {
+                    if (_glyphAtlas.UvFor(c) is { } uv)
+                    {
+                        quads.DrawTextured(
+                            (x, y, x + glyphWidthPx * pxToClipX, y + glyphHeightPx * pxToClipY),
+                            (uv.U0, uv.V0, uv.U1, uv.V1), _glyphView!,
+                            pass == 0 ? 0.9f : 1f,
+                            pass == 0 ? 0f : 1f, pass == 0 ? 0f : 1f, pass == 0 ? 0f : 1f);
+                    }
+                    x += glyphWidthPx * pxToClipX;
+                }
             }
         }
     }

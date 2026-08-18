@@ -93,6 +93,7 @@ public partial class MainWindow : Window
         };
         RebuildHomeGeometry();
         UpdateHomeLabels();
+        EnsureStormWatchForHome(); // startup with a saved home arms the storm watch immediately
 
         _inspector = new InspectorTools(_mapView, _radar);
         _inspector.InspectorChanged += text => Dispatcher.BeginInvoke(() => InspectorText.Text = text);
@@ -246,6 +247,7 @@ public partial class MainWindow : Window
     /// <summary>Merge warning polygons, storm features, and the measure line into one overlay.</summary>
     private void ComposeOverlay()
     {
+        _mapView.SetLabels(_storms.Labels);
         OverlayGeometry?[] sources = [_warnings?.Geometry, _storms.Geometry, _homeGeometry, _measureGeometry];
         var active = sources.Where(s => s is not null).Cast<OverlayGeometry>().ToArray();
         switch (active.Length)
@@ -266,9 +268,29 @@ public partial class MainWindow : Window
         _mapView.SetOverlay(merged);
     }
 
+    /// <summary>The site the storm layer should watch: nearest to home when home is set,
+    /// otherwise whatever is selected for browsing.</summary>
+    private RadarSite? StormWatchSite()
+    {
+        if (_settings?.HomeLatDeg is { } lat && _settings.HomeLonDeg is { } lon)
+            return RadarSites.Nearest(lat, lon);
+        return SiteCombo.SelectedItem as RadarSite;
+    }
+
+    /// <summary>Home is set: make sure the storm layer is watching its nearest radar,
+    /// so track alerts work without a manual toggle.</summary>
+    private void EnsureStormWatchForHome()
+    {
+        if (_settings?.HomeLatDeg is null || StormWatchSite() is not { } site) return;
+        if (StormsToggle.IsChecked == true)
+            _storms.Enable(site.Icao); // re-point (home may have moved to a new nearest site)
+        else
+            StormsToggle.IsChecked = true; // fires StormsToggle_Checked
+    }
+
     private void StormsToggle_Checked(object sender, RoutedEventArgs e)
     {
-        if (SiteCombo.SelectedItem is RadarSite site)
+        if (StormWatchSite() is { } site)
             _storms.Enable(site.Icao);
         else
             StormsToggle.IsChecked = false;
@@ -292,10 +314,12 @@ public partial class MainWindow : Window
             _settings.HomeLonDeg = lon;
             _settings.Save();
             _threats.Configure(lat, lon, _settings.AlertRadiusKm);
+            EnsureStormWatchForHome();
             RebuildHomeGeometry();
             UpdateHomeLabels();
             ComposeOverlay();
-            StatusText.Text = $"Home set to {lat:F3}, {lon:F3} — proximity alerts armed.";
+            StatusText.Text = $"Home set to {lat:F3}, {lon:F3} — proximity alerts armed, " +
+                              $"storm watch on {StormWatchSite()?.Icao}.";
             return;
         }
 
@@ -317,6 +341,10 @@ public partial class MainWindow : Window
         if (storm.ProbabilityOfHail > 0)
             lines.Add($"Hail {storm.ProbabilityOfHail}% · severe {Math.Max(0, storm.ProbabilityOfSevereHail)}%" +
                       (storm.MaxHailSizeInches > 0 ? $" · max {storm.MaxHailSizeInches}\"" : ""));
+        if (storm.MaxDbz is { } maxDbz)
+            lines.Add($"Max reflectivity {maxDbz} dBZ" +
+                      (storm.EchoTopKft is { } top ? $" · echo top {top:F0} kft" : "") +
+                      (storm.CellBasedVil is { } vil ? $" · VIL {vil:F0}" : ""));
         if (storm.MesoRadiusKm is { } mesoRadius)
             lines.Add($"MESOCYCLONE — radius {mesoRadius:F1} km");
         if (_threats.IsArmed &&
@@ -391,8 +419,9 @@ public partial class MainWindow : Window
         {
             HomeLabel.Text = $"Home: {lat:F3}, {lon:F3}";
             AlertArmedLabel.Text =
-                $"Alerts armed ({_settings.AlertRadiusKm:F0} km). Warning alerts are always on; " +
-                "enable ⛈ Storms for track alerts.";
+                $"Alerts armed ({_settings.AlertRadiusKm:F0} km). " +
+                $"Storm watch auto-enabled on {StormWatchSite()?.Icao ?? "?"} " +
+                "(nearest radar to home); warning alerts always on.";
         }
         else
         {
@@ -485,13 +514,22 @@ public partial class MainWindow : Window
     {
         // Fires during XAML parse; later-declared controls may not exist yet.
         if (_storms is null || FilterPastTrack is null || FilterForecastTrack is null ||
+            FilterCones is null || FilterLabels is null ||
             FilterHail is null || FilterMeso is null || PoshSlider is null) return;
         _storms.ShowPastTrack = FilterPastTrack.IsChecked == true;
         _storms.ShowForecastTrack = FilterForecastTrack.IsChecked == true;
+        _storms.ShowCones = FilterCones.IsChecked == true;
+        _storms.ShowLabels = FilterLabels.IsChecked == true;
         _storms.ShowHail = FilterHail.IsChecked == true;
         _storms.ShowMeso = FilterMeso.IsChecked == true;
         _storms.MinSevereHailProbability = (int)PoshSlider.Value;
         _storms.Rebuild();
+    }
+
+    private void SmoothCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_mapView is not null)
+            _mapView.RadarSmoothing = SmoothCheck.IsChecked == true;
     }
 
     private void SetHomeButton_Click(object sender, RoutedEventArgs e)
