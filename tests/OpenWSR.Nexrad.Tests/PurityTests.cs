@@ -18,6 +18,8 @@ public class PurityTests
     [Theory]
     [InlineData("OpenWSR.Nexrad")]
     [InlineData("OpenWSR.Geo")]
+    [InlineData("OpenWSR.Grib2")]
+    [InlineData("OpenWSR.Placefiles")]
     public void PureAssembliesReferenceNoForbiddenDependencies(string assemblyName)
     {
         var assembly = Assembly.Load(assemblyName);
