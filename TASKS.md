@@ -127,13 +127,14 @@ phase is done only when its **gate** passes. Check items off as they land.
 
 ## Phase 8 â€” Polish
 
-- [ ] Multi-pane 1/2/4 layout; linked or independent pan per pane
-- [ ] Level III decoder: packet framing, then storm tracks, hail index, mesocyclone detection (bucket `unidata-nexrad-level3`; Iowa State Mesonet / NWS TGFTP fallbacks)
+- [x] Multi-pane 1/2/4 layout; linked pan (30 Hz camera sync, last-moved wins) or independent via toolbar toggle; secondary panes default to VEL/ZDR/RhoHV with per-pane keyboard product switching
+- [x] Level III decoder: WMO/message/PDB headers, zlib-aware symbology, packets 2/8/15/19/20/23/24 → NST storm tracks, NHI hail, NMD mesocyclones; 4 golden tests vs MetPy; Level3Client + ⛈ Storms overlay (tracks/hail triangles/meso circles, 2-min refresh). Fallback feeds not wired.
 - [x] Settings persistence (settings.json); keyboard shortcuts (moment/tilt/tools); PerMonitorV2 manifest (mixed-DPI HwndHost verification pending a second monitor)
 - [x] Single-file self-contained ReadyToRun publish (OpenWSR.exe, 160 MB, smoke-tested at 60 fps)
 - [x] About box with life-safety disclaimer + controls; THIRD-PARTY-NOTICES.md (no Supercell Wx code ported); Serilog rolling file logging wired
 
 **Gate:** published single-file build runs on a clean Windows machine with all of the above working.
+
 
 
 

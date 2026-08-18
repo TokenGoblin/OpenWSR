@@ -23,9 +23,22 @@
                 <ToggleButton x:Name="LiveToggle" Content="⦿ Live" Margin="4,0"
                               Checked="LiveToggle_Checked" Unchecked="LiveToggle_Unchecked"
                               ToolTip="Stream real-time chunks for the selected site" />
+                <ToggleButton x:Name="StormsToggle" Content="⛈ Storms" Margin="4,0"
+                              Checked="StormsToggle_Checked" Unchecked="StormsToggle_Unchecked"
+                              ToolTip="Overlay Level III storm tracks, hail, and mesocyclones for the selected site" />
                 <Separator />
                 <Button x:Name="PaletteButton" Content="Palette…" Margin="4,0" Click="PaletteButton_Click"
                         ToolTip="Import a GR2Analyst .pal color table for the current product" />
+                <Separator />
+                <ComboBox x:Name="PaneCombo" Width="80" Margin="4,0" SelectionChanged="PaneCombo_SelectionChanged"
+                          ToolTip="Number of map panes">
+                    <ComboBoxItem Content="1 pane" IsSelected="True" />
+                    <ComboBoxItem Content="2 panes" />
+                    <ComboBoxItem Content="4 panes" />
+                </ComboBox>
+                <ToggleButton x:Name="LinkToggle" Content="⛓ Linked" Margin="4,0" IsChecked="True"
+                              Checked="LinkToggle_Changed" Unchecked="LinkToggle_Changed"
+                              ToolTip="Link pan/zoom across panes" />
                 <Separator />
                 <Button x:Name="AboutButton" Content="About" Margin="4,0" Click="AboutButton_Click" />
             </ToolBar>
@@ -61,6 +74,8 @@
             <TextBlock x:Name="TimeSliderLabel" Grid.Column="1" Margin="8,4" MinWidth="150"
                        Foreground="#C8CCD4" VerticalAlignment="Center" Text="—" />
         </Grid>
-        <Border x:Name="MapHost" />
+        <Grid x:Name="PaneGrid">
+            <Border x:Name="MapHost" />
+        </Grid>
     </DockPanel>
 </Window>

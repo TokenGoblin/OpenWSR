@@ -20,6 +20,8 @@ public partial class MainWindow : Window
     private readonly LiveFeed _liveFeed = new();
     private WarningsController? _warnings;
     private InspectorTools? _inspector;
+    private readonly StormOverlayController _storms = new();
+    private PaneManager? _panes;
     private OverlayGeometry? _measureGeometry;
     private bool _suppressSliderEvents;
 
@@ -45,7 +47,10 @@ public partial class MainWindow : Window
         _mapView.KeyPressed += key => _radar.OnKey(key);
         KeyDown += (_, e) => _radar.OnKey(System.Windows.Input.KeyInterop.VirtualKeyFromKey(e.Key));
 
+        _panes = new PaneManager(PaneGrid, _mapView, _radar, MapHost, provider);
+
         _playback = new ArchivePlaybackController(_mapView, _radar);
+        _playback.VolumeLoaded += volume => _panes.ShowVolume(volume);
         _playback.StatusChanged += text => Dispatcher.BeginInvoke(() => StatusText.Text = text);
         _playback.DayLoaded += (count, index) => Dispatcher.BeginInvoke(() =>
         {
@@ -68,6 +73,9 @@ public partial class MainWindow : Window
         _warnings.GeometryChanged += () => Dispatcher.BeginInvoke(ComposeOverlay);
         _warnings.StatusChanged += text => Dispatcher.BeginInvoke(() => StatusText.Text = text);
 
+        _storms.GeometryChanged += () => Dispatcher.BeginInvoke(ComposeOverlay);
+        _storms.StatusChanged += text => Dispatcher.BeginInvoke(() => StatusText.Text = text);
+
         _inspector = new InspectorTools(_mapView, _radar);
         _inspector.InspectorChanged += text => Dispatcher.BeginInvoke(() => InspectorText.Text = text);
         _inspector.MeasureChanged += geometry =>
@@ -80,7 +88,7 @@ public partial class MainWindow : Window
         _liveFeed.VolumeUpdated += (volume, _) => Dispatcher.BeginInvoke(() =>
         {
             if (LiveToggle.IsChecked == true)
-                _radar.ShowVolume(volume);
+                _panes!.ShowVolume(volume);
         });
 
         _statusTimer = new DispatcherTimer(DispatcherPriority.Background)
@@ -98,8 +106,10 @@ public partial class MainWindow : Window
         Closed += (_, _) =>
         {
             _statusTimer.Stop();
+            _storms.Dispose();
             _liveFeed.Dispose();
             _playback.Dispose();
+            _panes?.Dispose();
             _mapView.Dispose();
         };
     }
@@ -158,7 +168,7 @@ public partial class MainWindow : Window
             {
                 var volume = await Task.Run(() => ArchiveFile.DecodeFile(path));
                 _mapView.Camera.MoveTo(volume.LatDeg, volume.LonDeg, 250);
-                _radar.ShowVolume(volume);
+                _panes!.ShowVolume(volume);
             }
             catch (Exception ex)
             {
@@ -215,24 +225,46 @@ public partial class MainWindow : Window
         _playback.SetSpeed(SpeedCombo.SelectedIndex switch { 0 => 2, 2 => 8, _ => 4 });
     }
 
-    /// <summary>Merge warning polygons and the transient measure line into one overlay.</summary>
+    /// <summary>Merge warning polygons, storm features, and the measure line into one overlay.</summary>
     private void ComposeOverlay()
     {
-        var warnings = _warnings?.Geometry;
-        if (_measureGeometry is null)
+        OverlayGeometry?[] sources = [_warnings?.Geometry, _storms.Geometry, _measureGeometry];
+        var active = sources.Where(s => s is not null).Cast<OverlayGeometry>().ToArray();
+        switch (active.Length)
         {
-            _mapView.SetOverlay(warnings);
-            return;
+            case 0:
+                _mapView.SetOverlay(null);
+                return;
+            case 1:
+                _mapView.SetOverlay(active[0]);
+                return;
         }
         var merged = new OverlayGeometry();
-        if (warnings is not null)
+        foreach (var source in active)
         {
-            merged.FillTriangles.AddRange(warnings.FillTriangles);
-            merged.Lines.AddRange(warnings.Lines);
+            merged.FillTriangles.AddRange(source.FillTriangles);
+            merged.Lines.AddRange(source.Lines);
         }
-        merged.FillTriangles.AddRange(_measureGeometry.FillTriangles);
-        merged.Lines.AddRange(_measureGeometry.Lines);
         _mapView.SetOverlay(merged);
+    }
+
+    private void StormsToggle_Checked(object sender, RoutedEventArgs e)
+    {
+        if (SiteCombo.SelectedItem is RadarSite site)
+            _storms.Enable(site.Icao);
+        else
+            StormsToggle.IsChecked = false;
+    }
+
+    private void StormsToggle_Unchecked(object sender, RoutedEventArgs e) => _storms.Disable();
+
+    private void PaneCombo_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
+        _panes?.SetPaneCount(PaneCombo.SelectedIndex switch { 1 => 2, 2 => 4, _ => 1 });
+
+    private void LinkToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_panes is not null)
+            _panes.LinkedPan = LinkToggle.IsChecked == true;
     }
 
     private void PaletteButton_Click(object sender, RoutedEventArgs e)

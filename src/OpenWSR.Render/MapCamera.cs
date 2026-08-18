@@ -43,6 +43,18 @@ public sealed class MapCamera
         }
     }
 
+    /// <summary>Adopt another camera's view (pane linking). Does not touch inertia.</summary>
+    public void SetView(double centerX, double centerY, double metersPerPixel)
+    {
+        lock (_lock)
+        {
+            _centerX = centerX;
+            _centerY = centerY;
+            _metersPerPixel = Math.Clamp(metersPerPixel, MinMetersPerPixel, MaxMetersPerPixel);
+            ClampCenter();
+        }
+    }
+
     public void PanPixels(double dxPx, double dyPx)
     {
         lock (_lock)

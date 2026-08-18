@@ -30,6 +30,7 @@ public sealed class ArchivePlaybackController(
     public event Action<string>? StatusChanged;
     public event Action<int, int>? DayLoaded;      // volume count, initial index
     public event Action<bool>? PlayingChanged;
+    public event Action<RadarVolume>? VolumeLoaded; // scrub target decoded (routed to all panes)
 
     public bool IsPlaying { get; private set; }
     public IReadOnlyList<ArchiveVolumeRef> DayVolumes => _dayVolumes;
@@ -83,7 +84,7 @@ public sealed class ArchivePlaybackController(
                 _initialized = true;
                 mapView.Camera.MoveTo(volume.LatDeg, volume.LonDeg, 250);
             }
-            radar.ShowVolume(volume);
+            VolumeLoaded?.Invoke(volume);
         }
         catch (OperationCanceledException)
         {
