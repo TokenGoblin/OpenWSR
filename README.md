@@ -24,6 +24,11 @@ the same GPU scene as the basemap, in its native polar geometry.
   order-independent assembly, adaptive polling, data-age indicator.
 - **Warnings** — live NWS polygons (tornado red / severe yellow / flash-flood
   green), click for full text.
+- **Storm products** — Level III NST/NHI/NMD overlays: SCIT storm tracks with
+  forecast positions, hail markers sized by severe-hail probability, mesocyclone
+  circles at detected radius. Decoder verified against MetPy.
+- **Multi-pane** — 1/2/4 panes with linked or independent pan/zoom; secondary
+  panes default to velocity / ZDR / RhoHV with per-pane product switching.
 - **Tools** — hover inspector (value, azimuth, ranges, beam height), right-drag
   geodesic measuring, GR2Analyst `.pal` palette import.
 
@@ -58,14 +63,14 @@ per-sweep stats; `--soak <SITE> <minutes>` runs the live pipeline headless.
 ## Layout
 
 ```
-src/OpenWSR.Nexrad     Level II decoder + live chunk assembler (pure, no I/O)
+src/OpenWSR.Nexrad     Level II decoder, live chunk assembler, Level III decoder (pure, no I/O)
 src/OpenWSR.Geo        Beam propagation, geodesy, Web Mercator, tile math (pure)
 src/OpenWSR.Render     D3D11 device, map/radar/overlay renderers, HwndHost
 src/OpenWSR.Ingest     S3 archive/chunk clients, caches, NWS alerts, site table
 src/OpenWSR.Palettes   Color tables + GR2Analyst .pal import
 src/OpenWSR.App        WPF shell
 src/OpenWSR.Harness    Console decoder harness + live soak
-tests/                 Golden-file, replay, geo, palette tests (43)
+tests/                 Golden-file, replay, geo, palette, Level III tests (47)
 ```
 
 `OpenWSR-build-plan.md` is the phase-gated implementation brief; `TASKS.md` tracks

@@ -23,4 +23,11 @@ foreach ($i in 1..3) {
     $key = 'KTLX/2/20260816-082711-{0:d3}-{1}' -f $i, $type
     curl.exe -sf -o "$dest/chunks/KTLX/$($key -replace '/', '_')" "$chunks/$key"
 }
+# Level III storm-product golden files (TLX 2021-10-11 severe weather event)
+New-Item -ItemType Directory -Force "$dest/level3" | Out-Null
+$level3 = 'https://unidata-nexrad-level3.s3.amazonaws.com'
+foreach ($prod in @('NST', 'NHI', 'NMD')) {
+    $key = "TLX_${prod}_2021_10_11_01_49_20"
+    curl.exe -sf -o "$dest/level3/$key" "$level3/$key"
+}
 Write-Host 'Done.'
