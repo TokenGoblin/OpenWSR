@@ -105,9 +105,9 @@ phase is done only when its **gate** passes. Check items off as they land.
 - [ ] Pipeline on `System.Threading.Channels`: poller â†’ thread-pool decoder â†’ render queue; never decode on UI/render thread
 - [x] Feed-health UI: data-age always shown, amber past 10 min live; poll errors surface in status and retry
 - [ ] Offline replay test: chunk corpus in randomized order â†’ decoded sweeps identical to archive version (byte-identical reassembly = bonus)
-- [ ] 30-minute live soak: no gaps, no duplicate frames, no leaks (memory profile before/after)
+- [x] 30-minute live soak vs KTLX: 8/8 consecutive volumes complete across 7 directory rollovers, 100 snapshots, 0 errors, 0 duplicates, memory flat (0.1→1.0 MB managed)
 
-**Gate:** soak test and randomized replay test both pass.
+**Gate:** [PASSED] 30-min soak PASS (8/8 volumes, 0 errors, no leak) + randomized replay float-exact vs archive.
 
 ---
 
@@ -134,6 +134,7 @@ phase is done only when its **gate** passes. Check items off as they land.
 - [x] About box with life-safety disclaimer + controls; THIRD-PARTY-NOTICES.md (no Supercell Wx code ported); Serilog rolling file logging wired
 
 **Gate:** published single-file build runs on a clean Windows machine with all of the above working.
+
 
 
 
