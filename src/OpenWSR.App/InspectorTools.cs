@@ -82,8 +82,8 @@ public sealed class InspectorTools
         }
 
         InspectorChanged?.Invoke(
-            $"{value}   az {azimuthDeg:F1}°  slant {slant / 1000:F1} km  " +
-            $"ground {groundRange / 1000:F1} km  beam {height:F0} m ARL");
+            $"{value}   az {azimuthDeg:F1}°  slant {Units.Distance(slant / 1000)}  " +
+            $"ground {Units.Distance(groundRange / 1000)}  beam {Units.Height(height)} ARL");
     }
 
     private void OnMeasureDrag(int startX, int startY, int x, int y, bool finished)
@@ -94,7 +94,7 @@ public sealed class InspectorTools
         double bearing = (GeoMath.BearingRad(lat1, lon1, lat2, lon2) * 180.0 / Math.PI + 360.0) % 360.0;
 
         InspectorChanged?.Invoke(
-            $"Measure: {meters / 1000:F2} km  ({meters / 1852:F2} nm)  bearing {bearing:F0}°" +
+            $"Measure: {Units.DistancePrecise(meters / 1000)}  bearing {bearing:F0}°" +
             (finished ? "" : "  [release to clear]"));
 
         if (finished)

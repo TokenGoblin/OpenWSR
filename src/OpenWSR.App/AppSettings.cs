@@ -19,6 +19,9 @@ public sealed class AppSettings
     /// <summary>Alert when a storm track or warning comes within this range of home.</summary>
     public double AlertRadiusKm { get; set; } = 40;
 
+    /// <summary>Display units for distance, speed and height.</summary>
+    public UnitSystem Units { get; set; } = UnitSystem.Imperial;
+
     public string UserAgent =>
         string.IsNullOrWhiteSpace(Contact) ? "OpenWSR/0.1" : $"OpenWSR/0.1 ({Contact})";
 
@@ -31,6 +34,7 @@ public sealed class AppSettings
     {
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
     };
 
     public static AppSettings Load()

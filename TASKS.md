@@ -174,3 +174,17 @@ phase is done only when its **gate** passes. Check items off as they land.
 - [x] 🎯 Hotspot button: scan -> switch site, start Live, enable storm overlay on hotspot site, camera to the cell
 
 **Gate:** ✅ 54/54 tests; live run: 147/163 sites reporting, winner KAMX VIL 47.5 kg/m2 — app jumped to central-FL convection with live feed + storm layers on.
+
+## Phase 01 — legibility and native chrome (2026-08-18)
+
+- [x] Colour scale drawn in the D3D scene (airspace-safe): 1x256 palette texture, nice-stepped tick labels, product-aware, follows imported .pal
+- [x] Settings window: basemap provider + MapTiler key, units, weather.gov contact with live User-Agent preview
+- [x] Location search: city / ZIP / lat,lon via Nominatim (rate-limited, identified UA) -> nearest radar + camera
+- [x] Data-age fix: LIVE shows elapsed and colours; ARCHIVE shows the absolute scan time (was "116106 h 20 m")
+- [x] Unified timeline: transport controls inline, hour ticks with labels
+- [x] Storm symbol key in the layers panel
+- [x] Units system (miles / km / nautical) applied to inspector, measure, storm details, alerts, hotspot
+- [x] Windows-native restyle: dark title bar via DWM, left navigation rail with settings at the bottom, full dark control theme (button, toggle, combo, textbox, checkbox, slider, datepicker, scrollbar), collapsible layers panel
+- [x] Toolbar overflow defect removed (toolbar replaced by rail + top bar)
+
+**Gate:** 54/54 tests; verified live — legend renders with correct ticks, search resolved "Provo, UT" to KMTX at 82.2 mi, settings dialog round-trips, archive age reads as a date.

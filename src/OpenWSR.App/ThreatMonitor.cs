@@ -58,8 +58,8 @@ public sealed class ThreatMonitor
             Raise(new Threat(
                 $"storm:{storm.Id}",
                 $"Storm {storm.Id} approaching your area",
-                $"Track passes within {a.DistanceKm:F0} km of home {when} " +
-                $"(moving {CompassPoint(storm.BearingDeg)} at {storm.SpeedKmh:F0} km/h" +
+                $"Track passes within {Units.Distance(a.DistanceKm)} of home {when} " +
+                $"(moving {CompassPoint(storm.BearingDeg)} at {Units.Speed(storm.SpeedKmh)}" +
                 (extras.Count > 0 ? $"; {string.Join(", ", extras)})" : ")"),
                 storm.MesoRadiusKm is not null));
         }
@@ -85,7 +85,7 @@ public sealed class ThreatMonitor
             Raise(new Threat(
                 $"warn:{alert.Id}",
                 inside ? $"{alert.Event.ToUpperInvariant()} INCLUDES YOUR AREA" : alert.Event,
-                (inside ? alert.Headline : $"{nearestKm:F0} km from home: {alert.Headline}") + until,
+                (inside ? alert.Headline : $"{Units.Distance(nearestKm)} from home: {alert.Headline}") + until,
                 alert.Event == "Tornado Warning"));
         }
     }

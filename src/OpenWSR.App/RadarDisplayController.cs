@@ -36,6 +36,9 @@ public sealed class RadarDisplayController(MapView mapView)
         Apply();
     }
 
+    /// <summary>Re-render the current selection, e.g. after a units or palette change.</summary>
+    public void Refresh() => Apply();
+
     public void ShowVolume(RadarVolume volume)
     {
         _volume = volume;
@@ -109,8 +112,7 @@ public sealed class RadarDisplayController(MapView mapView)
         DisplayedSweep = sweep;
         mapView.ShowSweep(sweep, CurrentTable);
         StatusChanged?.Invoke(
-            $"{sweep.SiteId}  {sweep.ScanTimeUtc:yyyy-MM-dd HH:mm:ss}Z  {_moment}  " +
-            $"{sweep.ElevationAngleDeg:F1}°  (cut {sweep.ElevationIndex}, {_cutPosition + 1}/{cuts.Count})  " +
-            $"[R/V/W/D/P/C moment, ↑/↓ tilt]");
+            $"{sweep.SiteId}  {sweep.ScanTimeUtc:HH:mm:ss}Z  {_moment}  " +
+            $"{sweep.ElevationAngleDeg:F1}°  (tilt {_cutPosition + 1} of {cuts.Count})");
     }
 }

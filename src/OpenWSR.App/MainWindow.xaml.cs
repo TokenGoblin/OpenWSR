@@ -23,19 +23,25 @@ public partial class MainWindow : Window
     private readonly StormOverlayController _storms = new();
     private readonly ThreatMonitor _threats = new();
     private PaneManager? _panes;
+    private Geocoder? _geocoder;
     private AppSettings? _settings;
     private OverlayGeometry? _measureGeometry;
     private OverlayGeometry? _homeGeometry;
     private bool _suppressSliderEvents;
     private bool _settingHome;
+    private int _paneCount = 1;
     private Popup? _stormPopup;
     private Popup? _toast;
 
     public MainWindow()
     {
         InitializeComponent();
+        DarkTitleBar.Apply(this);
+        LinkToggle.IsEnabled = false; // only meaningful once a second pane exists
 
         var settings = _settings = AppSettings.Load();
+        Units.System = settings.Units;
+        _geocoder = new Geocoder(settings.UserAgent);
         var provider = settings.TileProvider == "maptiler" && !string.IsNullOrEmpty(settings.MapTilerKey)
             ? TileProvider.MapTiler(settings.MapTilerKey, settings.UserAgent)
             : TileProvider.Osm(settings.UserAgent);
@@ -66,9 +72,10 @@ public partial class MainWindow : Window
             TimeSlider.IsEnabled = true;
             _suppressSliderEvents = false;
             UpdateSliderLabel();
+            RebuildTicks();
         });
         _playback.PlayingChanged += playing => Dispatcher.BeginInvoke(() =>
-            PlayButton.Content = playing ? "⏸ Stop" : "▶ Loop");
+            PlayButton.Content = playing ? "⏸" : "▶");
 
         foreach (var site in RadarSites.All.Where(s => !s.IsTdwr).OrderBy(s => s.Icao))
             SiteCombo.Items.Add(site);
@@ -125,6 +132,7 @@ public partial class MainWindow : Window
         Closed += (_, _) =>
         {
             _statusTimer.Stop();
+            _geocoder?.Dispose();
             _storms.Dispose();
             _liveFeed.Dispose();
             _playback.Dispose();
@@ -144,16 +152,23 @@ public partial class MainWindow : Window
             AgeText.Text = "";
             return;
         }
+
+        // Elapsed time only means something for a live feed. On archive data it produced
+        // readings like "116106 h" — technically true, and useless.
+        if (LiveToggle.IsChecked != true)
+        {
+            AgeText.Text = $"ARCHIVE  {time:yyyy-MM-dd HH:mm}Z";
+            AgeText.Foreground = System.Windows.Media.Brushes.Gray;
+            return;
+        }
+
         var age = DateTime.UtcNow - time;
-        bool live = LiveToggle.IsChecked == true;
         AgeText.Text = age.TotalHours >= 1
-            ? $"data age {(int)age.TotalHours} h {age.Minutes:D2} m"
-            : $"data age {(int)age.TotalMinutes} m {age.Seconds:D2} s";
-        AgeText.Foreground = live && age > TimeSpan.FromMinutes(10)
+            ? $"LIVE  {(int)age.TotalHours} h {age.Minutes:D2} m old"
+            : $"LIVE  {(int)age.TotalMinutes} m {age.Seconds:D2} s old";
+        AgeText.Foreground = age > TimeSpan.FromMinutes(10)
             ? System.Windows.Media.Brushes.OrangeRed
-            : live
-                ? System.Windows.Media.Brushes.LightGreen
-                : System.Windows.Media.Brushes.Gray;
+            : System.Windows.Media.Brushes.LightGreen;
     }
 
     private void LiveToggle_Checked(object sender, RoutedEventArgs e)
@@ -336,23 +351,23 @@ public partial class MainWindow : Window
     {
         var lines = new List<string>
         {
-            $"Moving {ThreatMonitor.CompassPoint(storm.BearingDeg)} ({storm.BearingDeg:F0}°) at {storm.SpeedKmh:F0} km/h",
+            $"Moving {ThreatMonitor.CompassPoint(storm.BearingDeg)} ({storm.BearingDeg:F0}°) at {Units.Speed(storm.SpeedKmh)}",
         };
         if (storm.ProbabilityOfHail > 0)
             lines.Add($"Hail {storm.ProbabilityOfHail}% · severe {Math.Max(0, storm.ProbabilityOfSevereHail)}%" +
                       (storm.MaxHailSizeInches > 0 ? $" · max {storm.MaxHailSizeInches}\"" : ""));
         if (storm.MaxDbz is { } maxDbz)
             lines.Add($"Max reflectivity {maxDbz} dBZ" +
-                      (storm.EchoTopKft is { } top ? $" · echo top {top:F0} kft" : "") +
+                      (storm.EchoTopKft is { } top ? $" · echo top {Units.HeightKft(top)}" : "") +
                       (storm.CellBasedVil is { } vil ? $" · VIL {vil:F0}" : ""));
         if (storm.MesoRadiusKm is { } mesoRadius)
-            lines.Add($"MESOCYCLONE — radius {mesoRadius:F1} km");
+            lines.Add($"MESOCYCLONE — radius {Units.Distance(mesoRadius)}");
         if (_threats.IsArmed &&
             ThreatMonitor.ClosestApproach(storm, _threats.HomeLatDeg!.Value, _threats.HomeLonDeg!.Value)
                 is { } approach)
             lines.Add(approach.DistanceKm <= _threats.RadiusKm
-                ? $"⚠ Passes {approach.DistanceKm:F0} km from home in ~{approach.EtaMinutes:F0} min"
-                : $"Closest approach to home: {approach.DistanceKm:F0} km");
+                ? $"⚠ Passes {Units.Distance(approach.DistanceKm)} from home in ~{approach.EtaMinutes:F0} min"
+                : $"Closest approach to home: {Units.Distance(approach.DistanceKm)}");
 
         var panel = new StackPanel { MaxWidth = 340, Margin = new Thickness(10) };
         panel.Children.Add(new TextBlock
@@ -419,7 +434,7 @@ public partial class MainWindow : Window
         {
             HomeLabel.Text = $"Home: {lat:F3}, {lon:F3}";
             AlertArmedLabel.Text =
-                $"Alerts armed ({_settings.AlertRadiusKm:F0} km). " +
+                $"Alerts armed ({Units.Distance(_settings.AlertRadiusKm)}). " +
                 $"Storm watch auto-enabled on {StormWatchSite()?.Icao ?? "?"} " +
                 "(nearest radar to home); warning alerts always on.";
         }
@@ -554,8 +569,6 @@ public partial class MainWindow : Window
         ComposeOverlay();
     }
 
-    private void PaneCombo_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
-        _panes?.SetPaneCount(PaneCombo.SelectedIndex switch { 1 => 2, 2 => 4, _ => 1 });
 
     private void LinkToggle_Changed(object sender, RoutedEventArgs e)
     {
@@ -612,7 +625,7 @@ public partial class MainWindow : Window
 
             StatusText.Text =
                 $"🎯 Hotspot: VIL {hotspot.MaxVilKgM2:F0} kg/m² near {hotspot.Site.Icao} " +
-                $"({hotspot.Site.Name}, {hotspot.Site.State}), {hotspot.RangeKm:F0} km out — " +
+                $"({hotspot.Site.Name}, {hotspot.Site.State}), {Units.Distance(hotspot.RangeKm)} out — " +
                 $"as of {hotspot.ProductTimeUtc:HH:mm}Z";
         }
         catch (Exception ex)
@@ -648,10 +661,121 @@ public partial class MainWindow : Window
             "About OpenWSR", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
-    private void ToolBar_Loaded(object sender, RoutedEventArgs e)
+    private void LayersToggle_Changed(object sender, RoutedEventArgs e)
     {
-        // Hide the toolbar overflow chevron; everything fits.
-        if (sender is ToolBar toolBar && toolBar.Template.FindName("OverflowGrid", toolBar) is FrameworkElement grid)
-            grid.Visibility = Visibility.Collapsed;
+        if (LayersPanel is not null)
+            LayersPanel.Visibility = LayersToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>Rail button cycles 1 → 2 → 4 panes, so the rail needs no dropdown.</summary>
+    private void PaneButton_Click(object sender, RoutedEventArgs e)
+    {
+        _paneCount = _paneCount switch { 1 => 2, 2 => 4, _ => 1 };
+        _panes?.SetPaneCount(_paneCount);
+        PaneButton.Content = _paneCount switch { 1 => "◱", 2 => "◫", _ => "⊞" };
+        PaneButton.ToolTip = $"Map panes: {_paneCount}";
+        LinkToggle.IsEnabled = _paneCount > 1;
+    }
+
+    private void SettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_settings is null) return;
+        var dialog = new SettingsWindow(_settings) { Owner = this };
+        if (dialog.ShowDialog() != true) return;
+
+        Units.System = _settings.Units;
+        StatusText.Text = "Settings saved. Basemap changes take effect next launch.";
+        UpdateHomeLabels();
+        _radar.Refresh();
+    }
+
+    // ---- location search ----
+
+    private async void SearchBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key != System.Windows.Input.Key.Enter) return;
+        var query = SearchBox.Text.Trim();
+        if (query.Length == 0) return;
+
+        SearchBox.IsEnabled = false;
+        StatusText.Text = $"Looking up “{query}”…";
+        try
+        {
+            var place = await _geocoder!.SearchAsync(query);
+            if (place is null)
+            {
+                StatusText.Text = $"No match for “{query}”. Try a city, a ZIP code, or lat,lon.";
+                return;
+            }
+            var site = RadarSites.Nearest(place.LatDeg, place.LonDeg);
+            double km = GeoMath.DistanceM(place.LatDeg, place.LonDeg, site.LatDeg, site.LonDeg) / 1000.0;
+            SiteCombo.SelectedItem = RadarSites.ByIcao(site.Icao);
+            _mapView.Camera.MoveTo(place.LatDeg, place.LonDeg, 220);
+            StatusText.Text = $"{place.Name} — nearest radar {site.Icao} ({site.Name}), {Units.Distance(km)} away.";
+            SearchBox.Clear();
+        }
+        finally
+        {
+            SearchBox.IsEnabled = true;
+        }
+    }
+
+    // ---- timeline ticks ----
+
+    private void TimelineArea_SizeChanged(object sender, SizeChangedEventArgs e) => RebuildTicks();
+
+    /// <summary>
+    /// Hour ticks with labels under the scrub slider, so the timeline reads as a clock
+    /// rather than an anonymous 0..N range.
+    /// </summary>
+    private void RebuildTicks()
+    {
+        TickCanvas.Children.Clear();
+        var volumes = _playback?.DayVolumes;
+        if (volumes is not { Count: > 1 }) return;
+
+        double width = TimelineArea.ActualWidth;
+        if (width < 60) return;
+
+        var start = volumes[0].TimeUtc;
+        var end = volumes[^1].TimeUtc;
+        double totalMinutes = (end - start).TotalMinutes;
+        if (totalMinutes <= 0) return;
+
+        // Aim for roughly one label per 110 px.
+        int[] candidates = [1, 2, 3, 4, 6, 8, 12];
+        int hourStep = candidates[^1];
+        foreach (var candidate in candidates)
+        {
+            if (totalMinutes / 60.0 / candidate * 110 <= width) { hourStep = candidate; break; }
+        }
+
+        var brush = new System.Windows.Media.SolidColorBrush(
+            System.Windows.Media.Color.FromRgb(0x6C, 0x74, 0x83));
+        var tickHour = new DateTime(start.Year, start.Month, start.Day, start.Hour, 0, 0, DateTimeKind.Utc);
+        if (tickHour < start) tickHour = tickHour.AddHours(1);
+        while (tickHour.Hour % hourStep != 0) tickHour = tickHour.AddHours(1);
+
+        for (; tickHour <= end; tickHour = tickHour.AddHours(hourStep))
+        {
+            double fraction = (tickHour - start).TotalMinutes / totalMinutes;
+            double x = fraction * width;
+            TickCanvas.Children.Add(new System.Windows.Shapes.Line
+            {
+                X1 = x, X2 = x, Y1 = 7, Y2 = 13,
+                Stroke = brush, StrokeThickness = 1,
+            });
+            var label = new TextBlock
+            {
+                Text = $"{tickHour:HH}z",
+                FontSize = 9.5,
+                Foreground = brush,
+                FontFamily = new System.Windows.Media.FontFamily("Consolas"),
+            };
+            label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            Canvas.SetLeft(label, Math.Max(0, Math.Min(width - label.DesiredSize.Width, x - label.DesiredSize.Width / 2)));
+            Canvas.SetTop(label, -2);
+            TickCanvas.Children.Add(label);
+        }
     }
 }

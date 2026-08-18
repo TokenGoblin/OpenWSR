@@ -102,6 +102,20 @@ public sealed class MapView : IDisposable
     /// <summary>Replace the label layer (storm IDs, dBZ). Swapped atomically.</summary>
     public void SetLabels(IReadOnlyList<MapLabel> labels) => _labels = labels;
 
+    private sealed record LegendSpec(byte[] Rgba, float Min, float Max, string Title);
+
+    private LegendSpec? _legend;
+    private LegendSpec? _uploadedLegend;
+
+    /// <summary>
+    /// Show a colour scale for the displayed product. Drawn in the D3D scene rather than
+    /// in WPF, because the child window always covers WPF content in its rectangle.
+    /// </summary>
+    public void SetLegend(byte[] paletteRgba256, float min, float max, string title) =>
+        _legend = new LegendSpec(paletteRgba256, min, max, title);
+
+    public void ClearLegend() => _legend = null;
+
     /// <summary>Replace the overlay layer (warning polygons, measure lines). Null clears.</summary>
     public void SetOverlay(OverlayGeometry? overlay)
     {
@@ -124,8 +138,12 @@ public sealed class MapView : IDisposable
     private bool _sweepClearRequested;
 
     /// <summary>Stage a sweep for display; geometry prep runs on the calling thread.</summary>
-    public void ShowSweep(Sweep sweep, ColorTable palette) =>
-        ShowGeometry(SweepGeometry.Build(sweep), palette.BuildRgba256(), palette.MinValue, palette.Range);
+    public void ShowSweep(Sweep sweep, ColorTable palette)
+    {
+        var rgba = palette.BuildRgba256();
+        SetLegend(rgba, palette.MinValue, palette.MaxValue, palette.Name);
+        ShowGeometry(SweepGeometry.Build(sweep), rgba, palette.MinValue, palette.Range);
+    }
 
     /// <summary>Stage prebuilt geometry (loop playback path — no CPU rebuild per frame).</summary>
     public void ShowGeometry(SweepGeometry geometry, byte[] paletteRgba256, float paletteMin, float paletteRange)
@@ -310,6 +328,7 @@ public sealed class MapView : IDisposable
             quads.Begin();
             DrawMarkers(cam, quads);
             DrawLabels(cam, quads, device);
+            DrawLegend(cam, quads, device);
 
             device.SwapChain.Present(1);
 
@@ -328,6 +347,11 @@ public sealed class MapView : IDisposable
         _glyphView = null;
         _glyphTexture?.Dispose();
         _glyphTexture = null;
+        _legendView?.Dispose();
+        _legendView = null;
+        _legendTexture?.Dispose();
+        _legendTexture = null;
+        _uploadedLegend = null;
     }
 
     private void DrawTiles(CameraSnapshot cam, TileTextureCache textures, QuadRenderer quads)
@@ -367,35 +391,69 @@ public sealed class MapView : IDisposable
 
     private Vortice.Direct3D11.ID3D11Texture2D? _glyphTexture;
     private Vortice.Direct3D11.ID3D11ShaderResourceView? _glyphView;
+    private Vortice.Direct3D11.ID3D11Texture2D? _legendTexture;
+    private Vortice.Direct3D11.ID3D11ShaderResourceView? _legendView;
 
-    private unsafe void DrawLabels(CameraSnapshot cam, QuadRenderer quads, DeviceResources device)
+    private unsafe void EnsureGlyphTexture(DeviceResources device)
+    {
+        if (_glyphView is not null) return;
+        fixed (byte* p = _glyphAtlas.Bgra)
+        {
+            var desc = new Vortice.Direct3D11.Texture2DDescription
+            {
+                Width = (uint)_glyphAtlas.TextureWidth,
+                Height = (uint)_glyphAtlas.TextureHeight,
+                MipLevels = 1,
+                ArraySize = 1,
+                Format = Vortice.DXGI.Format.B8G8R8A8_UNorm,
+                SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
+                Usage = Vortice.Direct3D11.ResourceUsage.Immutable,
+                BindFlags = Vortice.Direct3D11.BindFlags.ShaderResource,
+            };
+            _glyphTexture = device.Device.CreateTexture2D(desc,
+                [new Vortice.Direct3D11.SubresourceData((IntPtr)p, (uint)(_glyphAtlas.TextureWidth * 4))]);
+            _glyphView = device.Device.CreateShaderResourceView(_glyphTexture);
+        }
+    }
+
+    /// <summary>Draw text anchored in clip space, with a dark halo for legibility over any map.</summary>
+    private void DrawTextClip(
+        QuadRenderer quads, CameraSnapshot cam, float clipX, float clipY, string text,
+        float glyphHeightPx = 15f, bool halo = true)
+    {
+        float glyphWidthPx = glyphHeightPx * GlyphAtlas.CellWidth / GlyphAtlas.CellHeight;
+        float pxToClipX = 2f / cam.ViewportWidth;
+        float pxToClipY = 2f / cam.ViewportHeight;
+
+        for (int pass = halo ? 0 : 1; pass < 2; pass++)
+        {
+            float x = clipX + (pass == 0 ? 1.2f * pxToClipX : 0);
+            float y = clipY + (pass == 0 ? -1.2f * pxToClipY : 0);
+            float tint = pass == 0 ? 0f : 1f;
+            foreach (var c in text)
+            {
+                if (_glyphAtlas.UvFor(c) is { } uv)
+                {
+                    quads.DrawTextured(
+                        (x, y, x + glyphWidthPx * pxToClipX, y + glyphHeightPx * pxToClipY),
+                        (uv.U0, uv.V0, uv.U1, uv.V1), _glyphView!,
+                        pass == 0 ? 0.9f : 1f, tint, tint, tint);
+                }
+                x += glyphWidthPx * pxToClipX;
+            }
+        }
+    }
+
+    /// <summary>Viewport pixels (origin top-left) to clip space.</summary>
+    private static (float X, float Y) PxToClip(CameraSnapshot cam, float xPx, float yPx) =>
+        (xPx / cam.ViewportWidth * 2f - 1f, 1f - yPx / cam.ViewportHeight * 2f);
+
+    private void DrawLabels(CameraSnapshot cam, QuadRenderer quads, DeviceResources device)
     {
         var labels = _labels;
         if (labels.Count == 0) return;
+        EnsureGlyphTexture(device);
 
-        if (_glyphView is null)
-        {
-            fixed (byte* p = _glyphAtlas.Bgra)
-            {
-                var desc = new Vortice.Direct3D11.Texture2DDescription
-                {
-                    Width = (uint)_glyphAtlas.TextureWidth,
-                    Height = (uint)_glyphAtlas.TextureHeight,
-                    MipLevels = 1,
-                    ArraySize = 1,
-                    Format = Vortice.DXGI.Format.B8G8R8A8_UNorm,
-                    SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
-                    Usage = Vortice.Direct3D11.ResourceUsage.Immutable,
-                    BindFlags = Vortice.Direct3D11.BindFlags.ShaderResource,
-                };
-                _glyphTexture = device.Device.CreateTexture2D(desc,
-                    [new Vortice.Direct3D11.SubresourceData((IntPtr)p, (uint)(_glyphAtlas.TextureWidth * 4))]);
-                _glyphView = device.Device.CreateShaderResourceView(_glyphTexture);
-            }
-        }
-
-        const float glyphHeightPx = 15f;
-        float glyphWidthPx = glyphHeightPx * GlyphAtlas.CellWidth / GlyphAtlas.CellHeight;
         float pxToClipX = 2f / cam.ViewportWidth;
         float pxToClipY = 2f / cam.ViewportHeight;
         double halfW = cam.ViewportWidth * cam.MetersPerPixel / 2.0;
@@ -407,27 +465,98 @@ public sealed class MapView : IDisposable
             float anchorY = (float)((label.MercY - cam.CenterY) / halfH);
             if (anchorX < -1.1f || anchorX > 1.1f || anchorY < -1.1f || anchorY > 1.1f)
                 continue;
-
-            for (int pass = 0; pass < 2; pass++) // dark halo first, then white text
-            {
-                float dx = pass == 0 ? 1.2f * pxToClipX : 0;
-                float dy = pass == 0 ? -1.2f * pxToClipY : 0;
-                float x = anchorX + label.OffsetXPx * pxToClipX + dx;
-                float y = anchorY + label.OffsetYPx * pxToClipY + dy;
-                foreach (var c in label.Text)
-                {
-                    if (_glyphAtlas.UvFor(c) is { } uv)
-                    {
-                        quads.DrawTextured(
-                            (x, y, x + glyphWidthPx * pxToClipX, y + glyphHeightPx * pxToClipY),
-                            (uv.U0, uv.V0, uv.U1, uv.V1), _glyphView!,
-                            pass == 0 ? 0.9f : 1f,
-                            pass == 0 ? 0f : 1f, pass == 0 ? 0f : 1f, pass == 0 ? 0f : 1f);
-                    }
-                    x += glyphWidthPx * pxToClipX;
-                }
-            }
+            DrawTextClip(quads, cam,
+                anchorX + label.OffsetXPx * pxToClipX,
+                anchorY + label.OffsetYPx * pxToClipY,
+                label.Text);
         }
+    }
+
+    /// <summary>
+    /// Colour scale for the displayed product: a vertical bar of the palette with labelled
+    /// breakpoints, so a colour on the map can be read back as a number.
+    /// </summary>
+    private unsafe void DrawLegend(CameraSnapshot cam, QuadRenderer quads, DeviceResources device)
+    {
+        var legend = _legend;
+        if (legend is null || legend.Max <= legend.Min) return;
+        EnsureGlyphTexture(device);
+
+        if (!ReferenceEquals(_uploadedLegend, legend))
+        {
+            // 1x256 texture so the palette runs vertically; row 0 is the high end.
+            var column = new byte[256 * 4];
+            for (int row = 0; row < 256; row++)
+            {
+                int source = (255 - row) * 4;
+                Array.Copy(legend.Rgba, source, column, row * 4, 4);
+            }
+            _legendView?.Dispose();
+            _legendTexture?.Dispose();
+            fixed (byte* p = column)
+            {
+                var desc = new Vortice.Direct3D11.Texture2DDescription
+                {
+                    Width = 1,
+                    Height = 256,
+                    MipLevels = 1,
+                    ArraySize = 1,
+                    Format = Vortice.DXGI.Format.R8G8B8A8_UNorm,
+                    SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
+                    Usage = Vortice.Direct3D11.ResourceUsage.Immutable,
+                    BindFlags = Vortice.Direct3D11.BindFlags.ShaderResource,
+                };
+                _legendTexture = device.Device.CreateTexture2D(desc,
+                    [new Vortice.Direct3D11.SubresourceData((IntPtr)p, 4)]);
+                _legendView = device.Device.CreateShaderResourceView(_legendTexture);
+            }
+            _uploadedLegend = legend;
+        }
+
+        const float barX = 16f, barW = 20f, marginTop = 34f;
+        float barH = Math.Min(300f, cam.ViewportHeight * 0.45f);
+        float barTop = marginTop;
+        float barBottom = barTop + barH;
+        if (barH < 90f) return; // too short to label meaningfully
+
+        // Backing plate so the scale stays readable over bright basemaps.
+        var plateTl = PxToClip(cam, barX - 8f, barTop - 22f);
+        var plateBr = PxToClip(cam, barX + barW + 62f, barBottom + 8f);
+        quads.DrawSolid((plateTl.X, plateBr.Y, plateBr.X, plateTl.Y), 0.05f, 0.06f, 0.08f, 0.72f);
+
+        var barTl = PxToClip(cam, barX, barTop);
+        var barBr = PxToClip(cam, barX + barW, barBottom);
+        quads.DrawTextured((barTl.X, barBr.Y, barBr.X, barTl.Y), (0, 0, 1, 1), _legendView!);
+
+        var title = PxToClip(cam, barX - 4f, barTop - 19f);
+        DrawTextClip(quads, cam, title.X, title.Y, legend.Title, 13f);
+
+        float range = legend.Max - legend.Min;
+        float step = NiceStep(range / 5f);
+        float first = MathF.Ceiling(legend.Min / step) * step;
+        for (float value = first; value <= legend.Max + 0.001f; value += step)
+        {
+            float t = (value - legend.Min) / range;
+            float y = barBottom - t * barH;
+            var tick = PxToClip(cam, barX + barW + 1f, y - 1.5f);
+            quads.DrawSolid((tick.X, PxToClip(cam, 0, y + 1.5f).Y,
+                PxToClip(cam, barX + barW + 6f, 0).X, tick.Y), 1f, 1f, 1f, 0.85f);
+            var label = PxToClip(cam, barX + barW + 9f, y - 6f);
+            DrawTextClip(quads, cam, label.X, label.Y, FormatTick(value, step), 12f);
+        }
+    }
+
+    private static string FormatTick(float value, float step) =>
+        step < 1f ? value.ToString("0.0") : value.ToString("0");
+
+    /// <summary>Round a raw interval up to 1, 2, 2.5 or 5 times a power of ten.</summary>
+    internal static float NiceStep(float raw)
+    {
+        if (raw <= 0) return 1f;
+        float magnitude = MathF.Pow(10, MathF.Floor(MathF.Log10(raw)));
+        float normalized = raw / magnitude;
+        float nice = normalized <= 1f ? 1f : normalized <= 2f ? 2f : normalized <= 2.5f ? 2.5f : normalized <= 5f ? 5f : 10f;
+        return nice * magnitude;
     }
 
     private void DrawMarkers(CameraSnapshot cam, QuadRenderer quads)
