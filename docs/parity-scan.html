@@ -1,0 +1,1087 @@
+<title>OpenWSR Parity Scan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+  /* Dark-first: the bare :root carries the primary (dark) palette, matching the app's own chrome. */
+  :root {
+    --ground:      #101319;
+    --surface:     #171B23;
+    --surface-2:   #1D222C;
+    --line:        #2A3140;
+    --line-soft:   #212734;
+    --text:        #DFE5EF;
+    --text-dim:    #98A2B4;
+    --text-faint:  #6B7488;
+    --accent:      #FFB020;
+    --accent-soft: #6B4A0E;
+    --good:        #46C46B;
+
+    /* Severity ramp lifted from the app's own reflectivity table — the colors mean something here. */
+    --sev-1: #3C8BC8;
+    --sev-2: #2AC82A;
+    --sev-3: #F2E32A;
+    --sev-4: #F2541E;
+    --sev-5: #D444D4;
+    --sev-ink: #101319;
+
+    --maxw: 1180px;
+    --radius: 4px;
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --ground:      #F5F6F9;
+      --surface:     #FFFFFF;
+      --surface-2:   #EEF1F6;
+      --line:        #D5DBE5;
+      --line-soft:   #E4E8EF;
+      --text:        #171B23;
+      --text-dim:    #596274;
+      --text-faint:  #838C9E;
+      --accent:      #9A6200;
+      --accent-soft: #F6E4BE;
+      --good:        #1E8A44;
+
+      --sev-1: #2B6E9F;
+      --sev-2: #1B8F1B;
+      --sev-3: #B39400;
+      --sev-4: #C63F12;
+      --sev-5: #A32BA3;
+      --sev-ink: #FFFFFF;
+    }
+  }
+
+  :root[data-theme="light"] {
+    --ground:      #F5F6F9;
+    --surface:     #FFFFFF;
+    --surface-2:   #EEF1F6;
+    --line:        #D5DBE5;
+    --line-soft:   #E4E8EF;
+    --text:        #171B23;
+    --text-dim:    #596274;
+    --text-faint:  #838C9E;
+    --accent:      #9A6200;
+    --accent-soft: #F6E4BE;
+    --good:        #1E8A44;
+
+    --sev-1: #2B6E9F;
+    --sev-2: #1B8F1B;
+    --sev-3: #B39400;
+    --sev-4: #C63F12;
+    --sev-5: #A32BA3;
+    --sev-ink: #FFFFFF;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--text);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: var(--maxw);
+    margin: 0 auto;
+    padding: 0 28px 96px;
+  }
+
+  /* ---- masthead ---- */
+
+  header.masthead {
+    border-bottom: 1px solid var(--line);
+    padding: 56px 0 28px;
+    margin-bottom: 44px;
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 14px;
+  }
+
+  h1 {
+    font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", sans-serif;
+    font-weight: 700;
+    font-size: clamp(38px, 6vw, 62px);
+    line-height: 1.02;
+    letter-spacing: -0.015em;
+    margin: 0 0 18px;
+    text-wrap: balance;
+  }
+
+  .standfirst {
+    font-size: clamp(17px, 1.7vw, 20px);
+    line-height: 1.5;
+    color: var(--text-dim);
+    max-width: 64ch;
+    margin: 0;
+  }
+
+  .standfirst strong { color: var(--text); font-weight: 600; }
+
+  .metastrip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 36px;
+    margin-top: 30px;
+    padding-top: 22px;
+    border-top: 1px solid var(--line-soft);
+  }
+
+  .metastrip div {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .metastrip b {
+    display: block;
+    font-size: 21px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.01em;
+  }
+
+  /* ---- sections ---- */
+
+  section { margin-bottom: 60px; }
+
+  h2 {
+    font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", sans-serif;
+    font-weight: 700;
+    font-size: 30px;
+    letter-spacing: -0.01em;
+    margin: 0 0 6px;
+    text-wrap: balance;
+  }
+
+  .sectionlede {
+    color: var(--text-dim);
+    max-width: 68ch;
+    margin: 0 0 26px;
+  }
+
+  h3 {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin: 34px 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  p { max-width: 70ch; }
+
+  /* ---- severity key ---- */
+
+  .key {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    margin-bottom: 26px;
+  }
+
+  .key .keylabel {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin-right: 6px;
+  }
+
+  .chip {
+    display: inline-block;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 3px 9px;
+    border-radius: 2px;
+    color: var(--sev-ink);
+    white-space: nowrap;
+  }
+
+  .s1 { background: var(--sev-1); }
+  .s2 { background: var(--sev-2); }
+  .s3 { background: var(--sev-3); }
+  .s4 { background: var(--sev-4); }
+  .s5 { background: var(--sev-5); }
+
+  /* ---- tables ---- */
+
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14.5px;
+    min-width: 720px;
+  }
+
+  thead th {
+    text-align: left;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    padding: 12px 16px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+
+  tbody td {
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: top;
+    color: var(--text-dim);
+  }
+
+  tbody tr:last-child td { border-bottom: none; }
+
+  td.feat {
+    color: var(--text);
+    font-weight: 500;
+    min-width: 190px;
+  }
+
+  td.sev { width: 1%; white-space: nowrap; }
+
+  td.who {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--text-faint);
+    min-width: 130px;
+  }
+
+  td.eff {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    white-space: nowrap;
+    color: var(--text-faint);
+  }
+
+  code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.88em;
+    background: var(--surface-2);
+    border: 1px solid var(--line-soft);
+    padding: 1px 5px;
+    border-radius: 2px;
+    color: var(--text);
+  }
+
+  /* ---- lead / win callout ---- */
+
+  .leadgrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(238px, 1fr));
+    gap: 14px;
+  }
+
+  .leadcard {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 2px solid var(--good);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+  }
+
+  .leadcard h4 {
+    margin: 0 0 6px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .leadcard p {
+    margin: 0;
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--text-dim);
+  }
+
+  /* ---- UI findings ---- */
+
+  .finding {
+    display: grid;
+    grid-template-columns: 46px 1fr;
+    gap: 18px;
+    padding: 20px 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .finding:last-of-type { border-bottom: none; }
+
+  .fnum {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    padding-top: 2px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .finding h4 {
+    margin: 0 0 7px;
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+  }
+
+  .finding p { margin: 0 0 9px; font-size: 14.5px; color: var(--text-dim); }
+  .finding p:last-child { margin-bottom: 0; }
+
+  .fix {
+    display: block;
+    font-size: 14px;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 2px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    max-width: 70ch;
+  }
+
+  .fix b {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 3px;
+  }
+
+  /* ---- phases ---- */
+
+  .phase {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    margin-bottom: 14px;
+  }
+
+  .phasehead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .phasenum {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    color: var(--sev-ink);
+    background: var(--accent);
+    padding: 2px 8px;
+    border-radius: 2px;
+  }
+
+  .phasehead h4 {
+    margin: 0;
+    font-size: 19px;
+    font-weight: 600;
+    font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", sans-serif;
+  }
+
+  .phasehead .cost {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    color: var(--text-faint);
+    margin-left: auto;
+  }
+
+  .phase ul { margin: 0; padding-left: 20px; }
+  .phase li { margin-bottom: 6px; color: var(--text-dim); font-size: 14.5px; }
+  .phase li:last-child { margin-bottom: 0; }
+  .phase li b { color: var(--text); font-weight: 600; }
+
+  .note {
+    font-size: 14px;
+    color: var(--text-dim);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    max-width: 74ch;
+  }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding-top: 22px;
+    margin-top: 60px;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--text-faint);
+    max-width: 78ch;
+  }
+
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  @media (max-width: 620px) {
+    .wrap { padding: 0 18px 64px; }
+    .finding { grid-template-columns: 1fr; gap: 6px; }
+  }
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <p class="eyebrow">Competitive analysis · 18 Aug 2026</p>
+  <h1>OpenWSR Parity Scan</h1>
+  <p class="standfirst">
+    OpenWSR already decodes and renders radar as well as anything on the market — the gaps are
+    almost entirely <strong>layers it doesn't draw</strong> and <strong>controls it doesn't expose</strong>,
+    not physics it can't do. Every critical missing data source turns out to be free, public, and
+    unauthenticated; the real blockers are one file format and one afternoon of UI work.
+  </p>
+  <div class="metastrip">
+    <div><b>6,872</b> lines across 59 files</div>
+    <div><b>54</b> tests passing</div>
+    <div><b>31</b> parity gaps identified</div>
+    <div><b>11</b> UI findings</div>
+    <div><b>7/7</b> data sources verified live</div>
+  </div>
+</header>
+
+<section>
+  <h2>Where OpenWSR already leads</h2>
+  <p class="sectionlede">
+    Worth stating first, because it shapes what's worth chasing: several things we give away are
+    sold as premium tiers elsewhere, and two have no commercial equivalent at all.
+  </p>
+  <div class="leadgrid">
+    <div class="leadcard">
+      <h4>Unlimited Level II archive</h4>
+      <p>Any site, any day back to 1991, free. RadarScope gates its historical archive behind Pro Tier&nbsp;Two.</p>
+    </div>
+    <div class="leadcard">
+      <h4>Sub-scan live latency</h4>
+      <p>Partial volumes render as each tilt completes — roughly five seconds after the radar sweeps it, not after the full scan.</p>
+    </div>
+    <div class="leadcard">
+      <h4>Zero-cost product switching</h4>
+      <p>Geometry is generated in the vertex shader, so changing moment or palette is a texture swap. Measured 0.7–11&nbsp;ms.</p>
+    </div>
+    <div class="leadcard">
+      <h4>National hotspot finder</h4>
+      <p>One click scans all 163 sites and flies to the heaviest cell in the country. No competitor ships this.</p>
+    </div>
+    <div class="leadcard">
+      <h4>Track-based proximity alerts</h4>
+      <p>Alerts carry a real ETA from the forecast track, not just "a warning was issued near you".</p>
+    </div>
+    <div class="leadcard">
+      <h4>No account, no key, no tier</h4>
+      <p>Runs anonymously against public data. Supercell Wx has five open issues about its mandatory paid map keys.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>The gaps</h2>
+  <p class="sectionlede">
+    Ranked by how much each one costs a user who is comparing us against what they already run.
+    Severity uses the app's own reflectivity ramp — blue is cosmetic, magenta is the reason someone
+    closes OpenWSR and opens something else.
+  </p>
+
+  <div class="key">
+    <span class="keylabel">Impact</span>
+    <span class="chip s1">Cosmetic</span>
+    <span class="chip s2">Nice</span>
+    <span class="chip s3">Expected</span>
+    <span class="chip s4">Costs users</span>
+    <span class="chip s5">Blocker</span>
+  </div>
+
+  <h3>Data &amp; layers</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Gap</th><th>Impact</th><th>Who has it</th><th>Effort</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="feat">National mosaic</td>
+          <td class="sev"><span class="chip s5">Blocker</span></td>
+          <td class="who">All of them</td>
+          <td class="eff">S → L</td>
+          <td>We are single-site only. Every consumer app <em>opens</em> on a national view. Two routes: pre-rendered Iowa State tiles (hours of work) or native MRMS GRIB2 (weeks).</td>
+        </tr>
+        <tr>
+          <td class="feat">Lightning</td>
+          <td class="sev"><span class="chip s5">Blocker</span></td>
+          <td class="who">RadarScope Pro, MyRadar, Windy</td>
+          <td class="eff">M</td>
+          <td>The headline feature of RadarScope's first paid tier. GOES GLM is free on AWS; needs NetCDF parsing.</td>
+        </tr>
+        <tr>
+          <td class="feat">Watches, SPS, mesoscale discussions</td>
+          <td class="sev"><span class="chip s4">Costs users</span></td>
+          <td class="who">RadarScope Pro T1</td>
+          <td class="eff">S</td>
+          <td>We fetch <code>alerts/active</code> but keep only polygon alerts, so every zone-based product silently drops. Same endpoint, more parsing.</td>
+        </tr>
+        <tr>
+          <td class="feat">SPC convective outlooks</td>
+          <td class="sev"><span class="chip s4">Costs users</span></td>
+          <td class="who">RadarScope Pro T1, Supercell Wx (open)</td>
+          <td class="eff">S</td>
+          <td>Plain GeoJSON, no auth. Verified live today. Categorical, tornado, hail, wind.</td>
+        </tr>
+        <tr>
+          <td class="feat">Local storm reports</td>
+          <td class="sev"><span class="chip s4">Costs users</span></td>
+          <td class="who">RadarScope Pro T1</td>
+          <td class="eff">S</td>
+          <td>Ground truth beside the radar signature — cheap to add, disproportionately valuable during an event.</td>
+        </tr>
+        <tr>
+          <td class="feat">Satellite imagery</td>
+          <td class="sev"><span class="chip s3">Expected</span></td>
+          <td class="who">Windy, Zoom Earth, MyRadar</td>
+          <td class="eff">M</td>
+          <td>GOES ABI free on AWS. Visible/IR/water vapour. NetCDF + reprojection.</td>
+        </tr>
+        <tr>
+          <td class="feat">Future radar (nowcast)</td>
+          <td class="sev"><span class="chip s3">Expected</span></td>
+          <td class="who">MyRadar, Windy, Weather.com</td>
+          <td class="eff">L</td>
+          <td>Consumers assume the timeline runs forward as well as back. HRRR simulated reflectivity is free; GRIB2 again.</td>
+        </tr>
+        <tr>
+          <td class="feat">County &amp; state boundaries</td>
+          <td class="sev"><span class="chip s3">Expected</span></td>
+          <td class="who">RadarScope, GRLevel3</td>
+          <td class="eff">S</td>
+          <td>We inherit whatever the basemap draws. Supercell Wx has had this open since 2023.</td>
+        </tr>
+        <tr>
+          <td class="feat">Placefile support</td>
+          <td class="sev"><span class="chip s3">Expected</span></td>
+          <td class="who">GR ecosystem, Supercell Wx</td>
+          <td class="eff">M</td>
+          <td>The community's de-facto overlay format. Supporting it inherits a decade of third-party content for free.</td>
+        </tr>
+        <tr>
+          <td class="feat">Shapefile / GeoJSON / KML import</td>
+          <td class="sev"><span class="chip s2">Nice</span></td>
+          <td class="who">GRLevel3</td>
+          <td class="eff">M</td>
+          <td>Damage surveys, custom boundaries. Three separate open requests on Supercell Wx.</td>
+        </tr>
+        <tr>
+          <td class="feat">Terrain / topography</td>
+          <td class="sev"><span class="chip s1">Cosmetic</span></td>
+          <td class="who">RadarScope, Windy</td>
+          <td class="eff">S</td>
+          <td>Basemap style swap, mostly.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Analysis &amp; derived products</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Gap</th><th>Impact</th><th>Who has it</th><th>Effort</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="feat">Vertical cross-section</td>
+          <td class="sev"><span class="chip s4">Costs users</span></td>
+          <td class="who">GR2Analyst</td>
+          <td class="eff">L</td>
+          <td>The largest structural gap in the whole open-source field — no OSS viewer has it. Draw a line, get a vertical slice through the volume. We already hold full volumes in memory, which is most of the battle.</td>
+        </tr>
+        <tr>
+          <td class="feat">Storm-relative velocity</td>
+          <td class="sev"><span class="chip s4">Costs users</span></td>
+          <td class="who">GR2Analyst, RadarScope</td>
+          <td class="eff">M</td>
+          <td>Subtract storm motion from velocity. We already compute storm motion for the cones, so the input exists. GR2A's user-settable motion vector is the specific ask.</td>
+        </tr>
+        <tr>
+          <td class="feat">Velocity dealiasing</td>
+          <td class="sev"><span class="chip s4">Costs users</span></td>
+          <td class="who">GR2Analyst, Py-ART</td>
+          <td class="eff">L</td>
+          <td>Our velocity folds at the Nyquist limit and we render it as-is. Anyone reading rotation notices immediately.</td>
+        </tr>
+        <tr>
+          <td class="feat">Azimuthal shear / rotation tracks</td>
+          <td class="sev"><span class="chip s3">Expected</span></td>
+          <td class="who">RadarScope Pro T2</td>
+          <td class="eff">M</td>
+          <td>Sold as a Tier Two feature, which tells you what it's worth. Computable from velocity we already decode.</td>
+        </tr>
+        <tr>
+          <td class="feat">Hail size contours</td>
+          <td class="sev"><span class="chip s3">Expected</span></td>
+          <td class="who">RadarScope Pro T2, MyRadar</td>
+          <td class="eff">S</td>
+          <td>We already decode hail probability per cell; contours are the presentation layer.</td>
+        </tr>
+        <tr>
+          <td class="feat">VWP / VAD wind profile</td>
+          <td class="sev"><span class="chip s2">Nice</span></td>
+          <td class="who">GRLevel3</td>
+          <td class="eff">M</td>
+          <td>A GRLevel3 staple. Parsing is easy; the panel is the work.</td>
+        </tr>
+        <tr>
+          <td class="feat">Soundings / hodographs</td>
+          <td class="sev"><span class="chip s2">Nice</span></td>
+          <td class="who">Specialist tools</td>
+          <td class="eff">L</td>
+          <td>Arguably out of scope for a radar viewer.</td>
+        </tr>
+        <tr>
+          <td class="feat">3D volume rendering</td>
+          <td class="sev"><span class="chip s1">Cosmetic</span></td>
+          <td class="who">GR2Analyst</td>
+          <td class="eff">XL</td>
+          <td>Impressive, rarely load-bearing. Our D3D11 foundation would make it feasible later.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Alerting &amp; workflow</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Gap</th><th>Impact</th><th>Who has it</th><th>Effort</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="feat">Location search &amp; GPS</td>
+          <td class="sev"><span class="chip s5">Blocker</span></td>
+          <td class="who">Every app</td>
+          <td class="eff">S</td>
+          <td>Today you pick a radar by ICAO callsign from a 163-entry dropdown. Normal people search a city or ZIP. This is the single most jarring difference on first launch.</td>
+        </tr>
+        <tr>
+          <td class="feat">In-app settings</td>
+          <td class="sev"><span class="chip s5">Blocker</span></td>
+          <td class="who">Every app</td>
+          <td class="eff">S</td>
+          <td>There is no settings screen at all. Tile provider, map key, and the NWS contact string are editable only by hand-editing JSON — and we currently ship an empty contact, which is out of spec with the API's stated policy.</td>
+        </tr>
+        <tr>
+          <td class="feat">Notifications when minimized</td>
+          <td class="sev"><span class="chip s4">Costs users</span></td>
+          <td class="who">All consumer apps</td>
+          <td class="eff">S</td>
+          <td>Our proximity alerts are an in-window toast. If the app isn't focused, the alert is invisible — which defeats most of the point.</td>
+        </tr>
+        <tr>
+          <td class="feat">Saved locations</td>
+          <td class="sev"><span class="chip s3">Expected</span></td>
+          <td class="who">Every app</td>
+          <td class="eff">S</td>
+          <td>One home point isn't enough — people track family, a route, a second property.</td>
+        </tr>
+        <tr>
+          <td class="feat">Per-type alert toggles &amp; audio</td>
+          <td class="sev"><span class="chip s3">Expected</span></td>
+          <td class="who">RadarOmega, Supercell Wx (open)</td>
+          <td class="eff">S</td>
+          <td>Choose which alert types speak, and only escalate on genuine upgrades rather than every polygon reissue.</td>
+        </tr>
+        <tr>
+          <td class="feat">GIF / video export</td>
+          <td class="sev"><span class="chip s3">Expected</span></td>
+          <td class="who">Everyone shares loops</td>
+          <td class="eff">M</td>
+          <td>Still open on Supercell Wx too. A loop you can't share is a loop nobody sees.</td>
+        </tr>
+        <tr>
+          <td class="feat">Independent site per pane</td>
+          <td class="sev"><span class="chip s3">Expected</span></td>
+          <td class="who">GRLevel3</td>
+          <td class="eff">M</td>
+          <td>Our panes share one volume with different products. Watching two adjacent radars needs two sites.</td>
+        </tr>
+        <tr>
+          <td class="feat">Units preference</td>
+          <td class="sev"><span class="chip s3">Expected</span></td>
+          <td class="who">Every app</td>
+          <td class="eff">S</td>
+          <td>We display kilometres and km/h with no option. US users expect miles, mph, and nautical miles for range.</td>
+        </tr>
+        <tr>
+          <td class="feat">Longer loops</td>
+          <td class="sev"><span class="chip s2">Nice</span></td>
+          <td class="who">RadarScope Pro T2 (50)</td>
+          <td class="eff">S</td>
+          <td>We cap at 30 frames. Mostly a VRAM-budget decision, already parameterised.</td>
+        </tr>
+        <tr>
+          <td class="feat">Drawing &amp; annotation</td>
+          <td class="sev"><span class="chip s2">Nice</span></td>
+          <td class="who">Supercell Wx (partial)</td>
+          <td class="eff">M</td>
+          <td>Lines, circles, text for briefings and screenshots.</td>
+        </tr>
+        <tr>
+          <td class="feat">Spotter Network</td>
+          <td class="sev"><span class="chip s2">Nice</span></td>
+          <td class="who">RadarScope Pro</td>
+          <td class="eff">M</td>
+          <td>Requires an account with the network; niche outside active chasers.</td>
+        </tr>
+        <tr>
+          <td class="feat">Mobile client</td>
+          <td class="sev"><span class="chip s1">Cosmetic</span></td>
+          <td class="who">RadarScope, MyRadar</td>
+          <td class="eff">XL</td>
+          <td>A different product, not a gap in this one. Noted only because it's where the market actually is.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>UI findings</h2>
+  <p class="sectionlede">
+    From inspecting the running app's live control tree and layout rather than reading the XAML.
+    The first four are defects, not preferences — one is a bug I introduced.
+  </p>
+
+  <div class="finding">
+    <div class="fnum">01</div>
+    <div>
+      <h4>There is no colour scale anywhere on screen</h4>
+      <p>
+        The app renders dBZ, m/s, dB and correlation coefficient in six different palettes and never
+        once tells you what the colours mean. A user cannot convert what they see into a number
+        without already knowing the table by heart. Every competitor shows a scale; it is the single
+        most conspicuous omission in the interface.
+      </p>
+      <span class="fix"><b>Fix</b>Vertical colour bar docked to the map's left edge, labelled at palette breakpoints, switching automatically with the product and with any imported <code>.pal</code>. The palette data structure already carries everything needed to draw it.</span>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="fnum">02</div>
+    <div>
+      <h4>Data age reads "116106 h 20 m" on archive data</h4>
+      <p>
+        The age indicator measures wall-clock distance from the displayed sweep, which is correct for
+        live data and absurd for a 2013 case study. Observed live in the running app. It also renders
+        in grey rather than green or amber in archive mode, so the one genuinely safety-relevant
+        readout in the product looks broken exactly when someone is learning to trust it.
+      </p>
+      <span class="fix"><b>Fix</b>Show elapsed time only in live mode. In archive mode show the absolute scan time and label the mode explicitly.</span>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="fnum">03</div>
+    <div>
+      <h4>Toolbar overflow is disabled, so controls can become unreachable</h4>
+      <p>
+        Nine control groups sit in a single non-wrapping row, and the overflow chevron is explicitly
+        collapsed in <code>ToolBar_Loaded</code> — my doing, on the assumption everything fits. At
+        narrow window widths the right-hand controls are clipped with no way to reach them.
+      </p>
+      <span class="fix"><b>Fix</b>Re-enable the overflow chevron immediately, then reorganise: the toolbar currently mixes source selection, playback, layer toggles, and app actions with no grouping a user could predict.</span>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="fnum">04</div>
+    <div>
+      <h4>Keyboard shortcuts are advertised inside the status text</h4>
+      <p>
+        Every status message ends with <code>[R/V/W/D/P/C moment, ↑/↓ tilt]</code>, permanently
+        consuming status-bar width to document six shortcuts, while the tilt and product actually in
+        use are buried in the same run-on string.
+      </p>
+      <span class="fix"><b>Fix</b>Product and tilt become real controls — a segmented product selector and a vertical tilt picker on the map edge, showing the VCP's actual elevation angles. Shortcuts move to a help overlay on <code>?</code>.</span>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="fnum">05</div>
+    <div>
+      <h4>Time is controlled from two places at once</h4>
+      <p>
+        Loop and speed live in the top toolbar; the scrub slider lives in a separate strip above the
+        status bar. One concept, two locations, neither aware of the other's state. The slider itself
+        has no ticks, no time labels, and no indication of which frames are cached versus still
+        downloading.
+      </p>
+      <span class="fix"><b>Fix</b>One full-width timeline: inline play/pause and speed, hour ticks with labels, cached-frame shading, and a distinct marker for "now" — the standard pattern every consumer radar app converged on, and the piece that would make future radar legible later.</span>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="fnum">06</div>
+    <div>
+      <h4>The status bar is eight fields of run-on text</h4>
+      <p>
+        Site, scan time, product, elevation, cut index, shortcut list, frame rate, upload latency,
+        data age, and the full inspector readout share one line with no visual hierarchy. The
+        developer diagnostics and the meteorology sit at identical weight.
+      </p>
+      <span class="fix"><b>Fix</b>Split them: meteorological readout follows the cursor on the map, feed health gets a compact fixed slot, and render diagnostics move behind a debug toggle.</span>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="fnum">07</div>
+    <div>
+      <h4>The layers panel is a flat column of checkboxes</h4>
+      <p>
+        Twelve controls with two sliders and bold text as the only grouping. No per-layer opacity, no
+        colour swatches tying a checkbox to what it draws on the map, no way to reorder, and no
+        indication of which layers are currently returning data versus quietly empty.
+      </p>
+      <span class="fix"><b>Fix</b>Layer rows with a swatch, a name, a visibility toggle, and a per-layer opacity control — with a live/stale dot per layer once satellite, lightning and mosaic arrive and layer count doubles.</span>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="fnum">08</div>
+    <div>
+      <h4>Failure and empty states are status-bar strings</h4>
+      <p>
+        "No volumes for this site on this date", a failed S3 list, and a Level III fetch error all
+        surface as one line of grey text that scrolls away on the next update. The map keeps showing
+        whatever was there before, so a stale display and a healthy one look identical.
+      </p>
+      <span class="fix"><b>Fix</b>Persistent, dismissible state on the map itself for anything that means "what you are looking at is not current".</span>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="fnum">09</div>
+    <div>
+      <h4>Nothing explains the storm symbols</h4>
+      <p>
+        Diamonds, dotted forecast tracks, cones, triangles sized by hail probability, and yellow
+        mesocyclone rings all appear with no key. The information is genuinely dense and genuinely
+        good — and unreadable to anyone who didn't build it.
+      </p>
+      <span class="fix"><b>Fix</b>A compact symbol key in the layers panel, next to the toggles that draw each symbol.</span>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="fnum">10</div>
+    <div>
+      <h4>First launch has nothing to show</h4>
+      <p>
+        The app opens on a hard-coded 2013 case study at KTLX. That is a fine demo and a strange
+        default: it isn't the user's weather, isn't current, and makes the data-age readout look
+        broken (see finding 02).
+      </p>
+      <span class="fix"><b>Fix</b>Open on the user's location if home is set, otherwise offer the hotspot scan we already have — "show me the weather that matters right now" is a better first impression than any static default.</span>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="fnum">11</div>
+    <div>
+      <h4>The window doesn't adapt</h4>
+      <p>
+        The layers panel is a fixed 212&nbsp;px that neither collapses nor scrolls independently, and
+        the default 1280×800 window leaves the map at roughly 1050&nbsp;px wide once the panel and
+        chrome take their share.
+      </p>
+      <span class="fix"><b>Fix</b>Collapsible panel with a persisted state, and a keyboard shortcut to hide all chrome for a clean full-bleed map.</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Every missing source is free — I checked today</h2>
+  <p class="sectionlede">
+    This is the encouraging part. I hit each endpoint anonymously while writing this; all seven
+    responded. Nothing below needs an account, a key, or a card.
+  </p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Source</th><th>Endpoint</th><th>Format</th><th>Cadence</th><th>Unlocks</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="feat">MRMS mosaic</td>
+          <td class="who"><code>noaa-mrms-pds</code></td>
+          <td class="eff">GRIB2.gz</td>
+          <td class="eff">~2 min</td>
+          <td>Seamless national reflectivity, precip rate, rotation tracks</td>
+        </tr>
+        <tr>
+          <td class="feat">Iowa State mosaic tiles</td>
+          <td class="who"><code>mesonet.agron.iastate.edu</code></td>
+          <td class="eff">PNG XYZ</td>
+          <td class="eff">~5 min</td>
+          <td>A national view with <em>no</em> GRIB2 work — drops into our existing tile pipeline</td>
+        </tr>
+        <tr>
+          <td class="feat">GOES ABI</td>
+          <td class="who"><code>noaa-goes19</code></td>
+          <td class="eff">NetCDF</td>
+          <td class="eff">5–10 min</td>
+          <td>Visible, infrared, water vapour satellite</td>
+        </tr>
+        <tr>
+          <td class="feat">GOES GLM</td>
+          <td class="who"><code>noaa-goes19/GLM-L2-LCFA</code></td>
+          <td class="eff">NetCDF</td>
+          <td class="eff">20 s</td>
+          <td>Lightning — RadarScope's flagship paid feature</td>
+        </tr>
+        <tr>
+          <td class="feat">HRRR</td>
+          <td class="who"><code>noaa-hrrr-bdp-pds</code></td>
+          <td class="eff">GRIB2</td>
+          <td class="eff">hourly</td>
+          <td>Future radar / nowcast out to 18 hours</td>
+        </tr>
+        <tr>
+          <td class="feat">SPC outlooks</td>
+          <td class="who"><code>spc.noaa.gov/products/outlook</code></td>
+          <td class="eff">GeoJSON</td>
+          <td class="eff">6×/day</td>
+          <td>Categorical, tornado, hail, wind outlooks</td>
+        </tr>
+        <tr>
+          <td class="feat">api.weather.gov</td>
+          <td class="who">already integrated</td>
+          <td class="eff">GeoJSON</td>
+          <td class="eff">60 s</td>
+          <td>Watches, statements, discussions — we already call it and discard these</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note" style="margin-top:18px;">
+    <strong>One dependency gates four features.</strong> MRMS, HRRR, satellite and lightning all
+    arrive as GRIB2 or NetCDF, and we currently decode neither. Supercell Wx is stuck at exactly this
+    point — its GRIB2 issue blocks its mosaic, wind and precipitation-type work, and it has been open
+    for two years. The pre-rendered Iowa State tiles are the way around it: a national mosaic in an
+    afternoon, using the tile cache we already built, while the format work happens on its own
+    schedule rather than blocking everything behind it.
+  </p>
+</section>
+
+<section>
+  <h2>Suggested sequence</h2>
+  <p class="sectionlede">
+    Ordered by user-visible value per unit of work. The first group is genuinely a day or two and
+    changes how the app feels more than anything after it.
+  </p>
+
+  <div class="phase">
+    <div class="phasehead">
+      <span class="phasenum">01</span>
+      <h4>Make what we already have legible</h4>
+      <span class="cost">~2 days</span>
+    </div>
+    <ul>
+      <li><b>Colour scale</b> docked to the map, product-aware, honouring imported palettes.</li>
+      <li><b>Settings screen</b> — tile provider, map key, NWS contact string, units. Removes the JSON editing and fixes our out-of-spec User-Agent.</li>
+      <li><b>Location search</b> by city or ZIP, resolving to the nearest radar. We already have the site table and the nearest-site maths.</li>
+      <li><b>Data-age fix</b>, <b>toolbar overflow re-enabled</b>, <b>storm symbol key</b>.</li>
+      <li><b>Unified timeline</b> with ticks, labels and inline transport controls.</li>
+    </ul>
+  </div>
+
+  <div class="phase">
+    <div class="phasehead">
+      <span class="phasenum">02</span>
+      <h4>Layers that need no new file formats</h4>
+      <span class="cost">~1 week</span>
+    </div>
+    <ul>
+      <li><b>National mosaic</b> via Iowa State tiles — the single biggest perceived gap, closed cheaply.</li>
+      <li><b>Watches, statements, mesoscale discussions</b> from the alerts endpoint we already poll.</li>
+      <li><b>SPC outlooks</b> and <b>local storm reports</b>, both plain GeoJSON.</li>
+      <li><b>County and state boundaries</b> as a real layer instead of whatever the basemap happens to draw.</li>
+      <li><b>Windows notifications</b> so proximity alerts work when the app isn't focused.</li>
+    </ul>
+  </div>
+
+  <div class="phase">
+    <div class="phasehead">
+      <span class="phasenum">03</span>
+      <h4>The format work</h4>
+      <span class="cost">~2–3 weeks</span>
+    </div>
+    <ul>
+      <li><b>GRIB2 decoder</b> — unlocks native MRMS and HRRR together.</li>
+      <li><b>NetCDF reader</b> — unlocks GOES satellite and GLM lightning together.</li>
+      <li><b>Future radar</b> on the timeline built in phase 01, running past "now".</li>
+    </ul>
+  </div>
+
+  <div class="phase">
+    <div class="phasehead">
+      <span class="phasenum">04</span>
+      <h4>Depth for the people who care most</h4>
+      <span class="cost">open-ended</span>
+    </div>
+    <ul>
+      <li><b>Vertical cross-section</b> — the standout gap across the entire open-source field, and we already hold the volumes it needs.</li>
+      <li><b>Storm-relative velocity</b> with a user-settable motion vector, then <b>velocity dealiasing</b>.</li>
+      <li><b>Placefile support</b>, inheriting the GR community's overlay ecosystem wholesale.</li>
+      <li><b>GIF export</b>, <b>drawing tools</b>, <b>azimuthal shear</b>.</li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  Method — competitor features from RadarScope's published Pro tier documentation and MyRadar's
+  store listing; open-source gaps from a full enumeration of Supercell Wx's 65 open GitHub issues,
+  which doubles as a user-validated list of what people miss when comparing against GRLevel3,
+  GR2Analyst and RadarScope. UI findings come from querying the running app's automation tree, not
+  from reading source. Data endpoints were each requested anonymously on 18 August 2026 and all
+  seven responded; treat that as a snapshot, since public buckets and paths do change.
+</footer>
+
+</div>

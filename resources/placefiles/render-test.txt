@@ -1,0 +1,43 @@
+; OpenWSR placefile render test — covers the statements a community file actually uses
+Title: OpenWSR Render Test
+RefreshSeconds: 300
+Threshold: 999
+
+; A filled polygon over western Oklahoma
+Color: 255 90 90
+Polygon:
+36.4,-100.2
+36.4,-98.4
+35.2,-98.4
+35.2,-100.2
+36.4,-100.2
+End:
+
+; A thick line running from Amarillo toward Tulsa
+Color: 80 200 255
+Line: 4, 0, "Test track"
+35.20,-101.83
+35.55,-100.60
+35.90,-99.40
+36.15,-97.60
+36.15,-95.99
+End:
+
+; Labelled points along it
+Color: 255 255 0
+Place: 35.20,-101.83, AMARILLO
+Place: 36.15,-95.99, TULSA
+Place: 35.47,-97.52, OKC
+
+; An Object block: label offset in pixels from an anchor
+Font: 1, 11, 1, "Consolas"
+Object: 34.60,-98.40
+  Threshold: 999
+  Text: 14, 10, 1, "OFFSET LABEL"
+  Icon: 0, 0, 0, 1, 1, "hover text"
+End:
+
+; Zoomed-in detail that should stay hidden at national scale
+Threshold: 40
+Color: 0 255 120
+Place: 35.47,-97.40, CLOSE ONLY

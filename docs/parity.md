@@ -1,0 +1,129 @@
+# Competitive parity: gaps and status
+
+A feature scan of OpenWSR against RadarScope, GRLevel3/GR2Analyst, RadarOmega, MyRadar,
+Windy and Supercell Wx, originally produced 18 Aug 2026. The presentation version with
+the full reasoning is [`parity-scan.html`](parity-scan.html) — open it in a browser.
+
+This file is the tracked version: the same 31 gaps and 11 UI findings, annotated with
+what has since been **done**, what is **partial**, and what is still **open**.
+
+> Method: competitor features from RadarScope's published Pro tier documentation and
+> MyRadar's store listing; open-source gaps from a full enumeration of Supercell Wx's 65
+> open GitHub issues, which doubles as a user-validated list of what people miss when
+> comparing against GRLevel3, GR2Analyst and RadarScope. UI findings came from querying
+> the running app's automation tree, not from reading source. Every data endpoint was
+> requested anonymously on 18 Aug 2026 and all seven responded.
+
+**Status at time of writing: 20 of 31 gaps closed, 4 partial, 7 open.**
+
+---
+
+## Where OpenWSR already led
+
+Worth restating, because it shaped what was worth chasing. Several of these are sold as
+premium tiers elsewhere and two have no commercial equivalent:
+
+- **Unlimited Level II archive** — any site, any day back to 1991. RadarScope gates its
+  historical archive behind Pro Tier Two.
+- **Sub-scan live latency** — partial volumes render as each tilt completes, roughly five
+  seconds after the radar sweeps it, rather than after the full scan.
+- **Zero-cost product switching** — geometry is generated in the vertex shader, so
+  changing moment or palette is a texture swap. Measured 0.7–11 ms.
+- **National hotspot finder** — one click scans all 163 sites and flies to the heaviest
+  cell in the country. No competitor ships this.
+- **Track-based proximity alerts** — alerts carry a real ETA from the forecast track, not
+  just "a warning was issued near you".
+- **No account, no key, no tier** — runs anonymously against public data. Supercell Wx
+  has five open issues about its mandatory paid map keys.
+
+---
+
+## Data and layers
+
+| Gap | Impact | Status |
+|---|---|---|
+| National mosaic | Blocker | **Done** — Iowa State pre-rendered N0Q tiles as a second tile layer |
+| Lightning | Blocker | **Open** — GOES GLM is free on AWS but needs a NetCDF reader |
+| Watches, SPS, mesoscale discussions | Costs users | **Done** — watch boxes and MCDs from IEM |
+| SPC convective outlooks | Costs users | **Done** — Day 1 categorical |
+| Local storm reports | Costs users | **Done** — last six hours |
+| Satellite imagery | Expected | **Done** — GOES-East IR tiles |
+| Future radar (nowcast) | Expected | **Done** — HRRR simulated reflectivity, six-hour loop, native GRIB2 |
+| County and state boundaries | Expected | **Partial** — inherited from the basemap, not a controllable layer |
+| Placefile support | Expected | **Done** — full GRLevelX parser, minus icon sheets |
+| Shapefile / GeoJSON / KML import | Nice | **Open** |
+| Terrain / topography | Cosmetic | **Open** — mostly a basemap style swap |
+
+## Analysis and derived products
+
+| Gap | Impact | Status |
+|---|---|---|
+| Vertical cross-section | Costs users | **Done** — interpolated between bracketing elevation cuts |
+| Storm-relative velocity | Costs users | **Done** |
+| Velocity dealiasing | Costs users | **Open** — velocity still folds at the Nyquist limit |
+| Azimuthal shear / rotation tracks | Expected | **Open** |
+| Hail size contours | Expected | **Partial** — per-cell markers sized by severe-hail probability, not contours |
+| VWP / VAD wind profile | Nice | **Open** — parsing is easy, the panel is the work |
+| Soundings / hodographs | Nice | **Open** — arguably out of scope |
+| 3D volume rendering | Cosmetic | **Open** |
+
+The cross-section was called out in the original scan as *"the largest structural gap in
+the whole open-source field — no OSS viewer has it."* It is now done.
+
+## Alerting and workflow
+
+| Gap | Impact | Status |
+|---|---|---|
+| Location search and GPS | Blocker | **Done** — city, ZIP or lat/lon, resolving to nearest radar |
+| In-app settings | Blocker | **Done** — including the NWS contact string that was out of spec |
+| Notifications when minimized | Costs users | **Done** — tray notifications |
+| Saved locations | Expected | **Partial** — one home point, not a list |
+| Per-type alert toggles and audio | Expected | **Done** — warning-type filters |
+| GIF / video export | Expected | **Done** — implemented, not yet exercised end-to-end |
+| Independent site per pane | Expected | **Open** — panes share one volume; pan links or unlinks, site does not |
+| Units preference | Expected | **Done** |
+| Longer loops | Nice | **Open** — still capped at 30 frames, already parameterised |
+| Drawing and annotation | Nice | **Open** |
+| Spotter Network | Nice | **Open** — requires an account, niche outside active chasers |
+| Mobile client | Cosmetic | **Out of scope** — a different product |
+
+---
+
+## UI findings
+
+Eleven findings from the running app. The first four were defects rather than preferences.
+
+| # | Finding | Status |
+|---|---|---|
+| 01 | No colour scale anywhere on screen | **Done** — D3D-drawn scale, product-aware, honours imported palettes |
+| 02 | Data age read "116106 h 20 m" on archive data | **Done** — elapsed time only in live mode |
+| 03 | Toolbar overflow disabled, controls unreachable when narrow | **Done** — superseded by the left nav rail |
+| 04 | Keyboard shortcuts advertised inside status text | **Done** |
+| 05 | Time controlled from two places at once | **Done** — one unified timeline with hour ticks |
+| 06 | Status bar is eight fields of run-on text | **Done** |
+| 07 | Layers panel is a flat column of checkboxes | **Partial** — grouped and filtered, still no per-layer opacity or reordering |
+| 08 | Failure and empty states are status-bar strings | **Partial** |
+| 09 | Nothing explains the storm symbols | **Done** — symbol key in the layers panel |
+| 10 | First launch has nothing to show | **Done** — opens on home if set, otherwise the hotspot scan |
+| 11 | Window doesn't adapt | **Done** — collapsible rail and panel |
+
+---
+
+## The strategic call that mattered
+
+The scan's central finding was a dependency, not a feature:
+
+> **One dependency gates four features.** MRMS, HRRR, satellite and lightning all arrive
+> as GRIB2 or NetCDF, and we currently decode neither. Supercell Wx is stuck at exactly
+> this point — its GRIB2 issue blocks its mosaic, wind and precipitation-type work, and
+> it has been open for two years.
+
+The chosen route was to **decouple the layers from the formats**: ship the national
+mosaic and satellite from Iowa State's pre-rendered tiles in hours using the existing
+tile pipeline, then do the real GRIB2 work on its own schedule rather than blocking
+everything behind it.
+
+That worked. The mosaic and satellite shipped the same day; GRIB2 landed afterwards and
+brought native HRRR future radar with it. **NetCDF was never done**, which is exactly why
+lightning is the one remaining Blocker-severity gap — it is the only feature still stuck
+behind the dependency the plan was designed to route around.

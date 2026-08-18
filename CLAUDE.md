@@ -4,6 +4,21 @@ A native Windows NEXRAD radar viewer: .NET 10, WPF shell, Direct3D 11 via Vortic
 Web Mercator tile engine. Reads only public, unauthenticated data. See `README.md` for
 what it does and `TASKS.md` for the build history.
 
+**Before touching a decoder, read `docs/formats.md`** — it holds the field notes for
+every binary format here, specifically the parts where the spec and the live feed
+disagree. The other reference docs:
+
+| | |
+|---|---|
+| `docs/formats.md` | Level II / Level III / GRIB2 / placefile gotchas |
+| `docs/verification.md` | The golden-test methodology and how to run a cross-check |
+| `docs/data-sources.md` | Endpoints, specs, and which ones have already moved |
+| `docs/parity.md` | Competitive gaps, annotated with what's closed |
+| `resources/crosscheck/` | MetPy and ecCodes dump scripts — run these before trusting a decode |
+
+Anything worth keeping goes in `docs/` or `resources/`, not in a scratch directory.
+Scratch directories are session-scoped and get lost.
+
 ## Commands
 
 ```

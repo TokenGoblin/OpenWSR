@@ -158,10 +158,26 @@ src/OpenWSR.Ingest      S3 clients, caches, alerts, geocoding, site table
 src/OpenWSR.App         WPF shell
 src/OpenWSR.Harness     Console decoder harness and live soak
 tests/                  76 tests
+docs/                   Format notes, verification, endpoints, parity, screenshots
+resources/              Cross-check scripts, sample placefiles, reference tables
 ```
 
 `Nexrad`, `Geo`, `Grib2` and `Placefiles` are pure: no WPF, no Direct3D, no network. A
 test enforces it.
+
+---
+
+## Documentation
+
+| | |
+|---|---|
+| [docs/](docs/) | Index, plus screenshots of every major capability |
+| [docs/formats.md](docs/formats.md) | Binary format field notes — the parts that cost real debugging time |
+| [docs/verification.md](docs/verification.md) | How the decoders are golden-tested, and how to run a cross-check |
+| [docs/data-sources.md](docs/data-sources.md) | Every endpoint, the specs behind them, and which have already moved |
+| [docs/parity.md](docs/parity.md) | Competitive gap analysis, annotated with what's since been closed |
+| [CLAUDE.md](CLAUDE.md) | Working brief: architecture, threading rules, hard-won gotchas |
+| [TASKS.md](TASKS.md) | Phase-by-phase build log |
 
 ---
 
