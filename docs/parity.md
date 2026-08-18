@@ -14,7 +14,8 @@ what has since been **done**, what is **partial**, and what is still **open**.
 > the running app's automation tree, not from reading source. Every data endpoint was
 > requested anonymously on 18 Aug 2026 and all seven responded.
 
-**Status at time of writing: 20 of 31 gaps closed, 4 partial, 7 open.**
+**Status at time of writing: 20 of 31 gaps closed, 4 partial, 7 open.** Of the 11 UI
+findings, 8 are closed, 2 partial and 1 open.
 
 ---
 
@@ -104,7 +105,7 @@ Eleven findings from the running app. The first four were defects rather than pr
 | 07 | Layers panel is a flat column of checkboxes | **Partial** — grouped and filtered, still no per-layer opacity or reordering |
 | 08 | Failure and empty states are status-bar strings | **Partial** |
 | 09 | Nothing explains the storm symbols | **Done** — symbol key in the layers panel |
-| 10 | First launch has nothing to show | **Done** — opens on home if set, otherwise the hotspot scan |
+| 10 | First launch has nothing to show | **Open** — still opens on the hard-coded KTLX 2013-05-20 demo (`MainWindow.xaml.cs:87`) regardless of whether home is set. A saved home arms the storm watch for its nearest radar, but does not change the view |
 | 11 | Window doesn't adapt | **Done** — collapsible rail and panel |
 
 ---

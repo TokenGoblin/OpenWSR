@@ -97,6 +97,10 @@ Then set a home location with **📍 Set home on map** in the layers panel to ar
 proximity alerts, or press **🎯** to jump straight to the heaviest weather in the
 country.
 
+The app currently opens on a fixed demo — KTLX on 2013-05-20, the Moore tornado day —
+rather than on your own location. A saved home arms the storm watch for its nearest
+radar, but does not change the opening view. Press **🎯** or pick a site to move on.
+
 ### Console harness
 
 ```
