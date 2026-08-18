@@ -32,6 +32,20 @@ public sealed class Level3Client : IDisposable
     public async Task<Level3Product?> GetLatestAsync(
         string icao, string product, CancellationToken ct = default)
     {
+        var bytes = await GetLatestBytesAsync(icao, product, ct);
+        return bytes is null ? null : Level3File.Decode(bytes);
+    }
+
+    /// <summary>Fetch and decode the newest digital radial-image product (e.g. "DVL"), or null.</summary>
+    public async Task<RadialImageProduct?> GetLatestRadialImageAsync(
+        string icao, string product, CancellationToken ct = default)
+    {
+        var bytes = await GetLatestBytesAsync(icao, product, ct);
+        return bytes is null ? null : RadialImage.Decode(bytes);
+    }
+
+    private async Task<byte[]?> GetLatestBytesAsync(string icao, string product, CancellationToken ct)
+    {
         var site = SitePrefix(icao);
         // Products only exist when the algorithm has output; probe today then yesterday.
         for (int daysBack = 0; daysBack <= 1; daysBack++)
@@ -55,7 +69,7 @@ public sealed class Level3Client : IDisposable
             using var buffer = new MemoryStream((int)data.ContentLength);
             await data.ResponseStream.CopyToAsync(buffer, ct);
             Log.Debug("Level3 {Key}: {Bytes} bytes", newestKey, buffer.Length);
-            return Level3File.Decode(buffer.GetBuffer().AsSpan(0, (int)buffer.Length));
+            return buffer.ToArray();
         }
         return null;
     }

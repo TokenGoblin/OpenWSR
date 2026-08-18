@@ -40,6 +40,9 @@
                               Checked="LinkToggle_Changed" Unchecked="LinkToggle_Changed"
                               ToolTip="Link pan/zoom across panes" />
                 <Separator />
+                <Button x:Name="HotspotButton" Content="🎯 Hotspot" Margin="4,0" Click="HotspotButton_Click"
+                        ToolTip="Find the heaviest precipitation in the USA right now and go there (live + storm tracking)" />
+                <Separator />
                 <Button x:Name="AboutButton" Content="About" Margin="4,0" Click="AboutButton_Click" />
             </ToolBar>
         </ToolBarTray>

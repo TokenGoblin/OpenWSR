@@ -582,6 +582,49 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Find the strongest cell in the country and point everything at it: browsing
+    /// site, live feed, storm overlay (temporarily overriding the home watch), camera.
+    /// The one-click way to exercise every feature against real weather.
+    /// </summary>
+    private async void HotspotButton_Click(object sender, RoutedEventArgs e)
+    {
+        HotspotButton.IsEnabled = false;
+        try
+        {
+            StatusText.Text = "Scanning every radar site for the heaviest precipitation…";
+            var hotspot = await NationalStormScan.FindHeaviestAsync((done, total) =>
+                Dispatcher.BeginInvoke(() =>
+                    StatusText.Text = $"Scanning storm structure… {done}/{total} sites"));
+            if (hotspot is null)
+            {
+                StatusText.Text = "No fresh storm cells anywhere in the USA — remarkably quiet.";
+                return;
+            }
+
+            SiteCombo.SelectedItem = RadarSites.ByIcao(hotspot.Site.Icao);
+            if (LiveToggle.IsChecked == true)
+                LiveToggle.IsChecked = false; // restart the feed on the new site
+            LiveToggle.IsChecked = true;
+            StormsToggle.IsChecked = true;
+            _storms.Enable(hotspot.Site.Icao); // follow the hotspot (overrides home watch for now)
+            _mapView.Camera.MoveTo(hotspot.LatDeg, hotspot.LonDeg, 150);
+
+            StatusText.Text =
+                $"🎯 Hotspot: VIL {hotspot.MaxVilKgM2:F0} kg/m² near {hotspot.Site.Icao} " +
+                $"({hotspot.Site.Name}, {hotspot.Site.State}), {hotspot.RangeKm:F0} km out — " +
+                $"as of {hotspot.ProductTimeUtc:HH:mm}Z";
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Hotspot scan failed: {ex.Message}";
+        }
+        finally
+        {
+            HotspotButton.IsEnabled = true;
+        }
+    }
+
     private void AboutButton_Click(object sender, RoutedEventArgs e)
     {
         var version = GetType().Assembly.GetName().Version?.ToString(3) ?? "dev";

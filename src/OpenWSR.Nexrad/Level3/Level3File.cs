@@ -13,7 +13,8 @@ namespace OpenWSR.Nexrad.Level3;
 /// </summary>
 public static class Level3File
 {
-    public static Level3Product Decode(ReadOnlySpan<byte> file)
+    /// <summary>Strip the WMO text header: returns the binary message and the 3-letter site.</summary>
+    internal static (byte[] Msg, string SiteId) OpenMessage(ReadOnlySpan<byte> file)
     {
         // Text header: "SDUS34 KOUN 110149\r\r\n NMDTLX\r\r\n" — variable length.
         int headerEnd = FindSecondCrCrLf(file);
@@ -21,6 +22,13 @@ public static class Level3File
         var msg = file[headerEnd..];
         if (msg.Length < 120)
             throw new NexradFormatException("Level III message truncated.");
+        return (msg.ToArray(), siteId);
+    }
+
+    public static Level3Product Decode(ReadOnlySpan<byte> file)
+    {
+        var (msgArray, siteId) = OpenMessage(file);
+        ReadOnlySpan<byte> msg = msgArray;
 
         int productCode = Be.I16(msg, 0);
 
@@ -43,7 +51,7 @@ public static class Level3File
 
         if (symbologyOffset > 0 && symbologyOffset < msg.Length)
         {
-            var symbology = Decompress(msg[symbologyOffset..]);
+            var symbology = DecompressBlock(msg[symbologyOffset..]);
             ParseSymbology(symbology, storms, hail, mesos);
         }
 
@@ -73,14 +81,22 @@ public static class Level3File
         throw new NexradFormatException("Level III WMO text header not found.");
     }
 
-    private static byte[] Decompress(ReadOnlySpan<byte> block)
+    internal static byte[] DecompressBlock(ReadOnlySpan<byte> block)
     {
-        if (block.Length >= 2 && block[0] == 0x78) // zlib header (build ≥ 14 products)
+        if (block.Length >= 3 && block[0] == 0x78) // zlib
         {
             using var input = new MemoryStream(block.ToArray(), writable: false);
             using var zlib = new ZLibStream(input, CompressionMode.Decompress);
             using var output = new MemoryStream(block.Length * 8);
             zlib.CopyTo(output);
+            return output.ToArray();
+        }
+        if (block.Length >= 3 && block[0] == (byte)'B' && block[1] == (byte)'Z' && block[2] == (byte)'h')
+        {
+            using var input = new MemoryStream(block.ToArray(), writable: false);
+            using var bz = new ICSharpCode.SharpZipLib.BZip2.BZip2InputStream(input);
+            using var output = new MemoryStream(block.Length * 8);
+            bz.CopyTo(output);
             return output.ToArray();
         }
         return block.ToArray();
@@ -293,18 +309,18 @@ public static class Level3File
     private static void ParseStormStructureTable(List<string> lines, List<StormCellStructure> structures)
     {
         var row = new System.Text.RegularExpressions.Regex(
-            @"^\s*([A-Z][0-9])\s+\d+/\s*\d+\s+[<>]?\s*([\d.]+)\s+[<>]?\s*([\d.]+)\s+([\d.]+)\s+(\d+)\s+([\d.]+)\s*$");
+            @"^\s*([A-Z][0-9])\s+(\d+)/\s*(\d+)\s+[<>]?\s*([\d.]+)\s+[<>]?\s*([\d.]+)\s+([\d.]+)\s+(\d+)\s+([\d.]+)\s*$");
         foreach (var line in lines)
         {
             var match = row.Match(line);
             if (!match.Success) continue;
+            double F(int group) => double.Parse(
+                match.Groups[group].Value, System.Globalization.CultureInfo.InvariantCulture);
             structures.Add(new StormCellStructure(
                 match.Groups[1].Value,
-                int.Parse(match.Groups[5].Value),
-                double.Parse(match.Groups[4].Value, System.Globalization.CultureInfo.InvariantCulture),
-                double.Parse(match.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture),
-                double.Parse(match.Groups[3].Value, System.Globalization.CultureInfo.InvariantCulture),
-                double.Parse(match.Groups[6].Value, System.Globalization.CultureInfo.InvariantCulture)));
+                F(2), F(3),
+                int.Parse(match.Groups[7].Value),
+                F(6), F(4), F(5), F(8)));
         }
     }
 }

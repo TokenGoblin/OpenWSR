@@ -94,6 +94,8 @@ public class Level3Tests
         Assert.Equal(11.1, r5.BaseKft);
         Assert.Equal(50.1, r5.TopKft);
         Assert.Equal(32.5, r5.MaxRefHeightKft);
+        Assert.Equal(182, r5.AzimuthDeg);
+        Assert.Equal(95, r5.RangeNm);
 
         var o4 = p.CellStructures.Single(c => c.Id == "O4");
         Assert.Equal(58, o4.MaxReflectivityDbz);
@@ -101,6 +103,33 @@ public class Level3Tests
 
         var n6 = p.CellStructures.Single(c => c.Id == "N6");
         Assert.Equal(56, n6.MaxReflectivityDbz);
+    }
+
+    [Fact]
+    public void Dvl_DigitalVilMatchesMetPy()
+    {
+        // EAX 2026-08-18 16:56Z. MetPy reference: 360x460 grid, max level 191 at
+        // radial 277 gate 149; map_data: 191 -> 15.7309, 50 -> 0.41837, 200 -> 19.8289.
+        var p = RadialImage.Decode(
+            File.ReadAllBytes(TestData.Path("level3/EAX_DVL_2026_08_18_16_56_10")));
+        Assert.Equal(134, p.ProductCode);
+        Assert.Equal("EAX", p.SiteId);
+        Assert.Equal(360, p.RadialCount);
+        Assert.Equal(460, p.GateCount);
+        Assert.Equal(0f, p.StartAnglesDeg[0]);
+        Assert.Equal(1f, p.StartAnglesDeg[1]);
+
+        byte max = p.Levels.Max();
+        int index = Array.IndexOf(p.Levels, max);
+        Assert.Equal(191, max);
+        Assert.Equal(277, index / p.GateCount);
+        Assert.Equal(149, index % p.GateCount);
+
+        Assert.Equal(15.7309, DigitalVil.Value(191, p.Thresholds)!.Value, 3);
+        Assert.Equal(0.41837, DigitalVil.Value(50, p.Thresholds)!.Value, 4);
+        Assert.Equal(19.8289, DigitalVil.Value(200, p.Thresholds)!.Value, 3);
+        Assert.Null(DigitalVil.Value(0, p.Thresholds));
+        Assert.Null(DigitalVil.Value(1, p.Thresholds));
     }
 
     [Fact]

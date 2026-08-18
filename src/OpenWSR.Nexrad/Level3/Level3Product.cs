@@ -30,6 +30,7 @@ public sealed record MesocycloneDetection(
 /// <summary>Per-cell storm structure from an NSS (product 62) tabular block.</summary>
 public sealed record StormCellStructure(
     string Id,
+    double AzimuthDeg, double RangeNm, // cell position relative to the radar
     int MaxReflectivityDbz,
     double CellBasedVil,     // kg/m²
     double BaseKft, double TopKft, double MaxRefHeightKft);
