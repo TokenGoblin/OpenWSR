@@ -7,34 +7,34 @@ phase is done only when its **gate** passes. Check items off as they land.
 
 ## Phase 0 — Bootstrap & test data
 
-- [ ] `git init`; commit the build plan and this file
-- [ ] Create `OpenWSR.sln` with projects: `App`, `Render`, `Nexrad`, `Ingest`, `Geo`, `Palettes` + `Nexrad.Tests`, `Geo.Tests`
-- [ ] Project settings everywhere: `net10.0` (`-windows` only for App/Render), `<Nullable>enable</Nullable>`, `<AllowUnsafeBlocks>`, `TreatWarningsAsErrors` in Release
-- [ ] Enforce purity: `Nexrad` and `Geo` reference nothing but the BCL (add a test that asserts their assembly references)
-- [ ] Add packages: Vortice trio, `AWSSDK.S3`, `SharpZipLib`, `CommunityToolkit.Mvvm`, `Serilog` + file sink
-- [ ] Download quiet-weather volume → `assets/testdata/`
-- [ ] Download KTLX 2013-05-20 ~20:00Z volume → `assets/testdata/`
-- [ ] Capture ~30 consecutive live chunks **spanning a volume boundary** (E → S) → `assets/testdata/chunks/`
-- [ ] Decide storage for test data (plain commit vs Git LFS vs fetch script) — likely 30–50 MB total
+- [x] `git init`; commit the build plan and this file
+- [x] Create `OpenWSR.slnx` with projects: `App`, `Render`, `Nexrad`, `Ingest`, `Geo`, `Palettes` + `Harness`, `Nexrad.Tests`, `Geo.Tests`
+- [x] Project settings everywhere: `net10.0` (`-windows` only for App), `<Nullable>enable</Nullable>`, `<AllowUnsafeBlocks>`, `TreatWarningsAsErrors` in Release
+- [x] Enforce purity: `Nexrad` and `Geo` reference nothing but the BCL (add a test that asserts their assembly references)
+- [x] Add packages: Vortice trio, `AWSSDK.S3`, `SharpZipLib`, `CommunityToolkit.Mvvm`, `Serilog` + file sink
+- [x] Download quiet-weather volume → `assets/testdata/` (KTLX 2026-08-10)
+- [x] Download KTLX 2013-05-20 ~20:00Z volume → `assets/testdata/` (20:16Z, tornado on ground)
+- [x] Capture live chunks **spanning a volume boundary** (55-chunk complete volume + next volume's start, plus the archive ground-truth file for the same scan)
+- [x] Decide storage for test data: plain commit (~40 MB) + `tools/fetch-testdata.ps1` for provenance
 
-**Gate:** solution builds clean; test data present and committed/fetchable.
+**Gate:** ✅ solution builds clean; test data present and committed.
 
 ---
 
 ## Phase 1 — Level II decoder (`OpenWSR.Nexrad`)
 
-- [ ] 24-byte volume header parser (`AR2V00xx.`, date/time, ICAO)
-- [ ] LDM record framing: 4-byte big-endian control word (abs = length, negative = final record) + bzip2 decompress (SharpZipLib)
-- [ ] Message framing: 12-byte CTM prefix + 16-byte message header; dispatch by message type; handle message segmentation
-- [ ] Message 31: block-pointer walk; VOL / ELV / RAD blocks
-- [ ] Message 31 moments: REF, VEL, SW, ZDR, PHI, RHO; scale/offset to physical units; codes 0/1 → NaN + parallel range-fold flags; **skip unknown block names** (CFP etc.)
-- [ ] Message 5 (VCP definition) parser
-- [ ] Message 2 (RDA status) parser
-- [ ] `Sweep` record + volume→sweeps assembly; correct handling of duplicate 0.5° cuts (SAILS/MESO-SAILS/MRLE); super-res REF vs VEL geometry kept independent
-- [ ] Console harness: print per-sweep elevation, moment, radial count, gate count, min/max
-- [ ] Golden-file tests: exact values from a hand-verified radial (cross-check with Py-ART/MetPy); both test volumes; sanity range −32..+95 dBZ
+- [x] 24-byte volume header parser (`AR2V00xx.`, date/time, ICAO)
+- [x] LDM record framing: 4-byte big-endian control word (abs = length, negative = final record) + bzip2 decompress (SharpZipLib); also handles the gzip-era layout (raw unframed messages after the header)
+- [x] Message framing: 12-byte CTM prefix + 16-byte message header; dispatch by message type; Message 31 >65534-halfword size carried in segment fields
+- [x] Message 31: block-pointer walk; VOL / ELV / RAD blocks
+- [x] Message 31 moments: REF, VEL, SW, ZDR, PHI, RHO, CFP; 8- and 16-bit words; scale/offset to physical units; codes 0/1 → NaN + range-fold mask; unknown block names skipped
+- [x] Message 5 (VCP definition) parser
+- [x] Message 2 (RDA status) parser
+- [x] `Sweep` record + `VolumeBuilder` (incremental, reused by Phase 6); SAILS-safe elevation-number grouping; independent REF/VEL geometry
+- [x] Console harness: per-sweep elevation, moment, radial count, gate count, min/max
+- [x] Golden-file tests: exact values cross-checked against MetPy 1.7.1 on both volumes; sanity range enforced
 
-**Gate:** harness output physically sane on both volumes; golden-file tests green.
+**Gate:** ✅ harness physically sane on both volumes; 10/10 golden-file tests green (values bit-identical to MetPy).
 
 ---
 
