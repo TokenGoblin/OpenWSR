@@ -17,6 +17,7 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _statusTimer;
     private readonly RadarDisplayController _radar;
     private readonly ArchivePlaybackController _playback;
+    private readonly LiveFeed _liveFeed = new();
     private bool _suppressSliderEvents;
 
     public MainWindow()
@@ -60,21 +61,75 @@ public partial class MainWindow : Window
         SiteCombo.SelectedItem = RadarSites.ByIcao("KTLX");
         DayPicker.SelectedDate = new DateTime(2013, 5, 20); // the committed demo day
 
+        _liveFeed.StatusChanged += text => Dispatcher.BeginInvoke(() => StatusText.Text = text);
+        _liveFeed.VolumeUpdated += (volume, _) => Dispatcher.BeginInvoke(() =>
+        {
+            if (LiveToggle.IsChecked == true)
+                _radar.ShowVolume(volume);
+        });
+
         _statusTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
             Interval = TimeSpan.FromMilliseconds(500),
         };
         _statusTimer.Tick += (_, _) =>
+        {
             FpsText.Text = $"{_mapView.FramesPerSecond:F0} fps · sweep upload {_mapView.LastSweepUploadMs:F1} ms";
+            UpdateAgeIndicator();
+        };
         _statusTimer.Start();
 
         Loaded += async (_, _) => await LoadStartupAsync();
         Closed += (_, _) =>
         {
             _statusTimer.Stop();
+            _liveFeed.Dispose();
             _playback.Dispose();
             _mapView.Dispose();
         };
+    }
+
+    /// <summary>
+    /// A stale radar image with no indication the feed died is dangerous. The age of the
+    /// displayed data is always visible; in live mode it turns amber past 10 minutes.
+    /// </summary>
+    private void UpdateAgeIndicator()
+    {
+        if (_radar.DisplayedSweepTimeUtc is not { } time)
+        {
+            AgeText.Text = "";
+            return;
+        }
+        var age = DateTime.UtcNow - time;
+        bool live = LiveToggle.IsChecked == true;
+        AgeText.Text = age.TotalHours >= 1
+            ? $"data age {(int)age.TotalHours} h {age.Minutes:D2} m"
+            : $"data age {(int)age.TotalMinutes} m {age.Seconds:D2} s";
+        AgeText.Foreground = live && age > TimeSpan.FromMinutes(10)
+            ? System.Windows.Media.Brushes.OrangeRed
+            : live
+                ? System.Windows.Media.Brushes.LightGreen
+                : System.Windows.Media.Brushes.Gray;
+    }
+
+    private void LiveToggle_Checked(object sender, RoutedEventArgs e)
+    {
+        if (SiteCombo.SelectedItem is not RadarSite site)
+        {
+            LiveToggle.IsChecked = false;
+            return;
+        }
+        _playback.StopLoop();
+        TimeSlider.IsEnabled = false;
+        _liveFeed.Start(site.Icao);
+        _mapView.Camera.MoveTo(site.LatDeg, site.LonDeg, 250);
+    }
+
+    private void LiveToggle_Unchecked(object sender, RoutedEventArgs e)
+    {
+        _liveFeed.Stop();
+        TimeSlider.IsEnabled = _playback.DayVolumes.Count > 0;
+        StatusText.Text = "Live feed stopped.";
     }
 
     private async Task LoadStartupAsync()

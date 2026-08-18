@@ -20,6 +20,9 @@ public sealed class RadarDisplayController(MapView mapView)
     public Moment CurrentMoment => _moment;
     public ColorTable CurrentTable => BuiltinTables.For(_moment);
 
+    /// <summary>Scan time of the sweep currently on screen — feeds the data-age indicator.</summary>
+    public DateTime? DisplayedSweepTimeUtc { get; private set; }
+
     public void ShowVolume(RadarVolume volume)
     {
         _volume = volume;
@@ -89,6 +92,7 @@ public sealed class RadarDisplayController(MapView mapView)
         }
         _cutPosition = Math.Clamp(_cutPosition, 0, cuts.Count - 1);
         var sweep = cuts[_cutPosition];
+        DisplayedSweepTimeUtc = sweep.ScanTimeUtc;
         mapView.ShowSweep(sweep, BuiltinTables.For(_moment));
         StatusChanged?.Invoke(
             $"{sweep.SiteId}  {sweep.ScanTimeUtc:yyyy-MM-dd HH:mm:ss}Z  {_moment}  " +

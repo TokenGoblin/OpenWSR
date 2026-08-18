@@ -19,6 +19,10 @@
                     <ComboBoxItem Content="4 fps" IsSelected="True" />
                     <ComboBoxItem Content="8 fps" />
                 </ComboBox>
+                <Separator />
+                <ToggleButton x:Name="LiveToggle" Content="⦿ Live" Margin="4,0"
+                              Checked="LiveToggle_Checked" Unchecked="LiveToggle_Unchecked"
+                              ToolTip="Stream real-time chunks for the selected site" />
             </ToolBar>
         </ToolBarTray>
         <StatusBar DockPanel.Dock="Bottom" Background="#22252B" Foreground="#C8CCD4">
@@ -28,6 +32,10 @@
             <Separator />
             <StatusBarItem>
                 <TextBlock x:Name="FpsText" Text="" />
+            </StatusBarItem>
+            <Separator />
+            <StatusBarItem>
+                <TextBlock x:Name="AgeText" Text="" FontWeight="Bold" />
             </StatusBarItem>
             <StatusBarItem HorizontalAlignment="Right">
                 <TextBlock x:Name="AttributionText" Text="© OpenStreetMap contributors" />

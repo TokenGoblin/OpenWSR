@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\OpenWSR.Nexrad\OpenWSR.Nexrad.csproj" />
+    <ProjectReference Include="..\OpenWSR.Ingest\OpenWSR.Ingest.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

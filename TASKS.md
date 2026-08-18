@@ -97,13 +97,13 @@ phase is done only when its **gate** passes. Check items off as they land.
 ## Phase 6 â€” Real-time chunks
 
 - [ ] Volume-directory discovery in `unidata-nexrad-level2-chunks`: probe candidate dirs among 1â€“999, newest object wins; persist last-known index, probe forward
-- [ ] Chunk key parsing: `<SITE>/<vol>/<YYYYMMDD-HHMMSS>-<seq>-<S|I|E>`; group by volume-start timestamp
-- [ ] `VolumeAssembler` per site: hold header state from `S`; decode `I`/`E` as bare LDM streams
-- [ ] Edge cases: join mid-volume (no `S` seen), out-of-order arrival, missing chunks, new volume starting before old completes
-- [ ] Partial-volume render: show lowest tilt as soon as complete
+- [x] Chunk key parsing incl. volume-start-timestamp grouping
+- [x] `LiveVolumeAssembler`: S header capture; I/E decoded as bare LDM streams; order-independent by design (records are self-contained)
+- [x] Edge cases tested: mid-volume join, randomized order, duplicates, missing chunks; two assemblers held across volume overlap
+- [x] Partial-volume render: snapshot emitted per newly completed cut (first render ~5 s after connect)
 - [ ] Adaptive polling: tighten while chunks flow, back off when idle (VCP-aware, 2â€“10 min scans)
 - [ ] Pipeline on `System.Threading.Channels`: poller â†’ thread-pool decoder â†’ render queue; never decode on UI/render thread
-- [ ] Feed-health UI: data age colored past ~10 min; visible failure state on feed death
+- [x] Feed-health UI: data-age always shown, amber past 10 min live; poll errors surface in status and retry
 - [ ] Offline replay test: chunk corpus in randomized order â†’ decoded sweeps identical to archive version (byte-identical reassembly = bonus)
 - [ ] 30-minute live soak: no gaps, no duplicate frames, no leaks (memory profile before/after)
 
@@ -134,6 +134,7 @@ phase is done only when its **gate** passes. Check items off as they land.
 - [ ] About box: "not for life-safety decisions" disclaimer; `THIRD-PARTY-NOTICES.md` (MIT notice if any Supercell Wx code ported)
 
 **Gate:** published single-file build runs on a clean Windows machine with all of the above working.
+
 
 
 
