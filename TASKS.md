@@ -228,3 +228,16 @@ phase is done only when its **gate** passes. Check items off as they land.
 
 ### Still open
 Placefiles, velocity dealiasing, azimuthal shear, MRMS native render, NetCDF/GLM lightning, drawing tools, VWP.
+
+## Placefiles — the community overlay ecosystem (2026-08-18)
+
+- [x] `OpenWSR.Placefiles`: pure GRLevelX placefile parser — Title, Refresh/RefreshSeconds, Color (with optional alpha), Threshold, Font, Place, Text, Icon, Line, Polygon (multi-contour, closing on the repeated first point), Object/End pixel-offset blocks, TimeRange, and comment handling that respects quoted semicolons. Triangles and Image blocks are skipped and reported rather than mis-drawn.
+- [x] 7 tests: a synthetic file covering the spec plus two real IEM community placefiles (ASOS observations, NWS warning time-mot-loc tracks)
+- [x] `PlacefileController`: loads from URL or disk, appends lat/lon/version to URLs the way GR does, honours each file's own refresh interval, and rebuilds when the zoom crosses item thresholds
+- [x] Layers-panel manager: add by URL or file, per-file enable, remove, status tooltip; sources persist in settings
+- [x] Rendering: polygons filled + outlined, lines at their declared pixel width, labels with Object-block pixel offsets, icons as markers
+
+**Gate:** 74/74 tests; verified live — a real IEM warning-track placefile parsed and a purpose-built test overlay rendered polygon, line, labels, an Object-block offset label, and correctly hid a 40 nm-threshold item at national zoom.
+
+### Known limitation
+IconFile sheets are not downloaded; Icon statements draw as markers in the placefile's colour. Triangles and Image blocks are skipped.

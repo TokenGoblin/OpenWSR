@@ -22,6 +22,9 @@ public sealed class AppSettings
     /// <summary>Display units for distance, speed and height.</summary>
     public UnitSystem Units { get; set; } = UnitSystem.Imperial;
 
+    /// <summary>Placefile sources (URLs or local paths) to reload at startup.</summary>
+    public List<string> Placefiles { get; set; } = [];
+
     public string UserAgent =>
         string.IsNullOrWhiteSpace(Contact) ? "OpenWSR/0.1" : $"OpenWSR/0.1 ({Contact})";
 

@@ -7,6 +7,7 @@
     <Project Path="src/OpenWSR.Ingest/OpenWSR.Ingest.csproj" />
     <Project Path="src/OpenWSR.Nexrad/OpenWSR.Nexrad.csproj" />
     <Project Path="src/OpenWSR.Palettes/OpenWSR.Palettes.csproj" />
+    <Project Path="src/OpenWSR.Placefiles/OpenWSR.Placefiles.csproj" />
     <Project Path="src/OpenWSR.Render/OpenWSR.Render.csproj" />
   </Folder>
   <Folder Name="/tests/">

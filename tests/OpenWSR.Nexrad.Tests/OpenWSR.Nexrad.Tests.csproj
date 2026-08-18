@@ -23,6 +23,7 @@
     <ProjectReference Include="..\..\src\OpenWSR.Geo\OpenWSR.Geo.csproj" />
     <ProjectReference Include="..\..\src\OpenWSR.Palettes\OpenWSR.Palettes.csproj" />
     <ProjectReference Include="..\..\src\OpenWSR.Grib2\OpenWSR.Grib2.csproj" />
+    <ProjectReference Include="..\..\src\OpenWSR.Placefiles\OpenWSR.Placefiles.csproj" />
   </ItemGroup>
 
 </Project>

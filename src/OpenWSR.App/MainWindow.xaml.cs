@@ -25,6 +25,7 @@ public partial class MainWindow : Window
     private readonly ThreatMonitor _threats = new();
     private OutlookOverlayController? _outlooks;
     private FutureRadarController? _future;
+    private PlacefileController? _placefiles;
     private TrayNotifier? _tray;
     private PaneManager? _panes;
     private Geocoder? _geocoder;
@@ -93,6 +94,15 @@ public partial class MainWindow : Window
         _outlooks = new OutlookOverlayController(settings.UserAgent);
         _outlooks.GeometryChanged += () => Dispatcher.BeginInvoke(ComposeOverlay);
         _outlooks.StatusChanged += text => Dispatcher.BeginInvoke(() => StatusText.Text = text);
+
+        _placefiles = new PlacefileController(_mapView, settings.UserAgent);
+        _placefiles.Changed += () => Dispatcher.BeginInvoke(() =>
+        {
+            PlacefileList.ItemsSource = null;
+            PlacefileList.ItemsSource = _placefiles!.Files;
+            ComposeOverlay();
+        });
+        _placefiles.StatusChanged += text => Dispatcher.BeginInvoke(() => StatusText.Text = text);
 
         _future = new FutureRadarController(_mapView, settings.UserAgent);
         _future.StatusChanged += text => Dispatcher.BeginInvoke(() => StatusText.Text = text);
@@ -174,11 +184,17 @@ public partial class MainWindow : Window
         };
         _statusTimer.Start();
 
-        Loaded += async (_, _) => await LoadStartupAsync();
+        Loaded += async (_, _) =>
+        {
+            foreach (var source in settings.Placefiles.ToList())
+                await _placefiles!.AddAsync(source);
+            await LoadStartupAsync();
+        };
         Closed += (_, _) =>
         {
             _statusTimer.Stop();
             _tray?.Dispose();
+            _placefiles?.Dispose();
             _future?.Dispose();
             _outlooks?.Dispose();
             _geocoder?.Dispose();
@@ -314,10 +330,15 @@ public partial class MainWindow : Window
         var labels = new List<MapView.MapLabel>(_storms.Labels);
         if (_outlooks?.Labels is { Count: > 0 } outlookLabels)
             labels.AddRange(outlookLabels);
+        if (_placefiles?.Labels is { Count: > 0 } placefileLabels)
+            labels.AddRange(placefileLabels);
         _mapView.SetLabels(labels);
 
         OverlayGeometry?[] sources =
-            [_outlooks?.Geometry, _warnings?.Geometry, _storms.Geometry, _homeGeometry, _measureGeometry];
+        [
+            _outlooks?.Geometry, _warnings?.Geometry, _placefiles?.Geometry,
+            _storms.Geometry, _homeGeometry, _measureGeometry,
+        ];
         var active = sources.Where(s => s is not null).Cast<OverlayGeometry>().ToArray();
         switch (active.Length)
         {
@@ -752,6 +773,52 @@ public partial class MainWindow : Window
         await Task.Run(() => GifWriter.Save(path, frames, delayCentiseconds: 25));
         StatusText.Text = $"Saved {System.IO.Path.GetFileName(path)} ({frames.Count} frames)";
         if (wasPlaying) await _playback.PlayAsync();
+    }
+
+    // ---- placefiles ----
+
+    private async void PlacefileAddUrl_Click(object sender, RoutedEventArgs e)
+    {
+        var url = PlacefilePrompt.Ask(this);
+        if (string.IsNullOrWhiteSpace(url)) return;
+        await AddPlacefileAsync(url.Trim());
+    }
+
+    private async void PlacefileAddFile_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Open placefile",
+            Filter = "Placefiles (*.txt;*.php)|*.txt;*.php|All files (*.*)|*.*",
+        };
+        if (dialog.ShowDialog(this) != true) return;
+        await AddPlacefileAsync(dialog.FileName);
+    }
+
+    private async Task AddPlacefileAsync(string source)
+    {
+        if (_placefiles is null || _settings is null) return;
+        await _placefiles.AddAsync(source);
+        if (_placefiles.Files.Any(f => f.Source == source) && !_settings.Placefiles.Contains(source))
+        {
+            _settings.Placefiles.Add(source);
+            _settings.Save();
+        }
+    }
+
+    private void PlacefileToggled(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: LoadedPlacefile file } element &&
+            element is System.Windows.Controls.Primitives.ToggleButton toggle)
+            _placefiles?.SetEnabled(file, toggle.IsChecked == true);
+    }
+
+    private void PlacefileRemove_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: LoadedPlacefile file }) return;
+        _placefiles?.Remove(file);
+        if (_settings is not null && _settings.Placefiles.Remove(file.Source))
+            _settings.Save();
     }
 
     private void SatelliteFilter_Changed(object sender, RoutedEventArgs e)

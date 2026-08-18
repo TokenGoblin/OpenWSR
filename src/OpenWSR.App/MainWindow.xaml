@@ -265,6 +265,39 @@
                         </StackPanel>
                     </Border>
 
+                    <TextBlock Text="PLACEFILES" FontWeight="Bold" FontSize="11"
+                               Foreground="{StaticResource TextDim}" Margin="0,16,0,4" />
+                    <ItemsControl x:Name="PlacefileList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox Content="{Binding DisplayName}" IsChecked="{Binding Enabled}"
+                                              ToolTip="{Binding Status}" Checked="PlacefileToggled"
+                                              Unchecked="PlacefileToggled" Tag="{Binding}" />
+                                    <Button Grid.Column="1" Content="✕" Width="20" Padding="0" FontSize="10"
+                                            Background="Transparent" BorderThickness="0"
+                                            Click="PlacefileRemove_Click" Tag="{Binding}"
+                                            ToolTip="Remove this placefile" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Grid Margin="0,5,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Button Content="Add URL…" Click="PlacefileAddUrl_Click" Margin="0,0,3,0" />
+                        <Button Grid.Column="1" Content="Add file…" Click="PlacefileAddFile_Click" Margin="3,0,0,0" />
+                    </Grid>
+                    <TextBlock x:Name="PlacefileHint" FontSize="10" FontStyle="Italic" TextWrapping="Wrap"
+                               Foreground="{StaticResource TextDim}" Margin="0,4,0,0"
+                               Text="GRLevelX overlays. Each file refreshes on its own schedule and honours its own zoom thresholds." />
+
                     <TextBlock Text="FUTURE RADAR" FontWeight="Bold" FontSize="11"
                                Foreground="{StaticResource TextDim}" Margin="0,16,0,4" />
                     <Button x:Name="FutureLoadButton" Content="Load HRRR forecast"

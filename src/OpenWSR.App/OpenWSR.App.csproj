@@ -6,6 +6,7 @@
     <ProjectReference Include="..\OpenWSR.Nexrad\OpenWSR.Nexrad.csproj" />
     <ProjectReference Include="..\OpenWSR.Geo\OpenWSR.Geo.csproj" />
     <ProjectReference Include="..\OpenWSR.Palettes\OpenWSR.Palettes.csproj" />
+    <ProjectReference Include="..\OpenWSR.Placefiles\OpenWSR.Placefiles.csproj" />
   </ItemGroup>
 
   <!-- Keep WinForms off the global using list: it collides with WPF on Application,
