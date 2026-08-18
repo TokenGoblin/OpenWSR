@@ -17,11 +17,23 @@ public sealed class RadarDisplayController(MapView mapView)
 
     public event Action<string>? StatusChanged;
 
+    public Moment CurrentMoment => _moment;
+    public ColorTable CurrentTable => BuiltinTables.For(_moment);
+
     public void ShowVolume(RadarVolume volume)
     {
         _volume = volume;
-        _cutPosition = 0;
-        Apply();
+        Apply(); // moment and cut position survive volume changes (scrubbing/looping)
+    }
+
+    /// <summary>The sweep the current moment/tilt selection picks from an arbitrary volume.</summary>
+    public Sweep? SelectSweep(RadarVolume volume)
+    {
+        var cuts = volume.Sweeps.Where(s => s.Moment == _moment)
+            .OrderBy(s => s.ElevationIndex)
+            .ToList();
+        if (cuts.Count == 0) return null;
+        return cuts[Math.Clamp(_cutPosition, 0, cuts.Count - 1)];
     }
 
     /// <summary>Map keyboard: R/V/W/D/P/C select the moment, Up/Down move through cuts.</summary>

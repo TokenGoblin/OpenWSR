@@ -45,13 +45,15 @@ public sealed class MapView : IDisposable
     private bool _sweepClearRequested;
 
     /// <summary>Stage a sweep for display; geometry prep runs on the calling thread.</summary>
-    public void ShowSweep(Sweep sweep, ColorTable palette)
+    public void ShowSweep(Sweep sweep, ColorTable palette) =>
+        ShowGeometry(SweepGeometry.Build(sweep), palette.BuildRgba256(), palette.MinValue, palette.Range);
+
+    /// <summary>Stage prebuilt geometry (loop playback path — no CPU rebuild per frame).</summary>
+    public void ShowGeometry(SweepGeometry geometry, byte[] paletteRgba256, float paletteMin, float paletteRange)
     {
-        var geometry = SweepGeometry.Build(sweep);
-        var rgba = palette.BuildRgba256();
         lock (_sweepLock)
         {
-            _pendingSweep = (geometry, rgba, palette.MinValue, palette.Range);
+            _pendingSweep = (geometry, paletteRgba256, paletteMin, paletteRange);
             _sweepClearRequested = false;
         }
     }

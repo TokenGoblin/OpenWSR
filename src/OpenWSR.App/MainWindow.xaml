@@ -3,6 +3,24 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="OpenWSR" Width="1280" Height="800" Background="#1A1C21">
     <DockPanel>
+        <ToolBarTray DockPanel.Dock="Top" Background="#22252B">
+            <ToolBar Background="#22252B" Foreground="#C8CCD4" Loaded="ToolBar_Loaded">
+                <ComboBox x:Name="SiteCombo" Width="220" Margin="4,0" />
+                <Button x:Name="NearestButton" Content="Nearest" Margin="4,0" Click="NearestButton_Click"
+                        ToolTip="Select the WSR-88D closest to the map center" />
+                <Separator />
+                <DatePicker x:Name="DayPicker" Margin="4,0" />
+                <Button x:Name="LoadDayButton" Content="Load day" Margin="4,0" Click="LoadDayButton_Click" />
+                <Separator />
+                <Button x:Name="PlayButton" Content="▶ Loop" Margin="4,0" Click="PlayButton_Click"
+                        ToolTip="Loop the most recent 30 volumes of the loaded day" />
+                <ComboBox x:Name="SpeedCombo" Width="70" Margin="4,0" SelectionChanged="SpeedCombo_SelectionChanged">
+                    <ComboBoxItem Content="2 fps" />
+                    <ComboBoxItem Content="4 fps" IsSelected="True" />
+                    <ComboBoxItem Content="8 fps" />
+                </ComboBox>
+            </ToolBar>
+        </ToolBarTray>
         <StatusBar DockPanel.Dock="Bottom" Background="#22252B" Foreground="#C8CCD4">
             <StatusBarItem>
                 <TextBlock x:Name="StatusText" Text="OpenWSR" />
@@ -15,6 +33,17 @@
                 <TextBlock x:Name="AttributionText" Text="© OpenStreetMap contributors" />
             </StatusBarItem>
         </StatusBar>
+        <Grid DockPanel.Dock="Bottom" Background="#22252B">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Slider x:Name="TimeSlider" Margin="8,4" Minimum="0" Maximum="0" IsEnabled="False"
+                    IsSnapToTickEnabled="True" TickFrequency="1"
+                    ValueChanged="TimeSlider_ValueChanged" />
+            <TextBlock x:Name="TimeSliderLabel" Grid.Column="1" Margin="8,4" MinWidth="150"
+                       Foreground="#C8CCD4" VerticalAlignment="Center" Text="—" />
+        </Grid>
         <Border x:Name="MapHost" />
     </DockPanel>
 </Window>

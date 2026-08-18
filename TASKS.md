@@ -82,15 +82,15 @@ phase is done only when its **gate** passes. Check items off as they land.
 
 ## Phase 5 â€” Archive ingest (`OpenWSR.Ingest`)
 
-- [ ] Anonymous S3 client (`unidata-nexrad-level2`, us-east-1); timeout + retry/backoff on every call
-- [ ] List volumes by site + UTC date; handle `.gz` (pre-2016-06-02) and bare files; **skip `*_MDM`**
-- [ ] Volume disk cache under `%LOCALAPPDATA%\OpenWSR\volumes` with size cap + LRU eviction
-- [ ] Radar site table (ICAO, lat/lon, elevation, TDWR flag) as embedded resource
-- [ ] Time-slider UI; N-frame loop with configurable speed
-- [ ] Nearest-radar selection from user-entered location
-- [ ] Data-age indicator groundwork (timestamp of displayed frame shown prominently)
+- [x] Anonymous S3 client (`unidata-nexrad-level2`, us-east-1); 30 s timeout, 4-attempt exponential backoff, Serilog per-request logging
+- [x] List volumes by site + UTC date; handles `.gz` and bare files; skips `*_MDM`
+- [x] Volume disk cache under `%LOCALAPPDATA%\OpenWSR\volumes`, 2 GB cap, last-access LRU eviction
+- [x] Radar site table (210 sites from NCEI HOMR) as embedded CSV resource; all WSR-88Ds shown as map markers
+- [x] Time-slider UI over the day's volumes; 30-frame loop at 2/4/8 fps with prebuilt geometry (zero per-frame CPU)
+- [x] Nearest-radar selection from the map center (Nearest button)
+- [x] Data-age groundwork: scan timestamp always in the status line (coloring lands with Phase 6 feed-health)
 
-**Gate:** scrub a day's volumes for a chosen site; loop 30 frames smoothly; second load hits disk cache with zero network calls.
+**Gate:** [PASSED] KTLX 2013-05-20: 323 volumes listed, scrubbed to arbitrary index, 30-frame loop steady at 4 fps; cached rebuild ~22 s with zero network (cold was ~7 min).
 
 ---
 
@@ -134,6 +134,7 @@ phase is done only when its **gate** passes. Check items off as they land.
 - [ ] About box: "not for life-safety decisions" disclaimer; `THIRD-PARTY-NOTICES.md` (MIT notice if any Supercell Wx code ported)
 
 **Gate:** published single-file build runs on a clean Windows machine with all of the above working.
+
 
 
 

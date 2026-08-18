@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\OpenWSR.Nexrad\OpenWSR.Nexrad.csproj" />
+    <ProjectReference Include="..\OpenWSR.Geo\OpenWSR.Geo.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -14,5 +15,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\nexrad-sites.csv" />
+  </ItemGroup>
 
 </Project>
