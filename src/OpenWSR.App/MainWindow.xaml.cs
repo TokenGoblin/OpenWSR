@@ -23,6 +23,7 @@ public partial class MainWindow : Window
     private readonly StormOverlayController _storms = new();
     private readonly ThreatMonitor _threats = new();
     private OutlookOverlayController? _outlooks;
+    private FutureRadarController? _future;
     private TrayNotifier? _tray;
     private PaneManager? _panes;
     private Geocoder? _geocoder;
@@ -92,6 +93,24 @@ public partial class MainWindow : Window
         _outlooks.GeometryChanged += () => Dispatcher.BeginInvoke(ComposeOverlay);
         _outlooks.StatusChanged += text => Dispatcher.BeginInvoke(() => StatusText.Text = text);
 
+        _future = new FutureRadarController(_mapView, settings.UserAgent);
+        _future.StatusChanged += text => Dispatcher.BeginInvoke(() => StatusText.Text = text);
+        _future.FrameChanged += (index, count, valid) => Dispatcher.BeginInvoke(() =>
+        {
+            // The newest complete HRRR run is an hour or so old, so its earliest frames
+            // can already be behind us. Say so rather than printing "+-0.7 h".
+            double ahead = (valid - DateTime.UtcNow).TotalHours;
+            string when = ahead switch
+            {
+                < -0.25 => $"{-ahead:F1} h ago",
+                < 0.25 => "about now",
+                _ => $"+{ahead:F1} h",
+            };
+            FutureLabel.Text = $"{when} · {valid:HH:mm}Z (frame {index + 1} of {count})";
+            foreach (var b in new[] { FuturePrevButton, FuturePlayButton, FutureNextButton, FutureClearButton })
+                b.IsEnabled = true;
+        });
+
         _tray = new TrayNotifier();
         _tray.Activated += () => Dispatcher.BeginInvoke(() =>
         {
@@ -146,6 +165,7 @@ public partial class MainWindow : Window
         {
             _statusTimer.Stop();
             _tray?.Dispose();
+            _future?.Dispose();
             _outlooks?.Dispose();
             _geocoder?.Dispose();
             _storms.Dispose();
@@ -575,6 +595,56 @@ public partial class MainWindow : Window
     {
         if (_mapView is not null)
             _mapView.MosaicOpacity = (float)(e.NewValue / 100.0);
+    }
+
+    private void SatelliteFilter_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_mapView is not null)
+            _mapView.SatelliteEnabled = FilterSatellite.IsChecked == true;
+    }
+
+    // ---- future radar ----
+
+    private async void FutureLoad_Click(object sender, RoutedEventArgs e)
+    {
+        if (_future is null) return;
+        FutureLoadButton.IsEnabled = false;
+        try
+        {
+            await _future.LoadAsync();
+        }
+        finally
+        {
+            FutureLoadButton.IsEnabled = true;
+        }
+    }
+
+    private void FuturePrev_Click(object sender, RoutedEventArgs e) => _future?.Step(-1);
+
+    private void FutureNext_Click(object sender, RoutedEventArgs e) => _future?.Step(1);
+
+    private void FuturePlay_Click(object sender, RoutedEventArgs e)
+    {
+        if (_future is null) return;
+        if (_future.IsPlaying)
+        {
+            _future.Pause();
+            FuturePlayButton.Content = "▶";
+        }
+        else
+        {
+            _future.Play();
+            FuturePlayButton.Content = "⏸";
+        }
+    }
+
+    private void FutureClear_Click(object sender, RoutedEventArgs e)
+    {
+        _future?.Clear();
+        FuturePlayButton.Content = "▶";
+        FutureLabel.Text = "Not loaded";
+        foreach (var b in new[] { FuturePrevButton, FuturePlayButton, FutureNextButton, FutureClearButton })
+            b.IsEnabled = false;
     }
 
     private async void OutlookFilter_Changed(object sender, RoutedEventArgs e)

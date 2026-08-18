@@ -102,6 +102,22 @@ public sealed class MapView : IDisposable
     /// <summary>Replace the label layer (storm IDs, dBZ). Swapped atomically.</summary>
     public void SetLabels(IReadOnlyList<MapLabel> labels) => _labels = labels;
 
+    /// <summary>A pre-rendered BGRA image pinned to a Mercator rectangle.</summary>
+    public sealed record ImageOverlay(
+        byte[] Bgra, int Width, int Height,
+        double MinX, double MinY, double MaxX, double MaxY, float Opacity);
+
+    private ImageOverlay? _imageOverlay;
+    private ImageOverlay? _uploadedImage;
+    private Vortice.Direct3D11.ID3D11Texture2D? _imageTexture;
+    private Vortice.Direct3D11.ID3D11ShaderResourceView? _imageView;
+
+    /// <summary>
+    /// Show a georeferenced raster over the basemap — model output or any gridded field
+    /// already resampled into Web Mercator. Null clears it.
+    /// </summary>
+    public void SetImageOverlay(ImageOverlay? overlay) => _imageOverlay = overlay;
+
     private sealed record LegendSpec(byte[] Rgba, float Min, float Max, string Title);
 
     private LegendSpec? _legend;
@@ -165,8 +181,24 @@ public sealed class MapView : IDisposable
     }
 
     private readonly TileFetcher _mosaicFetcher;
+    private readonly TileFetcher _satelliteFetcher;
     private volatile bool _mosaicEnabled;
     private volatile float _mosaicOpacity = 0.75f;
+    private volatile bool _satelliteEnabled;
+    private volatile float _satelliteOpacity = 0.6f;
+
+    /// <summary>GOES infrared under the radar layers.</summary>
+    public bool SatelliteEnabled
+    {
+        get => _satelliteEnabled;
+        set => _satelliteEnabled = value;
+    }
+
+    public float SatelliteOpacity
+    {
+        get => _satelliteOpacity;
+        set => _satelliteOpacity = Math.Clamp(value, 0f, 1f);
+    }
 
     /// <summary>
     /// Show the national NEXRAD mosaic under the single-site sweep — the seamless
@@ -188,6 +220,7 @@ public sealed class MapView : IDisposable
     {
         _fetcher = new TileFetcher(provider);
         _mosaicFetcher = new TileFetcher(TileProvider.NexradMosaic(provider.UserAgent));
+        _satelliteFetcher = new TileFetcher(TileProvider.GoesInfrared(provider.UserAgent));
     }
 
     public void Start(IntPtr hwnd, int width, int height)
@@ -286,6 +319,7 @@ public sealed class MapView : IDisposable
         using var device = new DeviceResources(_hwnd, _pendingWidth, _pendingHeight);
         using var textures = new TileTextureCache(device.Device);
         using var mosaicTextures = new TileTextureCache(device.Device, capacity: 600);
+        using var satelliteTextures = new TileTextureCache(device.Device, capacity: 600);
         using var quads = new QuadRenderer(device.Device, device.Context);
         using var radar = new RadarSweepRenderer(device.Device, device.Context);
         using var overlay = new OverlayRenderer(device.Device, device.Context);
@@ -310,11 +344,14 @@ public sealed class MapView : IDisposable
                 textures.Add(done.Key, done.Bgra);
             while (_mosaicFetcher.TryDequeueCompleted(out var mosaicDone))
                 mosaicTextures.Add(mosaicDone.Key, mosaicDone.Bgra);
+            while (_satelliteFetcher.TryDequeueCompleted(out var satelliteDone))
+                satelliteTextures.Add(satelliteDone.Key, satelliteDone.Bgra);
 
             var cam = Camera.Snapshot();
             var ctx = device.Context;
             textures.BeginFrame();
             mosaicTextures.BeginFrame();
+            satelliteTextures.BeginFrame();
 
             ctx.OMSetRenderTargets(device.BackBufferView!);
             ctx.RSSetViewport(0, 0, device.Width, device.Height);
@@ -322,9 +359,13 @@ public sealed class MapView : IDisposable
 
             quads.Begin();
             DrawTiles(cam, textures, quads, _fetcher);
+            // Satellite sits under the radar layers: cloud context, not the subject.
+            if (_satelliteEnabled)
+                DrawTiles(cam, satelliteTextures, quads, _satelliteFetcher, _satelliteOpacity, maxZoom: 10);
             // The mosaic is only published to zoom 12; above that we stretch its deepest tile.
             if (_mosaicEnabled)
                 DrawTiles(cam, mosaicTextures, quads, _mosaicFetcher, _mosaicOpacity, maxZoom: 12);
+            DrawImageOverlay(cam, quads, device);
 
             lock (_sweepLock)
             {
@@ -380,6 +421,11 @@ public sealed class MapView : IDisposable
         _legendTexture?.Dispose();
         _legendTexture = null;
         _uploadedLegend = null;
+        _imageView?.Dispose();
+        _imageView = null;
+        _imageTexture?.Dispose();
+        _imageTexture = null;
+        _uploadedImage = null;
     }
 
     private void DrawTiles(
@@ -423,6 +469,48 @@ public sealed class MapView : IDisposable
     private Vortice.Direct3D11.ID3D11ShaderResourceView? _glyphView;
     private Vortice.Direct3D11.ID3D11Texture2D? _legendTexture;
     private Vortice.Direct3D11.ID3D11ShaderResourceView? _legendView;
+
+    private unsafe void DrawImageOverlay(CameraSnapshot cam, QuadRenderer quads, DeviceResources device)
+    {
+        var overlay = _imageOverlay;
+        if (overlay is null)
+        {
+            if (_uploadedImage is not null)
+            {
+                _imageView?.Dispose(); _imageView = null;
+                _imageTexture?.Dispose(); _imageTexture = null;
+                _uploadedImage = null;
+            }
+            return;
+        }
+
+        if (!ReferenceEquals(_uploadedImage, overlay))
+        {
+            _imageView?.Dispose();
+            _imageTexture?.Dispose();
+            fixed (byte* p = overlay.Bgra)
+            {
+                var desc = new Vortice.Direct3D11.Texture2DDescription
+                {
+                    Width = (uint)overlay.Width,
+                    Height = (uint)overlay.Height,
+                    MipLevels = 1,
+                    ArraySize = 1,
+                    Format = Vortice.DXGI.Format.B8G8R8A8_UNorm,
+                    SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
+                    Usage = Vortice.Direct3D11.ResourceUsage.Immutable,
+                    BindFlags = Vortice.Direct3D11.BindFlags.ShaderResource,
+                };
+                _imageTexture = device.Device.CreateTexture2D(desc,
+                    [new Vortice.Direct3D11.SubresourceData((IntPtr)p, (uint)(overlay.Width * 4))]);
+                _imageView = device.Device.CreateShaderResourceView(_imageTexture);
+            }
+            _uploadedImage = overlay;
+        }
+
+        var clip = cam.ToClip(overlay.MinX, overlay.MinY, overlay.MaxX, overlay.MaxY);
+        quads.DrawTextured(clip, (0, 0, 1, 1), _imageView!, overlay.Opacity);
+    }
 
     private unsafe void EnsureGlyphTexture(DeviceResources device)
     {
@@ -610,5 +698,6 @@ public sealed class MapView : IDisposable
         Stop();
         _fetcher.Dispose();
         _mosaicFetcher.Dispose();
+        _satelliteFetcher.Dispose();
     }
 }

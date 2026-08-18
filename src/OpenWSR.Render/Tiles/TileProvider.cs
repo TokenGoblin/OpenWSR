@@ -26,4 +26,13 @@ public sealed record TileProvider(string Name, string UrlTemplate, string UserAg
         "nexrad-mosaic",
         "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png",
         userAgent);
+
+    /// <summary>
+    /// GOES-East infrared from Iowa State — cloud tops day and night, unlike visible.
+    /// Pre-rendered XYZ, so it drops straight into the tile pipeline.
+    /// </summary>
+    public static TileProvider GoesInfrared(string userAgent) => new(
+        "goes-ir",
+        "https://mesonet.agron.iastate.edu/c/tile.py/1.0.0/goes_east_ch13/{z}/{x}/{y}.png",
+        userAgent);
 }

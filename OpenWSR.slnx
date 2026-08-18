@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/OpenWSR.App/OpenWSR.App.csproj" />
     <Project Path="src/OpenWSR.Geo/OpenWSR.Geo.csproj" />
+    <Project Path="src/OpenWSR.Grib2/OpenWSR.Grib2.csproj" />
     <Project Path="src/OpenWSR.Harness/OpenWSR.Harness.csproj" />
     <Project Path="src/OpenWSR.Ingest/OpenWSR.Ingest.csproj" />
     <Project Path="src/OpenWSR.Nexrad/OpenWSR.Nexrad.csproj" />

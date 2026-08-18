@@ -199,3 +199,20 @@ phase is done only when its **gate** passes. Check items off as they land.
 - [x] Windows tray notifications for proximity threats, so alerts land when the app is not focused
 
 **Gate:** 54/54 tests; verified live — mosaic rendered a squall line from Kansas City to Texas; 3 outlook areas, 4 discussions, 1 watch box, 13 storm reports fetched and drawn.
+
+## Phase 03 — the format work (2026-08-18)
+
+- [x] `OpenWSR.Grib2`: pure GRIB2 edition-2 reader — sections 0-8, grid templates 3.0 (lat/lon) and 3.30 (Lambert), packing templates 5.0 simple, 5.41 PNG, and 5.2/5.3 complex with first/second-order spatial differencing; bitmap handling; sign-and-magnitude scale factors
+- [x] `MiniPng`: minimal greyscale PNG decoder so the GRIB2 library needs no imaging dependency
+- [x] Golden tests vs ecCodes 2.47 on committed MRMS (PNG-packed, 24.5 M points) and HRRR (complex-packed, Lambert) files
+- [x] `LambertConformal` in Geo with 7 tests validated against ecCodes' grid iterator (~11 m agreement)
+- [x] `HrrrClient`: byte-range fetch of just the REFC record using the .idx sidecar (~140 kB/hour instead of the whole cycle file), walking back cycles until one has published
+- [x] **Future radar**: HRRR simulated reflectivity resampled Lambert→Mercator, played as a 6-hour forecast loop with step/play/clear
+- [x] `MapView.SetImageOverlay`: georeferenced raster layer, reusable for any gridded field
+- [x] Satellite layer: GOES-East infrared tiles under the radar layers
+
+**Gate:** 63/63 tests; verified live — GRIB2 matches ecCodes exactly on both packing paths; HRRR 19z run loaded 6 forecast hours and rendered a correctly georeferenced squall line.
+
+### Still open from the parity scan
+- MRMS native rendering (reader works and is golden-tested; the tile mosaic covers the visual today)
+- NetCDF/GLM lightning, vertical cross-section, SRM, velocity dealiasing, placefiles, GIF export

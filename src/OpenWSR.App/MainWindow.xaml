@@ -132,6 +132,9 @@
                               Checked="MosaicFilter_Changed" Unchecked="MosaicFilter_Changed" />
                     <Slider x:Name="MosaicOpacitySlider" Minimum="0" Maximum="100" Value="75"
                             ValueChanged="MosaicOpacity_Changed" />
+                    <CheckBox x:Name="FilterSatellite" Content="Satellite (GOES IR)"
+                              ToolTip="Infrared cloud tops from GOES-East, under the radar layers"
+                              Checked="SatelliteFilter_Changed" Unchecked="SatelliteFilter_Changed" />
                     <CheckBox x:Name="FilterOutlooks" Content="SPC outlook"
                               ToolTip="Day 1 categorical convective outlook"
                               Checked="OutlookFilter_Changed" Unchecked="OutlookFilter_Changed" />
@@ -210,6 +213,30 @@
                                        Margin="0,5,0,0" Text="Click any cell for details." />
                         </StackPanel>
                     </Border>
+
+                    <TextBlock Text="FUTURE RADAR" FontWeight="Bold" FontSize="11"
+                               Foreground="{StaticResource TextDim}" Margin="0,16,0,4" />
+                    <Button x:Name="FutureLoadButton" Content="Load HRRR forecast"
+                            Click="FutureLoad_Click"
+                            ToolTip="Simulated reflectivity for the next 6 hours from the HRRR model" />
+                    <Grid Margin="0,6,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Button x:Name="FuturePrevButton" Content="◀" Width="30" Padding="0"
+                                IsEnabled="False" Click="FuturePrev_Click" />
+                        <Button x:Name="FuturePlayButton" Grid.Column="1" Content="▶" Width="30" Padding="0"
+                                Margin="4,0,0,0" IsEnabled="False" Click="FuturePlay_Click" />
+                        <Button x:Name="FutureNextButton" Grid.Column="2" Content="▶|" Width="34" Padding="0"
+                                Margin="4,0,0,0" IsEnabled="False" Click="FutureNext_Click" />
+                        <Button x:Name="FutureClearButton" Grid.Column="3" Content="Clear"
+                                Margin="4,0,0,0" IsEnabled="False" Click="FutureClear_Click" />
+                    </Grid>
+                    <TextBlock x:Name="FutureLabel" Text="Not loaded" FontSize="11"
+                               Foreground="{StaticResource TextDim}" Margin="0,5,0,0" TextWrapping="Wrap" />
 
                     <TextBlock Text="MY AREA" FontWeight="Bold" Foreground="{StaticResource TextDim}" Margin="0,14,0,4" />
                     <Button x:Name="SetHomeButton" Content="📍 Set home on map" Click="SetHomeButton_Click" />
