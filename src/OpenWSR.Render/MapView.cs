@@ -29,6 +29,7 @@ public sealed class MapView : IDisposable
     // Drag/inertia state, touched only on the UI thread.
     private bool _dragging;
     private int _lastX, _lastY;
+    private int _dragStartX, _dragStartY;
     private double _velX, _velY;
     private long _lastMoveTicks;
 
@@ -38,7 +39,59 @@ public sealed class MapView : IDisposable
     /// <summary>Raised on the UI thread with the virtual-key code of keys pressed over the map.</summary>
     public event Action<int>? KeyPressed;
 
+    /// <summary>Cursor motion over the map while not dragging (UI thread, client pixels).</summary>
+    public event Action<int, int>? Hovered;
+
+    /// <summary>A click that wasn't a drag (UI thread, client pixels).</summary>
+    public event Action<int, int>? Clicked;
+
+    /// <summary>Right-button measure drag: (startX, startY, x, y, finished).</summary>
+    public event Action<int, int, int, int, bool>? MeasureDragged;
+
+    private bool _rightDragging;
+    private int _rightStartX, _rightStartY;
+
+    public void OnRightDown(int x, int y)
+    {
+        _rightDragging = true;
+        _rightStartX = x;
+        _rightStartY = y;
+    }
+
+    public void OnRightMove(int x, int y)
+    {
+        if (_rightDragging)
+            MeasureDragged?.Invoke(_rightStartX, _rightStartY, x, y, false);
+    }
+
+    public void OnRightUp(int x, int y)
+    {
+        if (!_rightDragging) return;
+        _rightDragging = false;
+        MeasureDragged?.Invoke(_rightStartX, _rightStartY, x, y, true);
+    }
+
     internal void RaiseKeyPressed(int virtualKey) => KeyPressed?.Invoke(virtualKey);
+
+    private readonly Lock _overlayLock = new();
+    private OverlayGeometry? _overlay;
+
+    /// <summary>Replace the overlay layer (warning polygons, measure lines). Null clears.</summary>
+    public void SetOverlay(OverlayGeometry? overlay)
+    {
+        lock (_overlayLock)
+        {
+            _overlay = overlay;
+        }
+    }
+
+    public (double LatDeg, double LonDeg) ScreenToLatLon(int xPx, int yPx)
+    {
+        var cam = Camera.Snapshot();
+        double mx = cam.CenterX + (xPx - cam.ViewportWidth / 2.0) * cam.MetersPerPixel;
+        double my = cam.CenterY - (yPx - cam.ViewportHeight / 2.0) * cam.MetersPerPixel;
+        return GeoMath.FromMercator(mx, my);
+    }
 
     private readonly Lock _sweepLock = new();
     private (SweepGeometry Geometry, byte[] Palette, float Min, float Range)? _pendingSweep;
@@ -114,6 +167,8 @@ public sealed class MapView : IDisposable
         _dragging = true;
         _lastX = x;
         _lastY = y;
+        _dragStartX = x;
+        _dragStartY = y;
         _velX = _velY = 0;
         _lastMoveTicks = Stopwatch.GetTimestamp();
         Camera.StopInertia();
@@ -121,7 +176,11 @@ public sealed class MapView : IDisposable
 
     public void OnMouseMove(int x, int y)
     {
-        if (!_dragging) return;
+        if (!_dragging)
+        {
+            Hovered?.Invoke(x, y);
+            return;
+        }
         int dx = x - _lastX, dy = y - _lastY;
         _lastX = x;
         _lastY = y;
@@ -142,6 +201,11 @@ public sealed class MapView : IDisposable
     {
         if (!_dragging) return;
         _dragging = false;
+        if (Math.Abs(_lastX - _dragStartX) + Math.Abs(_lastY - _dragStartY) < 5)
+        {
+            Clicked?.Invoke(_lastX, _lastY);
+            return;
+        }
         double sinceMove = (Stopwatch.GetTimestamp() - _lastMoveTicks) / (double)Stopwatch.Frequency;
         if (sinceMove < 0.15)
             Camera.SetInertia(_velX, _velY);
@@ -158,6 +222,7 @@ public sealed class MapView : IDisposable
         using var textures = new TileTextureCache(device.Device);
         using var quads = new QuadRenderer(device.Device, device.Context);
         using var radar = new RadarSweepRenderer(device.Device, device.Context);
+        using var overlay = new OverlayRenderer(device.Device, device.Context);
 
         var clearColor = new Color4(0.10f, 0.11f, 0.13f, 1f);
         long lastTicks = Stopwatch.GetTimestamp();
@@ -205,6 +270,14 @@ public sealed class MapView : IDisposable
             }
             radar.Draw(cam);
             LastSweepUploadMs = radar.LastUploadMs;
+
+            OverlayGeometry? overlayGeometry;
+            lock (_overlayLock)
+            {
+                overlayGeometry = _overlay;
+            }
+            if (overlayGeometry is not null)
+                overlay.Draw(overlayGeometry, cam); // warnings sit above radar by z-order
 
             quads.Begin();
             DrawMarkers(cam, quads);

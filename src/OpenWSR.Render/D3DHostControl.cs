@@ -106,12 +106,27 @@ public sealed class D3DHostControl : HwndHost
             {
                 var (x, y) = Win32.ClientPoint(lParam);
                 view.OnMouseMove(x, y);
+                view.OnRightMove(x, y);
                 return IntPtr.Zero;
             }
             case Win32.WM_LBUTTONUP:
                 Win32.ReleaseCapture();
                 view.OnMouseUp();
                 return IntPtr.Zero;
+            case Win32.WM_RBUTTONDOWN:
+            {
+                Win32.SetCapture(hWnd);
+                var (x, y) = Win32.ClientPoint(lParam);
+                view.OnRightDown(x, y);
+                return IntPtr.Zero;
+            }
+            case Win32.WM_RBUTTONUP:
+            {
+                Win32.ReleaseCapture();
+                var (x, y) = Win32.ClientPoint(lParam);
+                view.OnRightUp(x, y);
+                return IntPtr.Zero;
+            }
             case Win32.WM_MOUSEWHEEL:
             {
                 // Wheel coordinates are screen-relative, unlike the other mouse messages.

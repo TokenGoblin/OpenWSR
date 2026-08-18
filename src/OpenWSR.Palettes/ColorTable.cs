@@ -1,32 +1,50 @@
 namespace OpenWSR.Palettes;
 
-public readonly record struct Rgba(byte R, byte G, byte B, byte A);
+public readonly record struct Rgba(byte R, byte G, byte B, byte A)
+{
+    public static Rgba Lerp(Rgba a, Rgba b, float t) => new(
+        (byte)(a.R + (b.R - a.R) * t),
+        (byte)(a.G + (b.G - a.G) * t),
+        (byte)(a.B + (b.B - a.B) * t),
+        (byte)(a.A + (b.A - a.A) * t));
+}
 
 /// <summary>
-/// A color table: value-keyed stops interpolated into the 256-entry RGBA ramp the
-/// renderer samples. Phase 7 adds GR2Analyst .pal parsing into this same shape.
+/// One palette band: at <paramref name="Value"/> the color is <paramref name="Start"/>.
+/// Toward the next band's value it blends to <paramref name="End"/> when set, to the next
+/// band's start color when interpolating, or stays constant when <paramref name="Solid"/>.
+/// This is exactly the GR2Analyst .pal model; built-in tables use the same shape.
 /// </summary>
+public readonly record struct PaletteEntry(float Value, Rgba Start, Rgba? End = null, bool Solid = false);
+
+/// <summary>A color table compiled into the 256-entry RGBA ramp the renderer samples.</summary>
 public sealed class ColorTable
 {
     public required string Name { get; init; }
-    public required float MinValue { get; init; }
-    public required float MaxValue { get; init; }
-    public required IReadOnlyList<(float Value, Rgba Color)> Stops { get; init; }
+    public required IReadOnlyList<PaletteEntry> Entries { get; init; }
 
-    /// <summary>Interpolation between stops; step tables (classic NWS look) use false.</summary>
-    public bool Interpolate { get; init; } = true;
+    /// <summary>Range-folded color, when the table defines one (.pal RF: line).</summary>
+    public Rgba? RangeFolded { get; init; }
 
+    public float MinValue => Entries.Min(e => e.Value);
+    public float MaxValue => Entries.Max(e => e.Value);
     public float Range => MaxValue - MinValue;
+
+    public static ColorTable FromStops(string name, params (float Value, Rgba Color)[] stops) => new()
+    {
+        Name = name,
+        Entries = [.. stops.Select(s => new PaletteEntry(s.Value, s.Color))],
+    };
 
     /// <summary>256 RGBA entries covering [MinValue, MaxValue].</summary>
     public byte[] BuildRgba256()
     {
+        var entries = Entries.OrderBy(e => e.Value).ToArray();
         var output = new byte[256 * 4];
-        var stops = Stops.OrderBy(s => s.Value).ToArray();
+        float min = entries[0].Value, range = entries[^1].Value - entries[0].Value;
         for (int i = 0; i < 256; i++)
         {
-            float v = MinValue + Range * i / 255f;
-            var c = Sample(stops, v);
+            var c = Sample(entries, min + range * i / 255f);
             output[i * 4 + 0] = c.R;
             output[i * 4 + 1] = c.G;
             output[i * 4 + 2] = c.B;
@@ -35,140 +53,22 @@ public sealed class ColorTable
         return output;
     }
 
-    private Rgba Sample((float Value, Rgba Color)[] stops, float v)
+    private static Rgba Sample(PaletteEntry[] entries, float v)
     {
-        if (v <= stops[0].Value) return stops[0].Color;
-        if (v >= stops[^1].Value) return stops[^1].Color;
-        for (int i = 1; i < stops.Length; i++)
+        if (v <= entries[0].Value) return entries[0].Start;
+        if (v >= entries[^1].Value)
         {
-            if (v > stops[i].Value) continue;
-            if (!Interpolate) return stops[i - 1].Color;
-            float t = (v - stops[i - 1].Value) / (stops[i].Value - stops[i - 1].Value);
-            var a = stops[i - 1].Color;
-            var b = stops[i].Color;
-            return new Rgba(
-                (byte)(a.R + (b.R - a.R) * t),
-                (byte)(a.G + (b.G - a.G) * t),
-                (byte)(a.B + (b.B - a.B) * t),
-                (byte)(a.A + (b.A - a.A) * t));
+            var last = entries[^1];
+            return last.Solid || last.End is null ? last.Start : last.End.Value;
         }
-        return stops[^1].Color;
+        for (int i = 0; i < entries.Length - 1; i++)
+        {
+            if (v > entries[i + 1].Value) continue;
+            var band = entries[i];
+            if (band.Solid) return band.Start;
+            float t = (v - band.Value) / (entries[i + 1].Value - band.Value);
+            return Rgba.Lerp(band.Start, band.End ?? entries[i + 1].Start, t);
+        }
+        return entries[^1].Start;
     }
-}
-
-/// <summary>Built-in tables modeled on the familiar NWS product colors.</summary>
-public static class BuiltinTables
-{
-    public static ColorTable Reflectivity { get; } = new()
-    {
-        Name = "Reflectivity (dBZ)",
-        MinValue = -30,
-        MaxValue = 75,
-        Stops =
-        [
-            (-30, new Rgba(0x00, 0x00, 0x00, 0x00)),
-            (-10, new Rgba(0x40, 0x4A, 0x59, 0x60)),
-            (5,   new Rgba(0x33, 0x64, 0x70, 0xB0)),
-            (10,  new Rgba(0x41, 0xC0, 0xF0, 0xFF)),
-            (18,  new Rgba(0x2E, 0x77, 0xEE, 0xFF)),
-            (22,  new Rgba(0x2A, 0xFA, 0x30, 0xFF)),
-            (35,  new Rgba(0x0E, 0x8E, 0x12, 0xFF)),
-            (40,  new Rgba(0xFF, 0xFB, 0x1F, 0xFF)),
-            (48,  new Rgba(0xFF, 0xA6, 0x00, 0xFF)),
-            (50,  new Rgba(0xFF, 0x27, 0x0F, 0xFF)),
-            (60,  new Rgba(0xA4, 0x0B, 0x0B, 0xFF)),
-            (65,  new Rgba(0xFF, 0x2F, 0xF3, 0xFF)),
-            (70,  new Rgba(0x9B, 0x55, 0xE0, 0xFF)),
-            (75,  new Rgba(0xFF, 0xFF, 0xFF, 0xFF)),
-        ],
-    };
-
-    public static ColorTable Velocity { get; } = new()
-    {
-        Name = "Velocity (m/s)",
-        MinValue = -35,
-        MaxValue = 35,
-        Stops =
-        [
-            (-35, new Rgba(0x0B, 0x61, 0x0B, 0xFF)),
-            (-20, new Rgba(0x1E, 0xC2, 0x1E, 0xFF)),
-            (-2,  new Rgba(0xAF, 0xE3, 0xAF, 0xFF)),
-            (0,   new Rgba(0x8E, 0x8E, 0x9E, 0xB0)),
-            (2,   new Rgba(0xF0, 0xC0, 0xC0, 0xFF)),
-            (20,  new Rgba(0xE0, 0x30, 0x30, 0xFF)),
-            (35,  new Rgba(0x8A, 0x0A, 0x0A, 0xFF)),
-        ],
-    };
-
-    public static ColorTable SpectrumWidth { get; } = new()
-    {
-        Name = "Spectrum width (m/s)",
-        MinValue = 0,
-        MaxValue = 15,
-        Stops =
-        [
-            (0,  new Rgba(0x20, 0x28, 0x30, 0x80)),
-            (4,  new Rgba(0x3C, 0x8B, 0xC8, 0xFF)),
-            (8,  new Rgba(0xF2, 0xE3, 0x2A, 0xFF)),
-            (12, new Rgba(0xF2, 0x54, 0x1E, 0xFF)),
-            (15, new Rgba(0xFF, 0xFF, 0xFF, 0xFF)),
-        ],
-    };
-
-    public static ColorTable DifferentialReflectivity { get; } = new()
-    {
-        Name = "ZDR (dB)",
-        MinValue = -4,
-        MaxValue = 8,
-        Stops =
-        [
-            (-4, new Rgba(0x28, 0x28, 0x3C, 0xC0)),
-            (0,  new Rgba(0x5A, 0x8C, 0xB4, 0xFF)),
-            (1,  new Rgba(0x2A, 0xC8, 0x2A, 0xFF)),
-            (2,  new Rgba(0xF2, 0xE3, 0x2A, 0xFF)),
-            (4,  new Rgba(0xF2, 0x54, 0x1E, 0xFF)),
-            (8,  new Rgba(0xC8, 0x28, 0xC8, 0xFF)),
-        ],
-    };
-
-    public static ColorTable CorrelationCoefficient { get; } = new()
-    {
-        Name = "RhoHV",
-        MinValue = 0.2f,
-        MaxValue = 1.05f,
-        Stops =
-        [
-            (0.20f, new Rgba(0x20, 0x20, 0x28, 0xC0)),
-            (0.70f, new Rgba(0x3C, 0x64, 0xC8, 0xFF)),
-            (0.90f, new Rgba(0x2A, 0xC8, 0x2A, 0xFF)),
-            (0.97f, new Rgba(0xF2, 0xE3, 0x2A, 0xFF)),
-            (1.00f, new Rgba(0xF2, 0x54, 0x1E, 0xFF)),
-            (1.05f, new Rgba(0xC8, 0x28, 0xC8, 0xFF)),
-        ],
-    };
-
-    public static ColorTable DifferentialPhase { get; } = new()
-    {
-        Name = "PhiDP (deg)",
-        MinValue = 0,
-        MaxValue = 360,
-        Stops =
-        [
-            (0,   new Rgba(0x20, 0x28, 0x30, 0xC0)),
-            (90,  new Rgba(0x3C, 0x8B, 0xC8, 0xFF)),
-            (180, new Rgba(0x2A, 0xC8, 0x2A, 0xFF)),
-            (270, new Rgba(0xF2, 0xE3, 0x2A, 0xFF)),
-            (360, new Rgba(0xC8, 0x28, 0x28, 0xFF)),
-        ],
-    };
-
-    public static ColorTable For(OpenWSR.Nexrad.Moment moment) => moment switch
-    {
-        OpenWSR.Nexrad.Moment.Velocity => Velocity,
-        OpenWSR.Nexrad.Moment.SpectrumWidth => SpectrumWidth,
-        OpenWSR.Nexrad.Moment.DifferentialReflectivity => DifferentialReflectivity,
-        OpenWSR.Nexrad.Moment.CorrelationCoefficient => CorrelationCoefficient,
-        OpenWSR.Nexrad.Moment.DifferentialPhase => DifferentialPhase,
-        _ => Reflectivity,
-    };
 }

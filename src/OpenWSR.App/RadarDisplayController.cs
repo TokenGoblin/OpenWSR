@@ -17,11 +17,24 @@ public sealed class RadarDisplayController(MapView mapView)
 
     public event Action<string>? StatusChanged;
 
+    private readonly Dictionary<Moment, ColorTable> _customTables = [];
+
     public Moment CurrentMoment => _moment;
-    public ColorTable CurrentTable => BuiltinTables.For(_moment);
+    public ColorTable CurrentTable =>
+        _customTables.TryGetValue(_moment, out var custom) ? custom : BuiltinTables.For(_moment);
 
     /// <summary>Scan time of the sweep currently on screen — feeds the data-age indicator.</summary>
     public DateTime? DisplayedSweepTimeUtc { get; private set; }
+
+    /// <summary>The sweep currently on screen — feeds the hover inspector.</summary>
+    public Sweep? DisplayedSweep { get; private set; }
+
+    /// <summary>Apply an imported .pal table to the current moment and re-render.</summary>
+    public void SetCustomTable(ColorTable table)
+    {
+        _customTables[_moment] = table;
+        Apply();
+    }
 
     public void ShowVolume(RadarVolume volume)
     {
@@ -93,7 +106,8 @@ public sealed class RadarDisplayController(MapView mapView)
         _cutPosition = Math.Clamp(_cutPosition, 0, cuts.Count - 1);
         var sweep = cuts[_cutPosition];
         DisplayedSweepTimeUtc = sweep.ScanTimeUtc;
-        mapView.ShowSweep(sweep, BuiltinTables.For(_moment));
+        DisplayedSweep = sweep;
+        mapView.ShowSweep(sweep, CurrentTable);
         StatusChanged?.Invoke(
             $"{sweep.SiteId}  {sweep.ScanTimeUtc:yyyy-MM-dd HH:mm:ss}Z  {_moment}  " +
             $"{sweep.ElevationAngleDeg:F1}°  (cut {sweep.ElevationIndex}, {_cutPosition + 1}/{cuts.Count})  " +

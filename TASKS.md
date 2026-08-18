@@ -115,11 +115,11 @@ phase is done only when its **gate** passes. Check items off as they land.
 
 - [ ] `api.weather.gov/alerts/active` poller: descriptive User-Agent w/ contact, â‰¥60 s interval, backoff on error
 - [ ] GeoJSON â†’ Mercator polygon tessellation; fill + stroke per NWS convention (red TOR, yellow SVR, green FFW); z-order above radar
-- [ ] Polygon hit-test + detail flyout (Popup, per airspace pattern): headline, expiry, full text
+- [x] Polygon hit-test (`GeoMath.PointInRing`, unit-tested incl. concave) + detail Popup (headline, expiry, description, instruction)
 - [ ] GR2Analyst `.pal` parser in `OpenWSR.Palettes`; map breakpoints â†’ 256-entry texture (with interpolation flags honored)
 - [ ] Inspector: hover â†’ value, azimuth, slant range, ground range, beam height AGL
 - [ ] Distance/bearing tool â€” geodesic math from lat/lon, never Mercator lengths
-- [ ] Warning expiry/refresh lifecycle (polygons disappear on expiry without restart)
+- [x] Warning expiry: pruned on every access + rebuilt each 60 s poll
 
 **Gate:** live warnings appear/expire correctly; imported third-party `.pal` matches its reference screenshot.
 
@@ -134,6 +134,7 @@ phase is done only when its **gate** passes. Check items off as they land.
 - [ ] About box: "not for life-safety decisions" disclaimer; `THIRD-PARTY-NOTICES.md` (MIT notice if any Supercell Wx code ported)
 
 **Gate:** published single-file build runs on a clean Windows machine with all of the above working.
+
 
 
 

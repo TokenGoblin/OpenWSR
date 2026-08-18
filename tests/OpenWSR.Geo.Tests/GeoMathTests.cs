@@ -100,6 +100,36 @@ public class OffsetTests
     }
 }
 
+public class PointInRingTests
+{
+    private static readonly (double, double)[] Quad =
+    [
+        (35.0, -98.0), (36.0, -98.0), (36.0, -97.0), (35.0, -97.0),
+    ];
+
+    [Theory]
+    [InlineData(35.5, -97.5, true)]   // center
+    [InlineData(35.99, -97.99, true)] // near corner, inside
+    [InlineData(36.5, -97.5, false)]  // north of it
+    [InlineData(35.5, -96.5, false)]  // east of it
+    public void QuadContainment(double lat, double lon, bool expected) =>
+        Assert.Equal(expected, GeoMath.PointInRing(lat, lon, Quad));
+
+    [Fact]
+    public void ConcavePolygonNotch()
+    {
+        // C-shape opening east: the notch is outside even though it is inside the bbox.
+        (double, double)[] cShape =
+        [
+            (35.0, -98.0), (37.0, -98.0), (37.0, -96.0), (36.5, -96.0),
+            (36.5, -97.5), (35.5, -97.5), (35.5, -96.0), (35.0, -96.0),
+        ];
+        Assert.False(GeoMath.PointInRing(36.0, -96.5, cShape)); // in the notch
+        Assert.True(GeoMath.PointInRing(36.0, -97.75, cShape)); // in the spine
+        Assert.True(GeoMath.PointInRing(36.75, -96.5, cShape)); // in the upper arm
+    }
+}
+
 public class MercatorTests
 {
     [Fact]

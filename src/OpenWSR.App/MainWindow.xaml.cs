@@ -18,6 +18,9 @@ public partial class MainWindow : Window
     private readonly RadarDisplayController _radar;
     private readonly ArchivePlaybackController _playback;
     private readonly LiveFeed _liveFeed = new();
+    private WarningsController? _warnings;
+    private InspectorTools? _inspector;
+    private OverlayGeometry? _measureGeometry;
     private bool _suppressSliderEvents;
 
     public MainWindow()
@@ -60,6 +63,18 @@ public partial class MainWindow : Window
             SiteCombo.Items.Add(site);
         SiteCombo.SelectedItem = RadarSites.ByIcao("KTLX");
         DayPicker.SelectedDate = new DateTime(2013, 5, 20); // the committed demo day
+
+        _warnings = new WarningsController(_mapView, MapHost, settings.UserAgent);
+        _warnings.GeometryChanged += () => Dispatcher.BeginInvoke(ComposeOverlay);
+        _warnings.StatusChanged += text => Dispatcher.BeginInvoke(() => StatusText.Text = text);
+
+        _inspector = new InspectorTools(_mapView, _radar);
+        _inspector.InspectorChanged += text => Dispatcher.BeginInvoke(() => InspectorText.Text = text);
+        _inspector.MeasureChanged += geometry =>
+        {
+            _measureGeometry = geometry;
+            Dispatcher.BeginInvoke(ComposeOverlay);
+        };
 
         _liveFeed.StatusChanged += text => Dispatcher.BeginInvoke(() => StatusText.Text = text);
         _liveFeed.VolumeUpdated += (volume, _) => Dispatcher.BeginInvoke(() =>
@@ -198,6 +213,45 @@ public partial class MainWindow : Window
     {
         if (_playback is null) return;
         _playback.SetSpeed(SpeedCombo.SelectedIndex switch { 0 => 2, 2 => 8, _ => 4 });
+    }
+
+    /// <summary>Merge warning polygons and the transient measure line into one overlay.</summary>
+    private void ComposeOverlay()
+    {
+        var warnings = _warnings?.Geometry;
+        if (_measureGeometry is null)
+        {
+            _mapView.SetOverlay(warnings);
+            return;
+        }
+        var merged = new OverlayGeometry();
+        if (warnings is not null)
+        {
+            merged.FillTriangles.AddRange(warnings.FillTriangles);
+            merged.Lines.AddRange(warnings.Lines);
+        }
+        merged.FillTriangles.AddRange(_measureGeometry.FillTriangles);
+        merged.Lines.AddRange(_measureGeometry.Lines);
+        _mapView.SetOverlay(merged);
+    }
+
+    private void PaletteButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Filter = "GR2Analyst color tables (*.pal)|*.pal|All files (*.*)|*.*",
+            Title = $"Import palette for {_radar.CurrentMoment}",
+        };
+        if (dialog.ShowDialog(this) != true) return;
+        try
+        {
+            _radar.SetCustomTable(OpenWSR.Palettes.Gr2Palette.ParseFile(dialog.FileName));
+            StatusText.Text = $"Palette applied to {_radar.CurrentMoment}: {Path.GetFileName(dialog.FileName)}";
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Palette import failed: {ex.Message}";
+        }
     }
 
     private void ToolBar_Loaded(object sender, RoutedEventArgs e)

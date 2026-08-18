@@ -23,6 +23,9 @@
                 <ToggleButton x:Name="LiveToggle" Content="⦿ Live" Margin="4,0"
                               Checked="LiveToggle_Checked" Unchecked="LiveToggle_Unchecked"
                               ToolTip="Stream real-time chunks for the selected site" />
+                <Separator />
+                <Button x:Name="PaletteButton" Content="Palette…" Margin="4,0" Click="PaletteButton_Click"
+                        ToolTip="Import a GR2Analyst .pal color table for the current product" />
             </ToolBar>
         </ToolBarTray>
         <StatusBar DockPanel.Dock="Bottom" Background="#22252B" Foreground="#C8CCD4">
@@ -36,6 +39,10 @@
             <Separator />
             <StatusBarItem>
                 <TextBlock x:Name="AgeText" Text="" FontWeight="Bold" />
+            </StatusBarItem>
+            <Separator />
+            <StatusBarItem>
+                <TextBlock x:Name="InspectorText" Text="" FontFamily="Consolas" />
             </StatusBarItem>
             <StatusBarItem HorizontalAlignment="Right">
                 <TextBlock x:Name="AttributionText" Text="© OpenStreetMap contributors" />

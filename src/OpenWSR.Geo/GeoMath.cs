@@ -84,6 +84,22 @@ public static class GeoMath
         return Math.Atan2(y, x);
     }
 
+    /// <summary>Even-odd ray-cast point-in-polygon over (lat, lon) vertices.</summary>
+    public static bool PointInRing(
+        double latDeg, double lonDeg, IReadOnlyList<(double LatDeg, double LonDeg)> ring)
+    {
+        bool inside = false;
+        for (int i = 0, j = ring.Count - 1; i < ring.Count; j = i++)
+        {
+            var (yi, xi) = ring[i];
+            var (yj, xj) = ring[j];
+            if (yi > latDeg != yj > latDeg &&
+                lonDeg < (xj - xi) * (latDeg - yi) / (yj - yi) + xi)
+                inside = !inside;
+        }
+        return inside;
+    }
+
     private static double NormalizeLonDeg(double lonDeg)
     {
         lonDeg %= 360.0;
