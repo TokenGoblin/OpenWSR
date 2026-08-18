@@ -164,9 +164,30 @@ public sealed class MapView : IDisposable
         }
     }
 
+    private readonly TileFetcher _mosaicFetcher;
+    private volatile bool _mosaicEnabled;
+    private volatile float _mosaicOpacity = 0.75f;
+
+    /// <summary>
+    /// Show the national NEXRAD mosaic under the single-site sweep — the seamless
+    /// CONUS picture every consumer app opens with.
+    /// </summary>
+    public bool MosaicEnabled
+    {
+        get => _mosaicEnabled;
+        set => _mosaicEnabled = value;
+    }
+
+    public float MosaicOpacity
+    {
+        get => _mosaicOpacity;
+        set => _mosaicOpacity = Math.Clamp(value, 0f, 1f);
+    }
+
     public MapView(TileProvider provider)
     {
         _fetcher = new TileFetcher(provider);
+        _mosaicFetcher = new TileFetcher(TileProvider.NexradMosaic(provider.UserAgent));
     }
 
     public void Start(IntPtr hwnd, int width, int height)
@@ -264,6 +285,7 @@ public sealed class MapView : IDisposable
     {
         using var device = new DeviceResources(_hwnd, _pendingWidth, _pendingHeight);
         using var textures = new TileTextureCache(device.Device);
+        using var mosaicTextures = new TileTextureCache(device.Device, capacity: 600);
         using var quads = new QuadRenderer(device.Device, device.Context);
         using var radar = new RadarSweepRenderer(device.Device, device.Context);
         using var overlay = new OverlayRenderer(device.Device, device.Context);
@@ -283,20 +305,26 @@ public sealed class MapView : IDisposable
             lastTicks = now;
             Camera.Tick(Math.Min(dt, 0.1));
 
-            // Upload any tiles the fetcher completed since last frame.
+            // Upload any tiles the fetchers completed since last frame.
             while (_fetcher.TryDequeueCompleted(out var done))
                 textures.Add(done.Key, done.Bgra);
+            while (_mosaicFetcher.TryDequeueCompleted(out var mosaicDone))
+                mosaicTextures.Add(mosaicDone.Key, mosaicDone.Bgra);
 
             var cam = Camera.Snapshot();
             var ctx = device.Context;
             textures.BeginFrame();
+            mosaicTextures.BeginFrame();
 
             ctx.OMSetRenderTargets(device.BackBufferView!);
             ctx.RSSetViewport(0, 0, device.Width, device.Height);
             ctx.ClearRenderTargetView(device.BackBufferView!, clearColor);
 
             quads.Begin();
-            DrawTiles(cam, textures, quads);
+            DrawTiles(cam, textures, quads, _fetcher);
+            // The mosaic is only published to zoom 12; above that we stretch its deepest tile.
+            if (_mosaicEnabled)
+                DrawTiles(cam, mosaicTextures, quads, _mosaicFetcher, _mosaicOpacity, maxZoom: 12);
 
             lock (_sweepLock)
             {
@@ -354,9 +382,11 @@ public sealed class MapView : IDisposable
         _uploadedLegend = null;
     }
 
-    private void DrawTiles(CameraSnapshot cam, TileTextureCache textures, QuadRenderer quads)
+    private void DrawTiles(
+        CameraSnapshot cam, TileTextureCache textures, QuadRenderer quads,
+        TileFetcher fetcher, float opacity = 1f, int maxZoom = 19)
     {
-        int zoom = TileMath.ZoomForMetersPerPixel(cam.MetersPerPixel);
+        int zoom = Math.Min(TileMath.ZoomForMetersPerPixel(cam.MetersPerPixel), maxZoom);
         var (minX, minY, maxX, maxY) = cam.WorldBounds();
 
         foreach (var key in TileMath.Cover(minX, minY, maxX, maxY, zoom))
@@ -366,11 +396,11 @@ public sealed class MapView : IDisposable
 
             if (textures.TryGet(key, out var view))
             {
-                quads.DrawTextured(clip, (0, 0, 1, 1), view);
+                quads.DrawTextured(clip, (0, 0, 1, 1), view, opacity);
                 continue;
             }
 
-            _fetcher.Request(key);
+            fetcher.Request(key);
 
             // Stretch the nearest cached ancestor over this tile while it loads.
             var ancestor = key;
@@ -383,7 +413,7 @@ public sealed class MapView : IDisposable
                 float size = 1f / (1 << levels);
                 float u0 = (key.X - (ancestor.X << levels)) * size;
                 float v0 = (key.Y - (ancestor.Y << levels)) * size;
-                quads.DrawTextured(clip, (u0, v0, u0 + size, v0 + size), ancestorView);
+                quads.DrawTextured(clip, (u0, v0, u0 + size, v0 + size), ancestorView, opacity);
                 break;
             }
         }
@@ -579,5 +609,6 @@ public sealed class MapView : IDisposable
     {
         Stop();
         _fetcher.Dispose();
+        _mosaicFetcher.Dispose();
     }
 }

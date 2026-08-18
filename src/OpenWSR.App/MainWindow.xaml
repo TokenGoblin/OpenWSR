@@ -111,7 +111,7 @@
                            Text="—" />
             </Grid>
         </Border>
-        <Border x:Name="LayersPanel" DockPanel.Dock="Right" Background="{StaticResource Chrome}" Width="222"
+        <Border x:Name="LayersPanel" DockPanel.Dock="Right" Background="{StaticResource Chrome}" Width="238"
                 BorderBrush="#FF272C35" BorderThickness="1,0,0,0">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="12,10">
@@ -126,7 +126,25 @@
                     <Slider x:Name="SmoothSlider" Minimum="0" Maximum="100" Value="0"
                             ValueChanged="SmoothSlider_ValueChanged" />
 
-                    <TextBlock Text="Warnings" FontWeight="Bold" Margin="0,10,0,2" />
+                    <TextBlock Text="National" FontWeight="Bold" Margin="0,12,0,2" />
+                    <CheckBox x:Name="FilterMosaic" Content="National mosaic"
+                              ToolTip="Seamless national reflectivity from the Iowa State NEXRAD mosaic"
+                              Checked="MosaicFilter_Changed" Unchecked="MosaicFilter_Changed" />
+                    <Slider x:Name="MosaicOpacitySlider" Minimum="0" Maximum="100" Value="75"
+                            ValueChanged="MosaicOpacity_Changed" />
+                    <CheckBox x:Name="FilterOutlooks" Content="SPC outlook"
+                              ToolTip="Day 1 categorical convective outlook"
+                              Checked="OutlookFilter_Changed" Unchecked="OutlookFilter_Changed" />
+                    <CheckBox x:Name="FilterWatches" Content="Watch boxes"
+                              ToolTip="Active SPC tornado and severe thunderstorm watches"
+                              Checked="OutlookFilter_Changed" Unchecked="OutlookFilter_Changed" />
+                    <CheckBox x:Name="FilterDiscussions" Content="Mesoscale discussions"
+                              Checked="OutlookFilter_Changed" Unchecked="OutlookFilter_Changed" />
+                    <CheckBox x:Name="FilterReports" Content="Storm reports (6 h)"
+                              ToolTip="Local storm reports: what actually happened on the ground"
+                              Checked="OutlookFilter_Changed" Unchecked="OutlookFilter_Changed" />
+
+                    <TextBlock Text="Warnings" FontWeight="Bold" Margin="0,12,0,2" />
                     <CheckBox x:Name="FilterTornado" Content="Tornado" IsChecked="True" Foreground="#FF6B6B"
                               Checked="WarningFilter_Changed" Unchecked="WarningFilter_Changed" />
                     <CheckBox x:Name="FilterSevere" Content="Severe thunderstorm" IsChecked="True" Foreground="#FFE066"

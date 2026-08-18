@@ -17,4 +17,13 @@ public sealed record TileProvider(string Name, string UrlTemplate, string UserAg
         "maptiler",
         $"https://api.maptiler.com/maps/streets-v2/256/{{z}}/{{x}}/{{y}}.png?key={apiKey}",
         userAgent);
+
+    /// <summary>
+    /// Iowa State's pre-rendered NEXRAD base-reflectivity mosaic (N0Q). A seamless
+    /// national picture without decoding GRIB2 ourselves; refreshed about every 5 minutes.
+    /// </summary>
+    public static TileProvider NexradMosaic(string userAgent) => new(
+        "nexrad-mosaic",
+        "https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png",
+        userAgent);
 }

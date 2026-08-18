@@ -188,3 +188,14 @@ phase is done only when its **gate** passes. Check items off as they land.
 - [x] Toolbar overflow defect removed (toolbar replaced by rail + top bar)
 
 **Gate:** 54/54 tests; verified live — legend renders with correct ticks, search resolved "Provo, UT" to KMTX at 82.2 mi, settings dialog round-trips, archive age reads as a date.
+
+## Phase 02 — national layers (2026-08-18)
+
+- [x] National radar mosaic: Iowa State pre-rendered NEXRAD N0Q tiles as a second tile layer (own fetcher + VRAM cache, opacity slider, zoom-capped at 12 with parent stretch) — a seamless CONUS view with no GRIB2 work
+- [x] SPC Day 1 categorical outlook (BOM-tolerant GeoJSON, risk-coloured fills)
+- [x] SPC watch boxes via the IEM API (spc_watch_outline; the old geojson path now redirects to HTML)
+- [x] SPC mesoscale discussions with number labels and watch probability
+- [x] NWS local storm reports (6 h) as X markers with magnitude labels
+- [x] Windows tray notifications for proximity threats, so alerts land when the app is not focused
+
+**Gate:** 54/54 tests; verified live — mosaic rendered a squall line from Kansas City to Texas; 3 outlook areas, 4 discussions, 1 watch box, 13 storm reports fetched and drawn.

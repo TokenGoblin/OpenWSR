@@ -22,6 +22,8 @@ public partial class MainWindow : Window
     private InspectorTools? _inspector;
     private readonly StormOverlayController _storms = new();
     private readonly ThreatMonitor _threats = new();
+    private OutlookOverlayController? _outlooks;
+    private TrayNotifier? _tray;
     private PaneManager? _panes;
     private Geocoder? _geocoder;
     private AppSettings? _settings;
@@ -86,6 +88,17 @@ public partial class MainWindow : Window
         _warnings.GeometryChanged += () => Dispatcher.BeginInvoke(ComposeOverlay);
         _warnings.StatusChanged += text => Dispatcher.BeginInvoke(() => StatusText.Text = text);
 
+        _outlooks = new OutlookOverlayController(settings.UserAgent);
+        _outlooks.GeometryChanged += () => Dispatcher.BeginInvoke(ComposeOverlay);
+        _outlooks.StatusChanged += text => Dispatcher.BeginInvoke(() => StatusText.Text = text);
+
+        _tray = new TrayNotifier();
+        _tray.Activated += () => Dispatcher.BeginInvoke(() =>
+        {
+            if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+            Activate();
+        });
+
         _storms.GeometryChanged += () => Dispatcher.BeginInvoke(ComposeOverlay);
         _storms.StatusChanged += text => Dispatcher.BeginInvoke(() => StatusText.Text = text);
         _storms.StormsUpdated += storms => Dispatcher.BeginInvoke(() => _threats.EvaluateStorms(storms));
@@ -132,6 +145,8 @@ public partial class MainWindow : Window
         Closed += (_, _) =>
         {
             _statusTimer.Stop();
+            _tray?.Dispose();
+            _outlooks?.Dispose();
             _geocoder?.Dispose();
             _storms.Dispose();
             _liveFeed.Dispose();
@@ -262,8 +277,13 @@ public partial class MainWindow : Window
     /// <summary>Merge warning polygons, storm features, and the measure line into one overlay.</summary>
     private void ComposeOverlay()
     {
-        _mapView.SetLabels(_storms.Labels);
-        OverlayGeometry?[] sources = [_warnings?.Geometry, _storms.Geometry, _homeGeometry, _measureGeometry];
+        var labels = new List<MapView.MapLabel>(_storms.Labels);
+        if (_outlooks?.Labels is { Count: > 0 } outlookLabels)
+            labels.AddRange(outlookLabels);
+        _mapView.SetLabels(labels);
+
+        OverlayGeometry?[] sources =
+            [_outlooks?.Geometry, _warnings?.Geometry, _storms.Geometry, _homeGeometry, _measureGeometry];
         var active = sources.Where(s => s is not null).Cast<OverlayGeometry>().ToArray();
         switch (active.Length)
         {
@@ -450,6 +470,10 @@ public partial class MainWindow : Window
         System.Media.SystemSounds.Exclamation.Play();
         StatusText.Text = $"⚠ {threat.Title}";
 
+        // A toast inside the window is invisible when the window is not. Always send a
+        // tray notification too — this is the case proximity alerts exist for.
+        _tray?.Notify(threat.Title, threat.Detail, threat.IsTornado);
+
         _toast?.IsOpen = false;
         var panel = new StackPanel { MaxWidth = 360, Margin = new Thickness(12) };
         panel.Children.Add(new TextBlock
@@ -539,6 +563,29 @@ public partial class MainWindow : Window
         _storms.ShowMeso = FilterMeso.IsChecked == true;
         _storms.MinSevereHailProbability = (int)PoshSlider.Value;
         _storms.Rebuild();
+    }
+
+    private void MosaicFilter_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_mapView is null) return;
+        _mapView.MosaicEnabled = FilterMosaic.IsChecked == true;
+    }
+
+    private void MosaicOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_mapView is not null)
+            _mapView.MosaicOpacity = (float)(e.NewValue / 100.0);
+    }
+
+    private async void OutlookFilter_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_outlooks is null || FilterOutlooks is null || FilterWatches is null ||
+            FilterDiscussions is null || FilterReports is null) return;
+        _outlooks.ShowOutlooks = FilterOutlooks.IsChecked == true;
+        _outlooks.ShowWatches = FilterWatches.IsChecked == true;
+        _outlooks.ShowDiscussions = FilterDiscussions.IsChecked == true;
+        _outlooks.ShowReports = FilterReports.IsChecked == true;
+        await _outlooks.ApplyAsync();
     }
 
     private void SmoothSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
