@@ -37,7 +37,7 @@ public sealed class MapView : IDisposable
     public double LastSweepUploadMs { get; private set; }
 
     private volatile float _radarOpacity = 0.85f;
-    private volatile bool _radarSmoothing;
+    private volatile float _radarSmoothing;
 
     /// <summary>Radar layer opacity, 0–1. Written from the UI thread, read per frame.</summary>
     public float RadarOpacity
@@ -46,11 +46,11 @@ public sealed class MapView : IDisposable
         set => _radarOpacity = Math.Clamp(value, 0f, 1f);
     }
 
-    /// <summary>Bilinear-smoothed radar (the friendly consumer look) vs raw gates.</summary>
-    public bool RadarSmoothing
+    /// <summary>Smoothing strength 0–1: raw gates → soft consumer-style blur.</summary>
+    public float RadarSmoothing
     {
         get => _radarSmoothing;
-        set => _radarSmoothing = value;
+        set => _radarSmoothing = Math.Clamp(value, 0f, 1f);
     }
 
     /// <summary>Raised on the UI thread with the virtual-key code of keys pressed over the map.</summary>

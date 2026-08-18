@@ -526,10 +526,10 @@ public partial class MainWindow : Window
         _storms.Rebuild();
     }
 
-    private void SmoothCheck_Changed(object sender, RoutedEventArgs e)
+    private void SmoothSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (_mapView is not null)
-            _mapView.RadarSmoothing = SmoothCheck.IsChecked == true;
+            _mapView.RadarSmoothing = (float)(e.NewValue / 100.0);
     }
 
     private void SetHomeButton_Click(object sender, RoutedEventArgs e)

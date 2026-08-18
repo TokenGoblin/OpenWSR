@@ -9,6 +9,38 @@ if (args.Length == 0)
 if (args[0] == "--soak")
     return await Soak.RunAsync(args[1], int.Parse(args[2]));
 
+if (args[0] == "--export-sweep")
+{
+    // Lowest reflectivity sweep -> JS data file for tools/smoothing-lab.html.
+    var vol = ArchiveFile.DecodeFile(args[1]);
+    var sweepOut = vol.Sweeps.First(s => s.Moment == Moment.Reflectivity);
+    var sb = new System.Text.StringBuilder(sweepOut.Data.Length * 6 + 1024);
+    sb.Append("window.SWEEP={site:\"").Append(vol.SiteId)
+      .Append("\",time:\"").Append(sweepOut.ScanTimeUtc.ToString("u"))
+      .Append("\",radials:").Append(sweepOut.RadialCount)
+      .Append(",gates:").Append(sweepOut.GateCount)
+      .Append(",firstGateM:").Append(sweepOut.FirstGateM)
+      .Append(",gateSpacingM:").Append(sweepOut.GateSpacingM)
+      .Append(",azimuths:[");
+    for (int i = 0; i < sweepOut.RadialCount; i++)
+    {
+        if (i > 0) sb.Append(',');
+        sb.Append(sweepOut.AzimuthsDeg[i].ToString("F2", System.Globalization.CultureInfo.InvariantCulture));
+    }
+    sb.Append("],data:[");
+    for (int i = 0; i < sweepOut.Data.Length; i++)
+    {
+        if (i > 0) sb.Append(',');
+        float v = sweepOut.Data[i];
+        sb.Append(float.IsNaN(v) ? "-999" :
+            v.ToString("F1", System.Globalization.CultureInfo.InvariantCulture));
+    }
+    sb.Append("]};");
+    File.WriteAllText(args[2], sb.ToString());
+    Console.WriteLine($"Exported {sweepOut.RadialCount}x{sweepOut.GateCount} REF sweep to {args[2]}");
+    return 0;
+}
+
 foreach (var path in args)
 {
     Console.WriteLine($"=== {Path.GetFileName(path)} ===");

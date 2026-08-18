@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>OpenWSR Smoothing Lab</title>
+<style>
+  body { background: #1a1c21; color: #c8ccd4; font-family: Segoe UI, sans-serif; margin: 0; padding: 16px; }
+  h1 { font-size: 16px; margin: 0 0 8px; }
+  .row { display: flex; gap: 16px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+  canvas { background: #0e0f12; border: 1px solid #333; }
+  input[type=range] { width: 260px; }
+  .hint { color: #8b93a3; font-size: 12px; }
+</style>
+<!-- Generate the data file first:
+     dotnet run --project src/OpenWSR.Harness -- --export-sweep assets/testdata/KTLX20130520_201643_V06.gz tools/sweep-data.js -->
+<script src="sweep-data.js"></script>
+</head>
+<body>
+<h1>OpenWSR smoothing lab — <span id="meta"></span></h1>
+<div class="row">
+  <label>Smoothing <input id="smooth" type="range" min="0" max="100" value="0"></label>
+  <span id="val">0%</span>
+  <label>Zoom <input id="zoom" type="range" min="30" max="200" value="70"></label>
+  <span class="hint">Same Gaussian + sentinel-exclusion math as the D3D pixel shader.</span>
+</div>
+<canvas id="c" width="640" height="640" style="width:900px;height:900px;image-rendering:auto;"></canvas>
+<script>
+"use strict";
+const S = window.SWEEP;
+document.getElementById("meta").textContent = `${S.site} ${S.time} reflectivity ${S.radials}×${S.gates}`;
+
+// Palette: the app's built-in reflectivity table.
+const stops = [
+  [-30,0,0,0,0],[-10,64,74,89,96],[5,51,100,112,176],[10,65,192,240,255],
+  [18,46,119,238,255],[22,42,250,48,255],[35,14,142,18,255],[40,255,251,31,255],
+  [48,255,166,0,255],[50,255,39,15,255],[60,164,11,11,255],[65,255,47,243,255],
+  [70,155,85,224,255],[75,255,255,255,255]];
+// 256-entry palette LUT over [-30, 75] dBZ — no per-pixel allocation.
+const PAL_MIN = -30, PAL_RANGE = 105;
+const lut = new Uint8Array(256 * 4);
+for (let i = 0; i < 256; i++) {
+  const v = PAL_MIN + PAL_RANGE * i / 255;
+  let a = stops[0], b = stops[stops.length-1], t = 0;
+  if (v <= stops[0][0]) { b = a; }
+  else if (v >= b[0]) { a = b; }
+  else for (let k = 1; k < stops.length; k++) {
+    if (v <= stops[k][0]) { a = stops[k-1]; b = stops[k]; t = (v - a[0]) / (b[0] - a[0]); break; }
+  }
+  for (let c = 0; c < 4; c++) lut[i*4+c] = Math.round(a[c+1] + (b[c+1] - a[c+1]) * t);
+}
+
+// Sorted azimuth index for pixel -> radial lookup.
+const order = [...Array(S.radials).keys()].sort((a,b) => S.azimuths[a] - S.azimuths[b]);
+const sortedAz = order.map(i => S.azimuths[i]);
+function radialFor(azDeg) {
+  let lo = 0, hi = sortedAz.length - 1;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (sortedAz[mid] < azDeg) lo = mid + 1; else hi = mid; }
+  const cand = [lo, lo - 1, sortedAz.length - 1, 0];
+  let best = lo, bestD = 1e9;
+  for (const c of cand) {
+    if (c < 0 || c >= sortedAz.length) continue;
+    const d = Math.min(Math.abs(sortedAz[c] - azDeg), 360 - Math.abs(sortedAz[c] - azDeg));
+    if (d < bestD) { bestD = d; best = c; }
+  }
+  return order[best];
+}
+// Row-reordered data grid matching sorted azimuths (mirror of SweepGeometry.Build).
+const grid = new Float32Array(S.radials * S.gates);
+for (let j = 0; j < S.radials; j++) {
+  const src = order[j];
+  for (let g = 0; g < S.gates; g++) grid[j * S.gates + g] = S.data[src * S.gates + g];
+}
+function sortedRow(azDeg) {
+  let lo = 0, hi = sortedAz.length - 1;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (sortedAz[mid] < azDeg) lo = mid + 1; else hi = mid; }
+  const prev = (lo - 1 + sortedAz.length) % sortedAz.length;
+  const dCur = Math.min(Math.abs(sortedAz[lo] - azDeg), 360 - Math.abs(sortedAz[lo] - azDeg));
+  const dPrev = Math.min(Math.abs(sortedAz[prev] - azDeg), 360 - Math.abs(sortedAz[prev] - azDeg));
+  return dPrev < dCur ? prev : lo;
+}
+
+const canvas = document.getElementById("c"), ctx = canvas.getContext("2d");
+function render() {
+  const smoothing = document.getElementById("smooth").value / 100;
+  const kmRange = document.getElementById("zoom").value; // km shown from centre to edge
+  document.getElementById("val").textContent = `${Math.round(smoothing*100)}%`;
+  const w = canvas.width, h = canvas.height, img = ctx.createImageData(w, h);
+  const px = img.data, mPerPx = kmRange * 1000 * 2 / w;
+  const sigma = 0.45 + smoothing * 1.9, inv2s2 = 1 / (2 * sigma * sigma);
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const ex = (x - w/2) * mPerPx, ny = (h/2 - y) * mPerPx;
+      const r = Math.hypot(ex, ny);
+      const az = (Math.atan2(ex, ny) * 180 / Math.PI + 360) % 360;
+      const gate = (r - S.firstGateM) / S.gateSpacingM;
+      if (gate < 0 || gate >= S.gates) continue;
+      const row = sortedRow(az);
+      let v;
+      if (smoothing <= 0.001) {
+        v = grid[row * S.gates + Math.round(gate)];
+        if (v < -900) continue;
+      } else {
+        const gc = Math.round(gate);
+        let acc = 0, wsum = 0, totalw = 0;
+        for (let dy = -2; dy <= 2; dy++) {
+          const rr = Math.min(S.radials - 1, Math.max(0, row + dy));
+          for (let dx = -2; dx <= 2; dx++) {
+            const gg = Math.min(S.gates - 1, Math.max(0, gc + dx));
+            const dgx = gate - gg, dgy = dy;
+            const wgt = Math.exp(-(dgx*dgx + dgy*dgy) * inv2s2);
+            totalw += wgt;
+            const s = grid[rr * S.gates + gg];
+            if (s < -900) continue;
+            acc += s * wgt; wsum += wgt;
+          }
+        }
+        const coverage = wsum / totalw;
+        if (coverage < 0.04) continue;
+        v = acc / wsum;
+        var alphaScale = Math.min(1, coverage * (1.6 - 0.4 * smoothing));
+      }
+      let t = (v - PAL_MIN) / PAL_RANGE;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const li = (t * 255 | 0) * 4;
+      const i = (y * w + x) * 4;
+      px[i] = lut[li]; px[i+1] = lut[li+1]; px[i+2] = lut[li+2];
+      px[i+3] = lut[li+3] * (smoothing > 0.001 ? alphaScale : 1);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+// Coalesce renders: a drag fires dozens of input events; only the latest matters.
+let pending = false;
+function requestRender() {
+  if (pending) return;
+  pending = true;
+  setTimeout(() => { pending = false; render(); }, 60);
+}
+document.getElementById("smooth").oninput = requestRender;
+document.getElementById("zoom").oninput = requestRender;
+render();
+</script>
+</body>
+</html>

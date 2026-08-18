@@ -77,36 +77,43 @@ public sealed class RadarSweepRenderer : IDisposable
                 return float4(float3(0.55, 0.25, 0.75) * a, a);
             }
 
-            if (smoothing > 0.5)
+            if (smoothing > 0.001)
             {
-                // Sentinel-aware bilinear over the 2x2 texel neighborhood: invalid
-                // gates drop out of the weighted average instead of bleeding in.
+                // Variable-width Gaussian over the gate/radial grid, sentinel-aware:
+                // invalid gates drop out of the weighted average instead of bleeding
+                // in. smoothing 0..1 widens the kernel from near-point interpolation
+                // to a soft consumer-style blur, and feathers echo edges by coverage.
                 float2 tex = i.uv * float2(gateCount, radialCount) - 0.5;
-                float2 f = frac(tex);
-                int2 p0 = int2(floor(tex));
+                int2 c0 = int2(round(tex));
+                float sigma = 0.45 + smoothing * 1.9;
+                float inv2s2 = 1.0 / (2.0 * sigma * sigma);
                 float acc = 0.0;
                 float wsum = 0.0;
+                float totalw = 0.0;
                 [unroll]
-                for (int dy = 0; dy < 2; dy++)
+                for (int dy = -2; dy <= 2; dy++)
                 {
                     [unroll]
-                    for (int dx = 0; dx < 2; dx++)
+                    for (int dx = -2; dx <= 2; dx++)
                     {
-                        int2 p = clamp(p0 + int2(dx, dy),
+                        int2 p = clamp(c0 + int2(dx, dy),
                             int2(0, 0), int2((int)gateCount - 1, (int)radialCount - 1));
+                        float2 d = tex - float2(p);
+                        float w = exp(-dot(d, d) * inv2s2);
+                        totalw += w;
                         float s = momentData.Load(int3(p, 0));
                         if (s < -0.5e30) continue;
-                        float w = (dx == 1 ? f.x : 1.0 - f.x) * (dy == 1 ? f.y : 1.0 - f.y);
                         acc += s * w;
                         wsum += w;
                     }
                 }
-                if (wsum < 0.12)
+                float coverage = wsum / max(totalw, 1e-6);
+                if (coverage < 0.04)
                     discard; // isolated speckle fades out entirely
                 v = acc / wsum;
                 float t2 = saturate((v - paletteMin) * invPaletteRange);
                 float4 c2 = palette.Sample(linearSamp, float2(t2, 0.5));
-                c2.a *= opacity * saturate(wsum * 1.6); // feather the echo edge
+                c2.a *= opacity * saturate(coverage * (1.6 - 0.4 * smoothing));
                 if (c2.a < 0.004)
                     discard;
                 return float4(c2.rgb * c2.a, c2.a);
@@ -161,8 +168,8 @@ public sealed class RadarSweepRenderer : IDisposable
 
     public float Opacity { get; set; } = 0.85f;
 
-    /// <summary>Sentinel-aware bilinear smoothing (the consumer-app radar look).</summary>
-    public bool Smoothing { get; set; }
+    /// <summary>Smoothing strength 0–1: raw gates → soft consumer-style blur.</summary>
+    public float Smoothing { get; set; }
 
     public double LastUploadMs { get; private set; }
 
@@ -276,7 +283,7 @@ public sealed class RadarSweepRenderer : IDisposable
             Opacity = Opacity,
             GateCount = g.GateCount,
             RadialCount = g.RadialCount,
-            Smoothing = Smoothing ? 1f : 0f,
+            Smoothing = Smoothing,
         };
         _context.UpdateSubresource(constants, _constants);
 
