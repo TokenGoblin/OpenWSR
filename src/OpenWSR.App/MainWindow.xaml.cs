@@ -37,6 +37,7 @@ public partial class MainWindow : Window
     private readonly AppSettings _settings;
     private OverlayGeometry? _measureGeometry;
     private readonly DrawingController _drawing;
+    private readonly VolumeController _volume;
     private OverlayGeometry? _homeGeometry;
     private bool _suppressSliderEvents;
     private bool _suppressModeEvents;
@@ -72,12 +73,24 @@ public partial class MainWindow : Window
         MapHost.Child = new D3DHostControl(_mapView);
 
         _radar = new RadarDisplayController(_mapView);
+
+        _volume = new VolumeController(_mapView, _radar);
+        _volume.StatusChanged += text => Dispatcher.BeginInvoke(() => Report(text));
+        _volume.ErrorRaised += text => Dispatcher.BeginInvoke(() => ReportError(text));
+        _volume.Changed += () => Dispatcher.BeginInvoke(() =>
+        {
+            VolumeSummary.Text = _volume.Summary ?? "";
+        });
+
         _radar.StatusChanged += text => Dispatcher.BeginInvoke(() => Report(text));
         _radar.SelectionChanged += () => Dispatcher.BeginInvoke(() =>
         {
             SyncProductBar();
             RebuildWindProfile();
+            if (_volume.IsActive) _ = _volume.RequestRebuildAsync();
         });
+
+        _drawing = new DrawingController(_mapView);
 
         // One place interprets map keys. Wiring both this and Window.KeyDown to the same
         // handler double-stepped the tilt and let text typed into the search box change
@@ -198,7 +211,6 @@ public partial class MainWindow : Window
         });
         _warnings.AlertsUpdated += alerts => Dispatcher.BeginInvoke(() => _threats.EvaluateWarnings(alerts));
         _threats.ThreatDetected += threat => Dispatcher.BeginInvoke(() => OnThreat(threat));
-        _drawing = new DrawingController(_mapView);
         _drawing.Changed += () => Dispatcher.BeginInvoke(() =>
         {
             ComposeOverlay();
@@ -1194,6 +1206,105 @@ public partial class MainWindow : Window
         PlayButton.ToolTip =
             $"Loop the most recent {frames} volumes of the loaded day — roughly "
             + $"{frames * 5 / 60.0:0.#} hours at a five-minute scan. Change the span in Settings.";
+    }
+
+    // ---- 3D volume ----
+
+    private async void Volume_Changed(object sender, RoutedEventArgs e)
+    {
+        if (VolumePanel is null) return;
+        bool on = VolumeToggle.IsChecked == true;
+        VolumePanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+
+        // The product bar still applies in 3D — a volume of velocity is as valid as one of
+        // reflectivity — but the tilt picker does not: 3D is every cut at once.
+        TiltPanel.IsEnabled = !on;
+
+        if (on)
+        {
+            SyncVolumeSettings();
+            await _volume.EnterAsync();
+            ResetVolumeCamera();
+        }
+        else
+        {
+            _volume.Leave();
+        }
+    }
+
+    /// <summary>Push the panel's values through before a build, so the first frame is right.</summary>
+    private void SyncVolumeSettings()
+    {
+        _mapView.VolumeThreshold = (float)VolumeThresholdSlider.Value;
+        _mapView.VolumeDensity = (float)VolumeDensitySlider.Value;
+        _mapView.VolumeExaggeration = (float)VolumeStretchSlider.Value;
+        SyncVolumeLabels();
+    }
+
+    private void SyncVolumeLabels()
+    {
+        if (VolumeThresholdLabel is null) return;
+        // The threshold is in the product's own units, so the label has to say which.
+        string unit = _radar.CurrentMoment switch
+        {
+            Moment.Reflectivity => "dBZ",
+            Moment.Velocity => "m/s",
+            Moment.SpectrumWidth => "m/s",
+            _ => "",
+        };
+        VolumeThresholdLabel.Text = $"Threshold — {VolumeThresholdSlider.Value:F0} {unit}".TrimEnd();
+        VolumeDensityLabel.Text = $"Density — {VolumeDensitySlider.Value:F2}";
+        VolumeStretchLabel.Text = $"Vertical stretch — {VolumeStretchSlider.Value:F0}×";
+    }
+
+    private void VolumeThreshold_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_mapView is null) return;
+        _mapView.VolumeThreshold = (float)e.NewValue;
+        SyncVolumeLabels();
+    }
+
+    private void VolumeDensity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_mapView is null) return;
+        _mapView.VolumeDensity = (float)e.NewValue;
+        SyncVolumeLabels();
+    }
+
+    private void VolumeStretch_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_mapView is null) return;
+        _mapView.VolumeExaggeration = (float)e.NewValue;
+        SyncVolumeLabels();
+        // The camera framed the old box height; keep it framing the new one.
+        if (_volume?.IsActive == true) ResetVolumeCamera();
+    }
+
+    private async void VolumeRange_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_volume is null) return;
+        if (VolumeRangeCombo.SelectedItem is not ComboBoxItem { Tag: string tag } ||
+            !double.TryParse(tag, out double halfWidth))
+            return;
+
+        _volume.HalfWidthM = halfWidth;
+        if (!_volume.IsActive) return;
+        await _volume.RebuildAsync();
+        ResetVolumeCamera();
+    }
+
+    private void VolumeReset_Click(object sender, RoutedEventArgs e) => ResetVolumeCamera();
+
+    /// <summary>
+    /// Frame the whole box from the south, looking north — the orientation a radar operator
+    /// already has in their head from every plan view they have ever seen.
+    /// </summary>
+    private void ResetVolumeCamera()
+    {
+        float top = (float)(20_000 * _mapView.VolumeExaggeration);
+        _mapView.VolumeCamera.Reset(
+            new System.Numerics.Vector3(0, 0, top * 0.35f),
+            _volume.HalfWidthM * 2.6);
     }
 
     // ---- drawing ----

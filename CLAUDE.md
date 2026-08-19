@@ -180,6 +180,21 @@ working on any volume back to 1991 and makes it impossible to take away. `GeoMat
 and its inverse `GeoMath.SlantRangeForHeight` are the pair that makes height-based products
 possible.
 
+**3D is a resample, not a layer.** `VolumeGrid3D` walks a Cartesian box and asks which
+beam passed through each cell — the reverse mapping, because a forward splat leaves holes
+wherever gates spread wider than a cell, and at 150 km a half-degree beam is over a
+kilometre across. `GeoMath.BeamAngleTo` is the inverse that makes it possible and is shared
+with the cross-section, so a slice through the 3D view and a 2D cross-section of the same
+volume agree by construction. **Voxel 0 means unsampled, never "weak"** — the volume is
+mostly empty (cone of silence, under the lowest beam, above the top cut) and a scale
+starting at zero paints the sky. Vertical is exaggerated ~6× by default because a 12 km
+storm in a 300 km box is a smear at true scale; the factor is on screen rather than hidden.
+
+**A live volume is published cut by cut**, so anything that rebuilds on "the volume
+changed" fires ten to fifteen times per scan. `VolumeController` debounces, and keeps the
+previous volume on screen while the new one has too few cuts — otherwise the 3D view blanks
+for a minute every five.
+
 **Derived products.** `Moment.AzimuthalShear` sits in the moment enum so the product bar
 and palettes treat it uniformly, but the decoder never emits it — `RadarDisplayController`
 materialises it from velocity on demand and caches per cut. Add further derived products at
@@ -234,7 +249,7 @@ screen. `--soak` runs the live pipeline headless.
 
 ## Open work
 
-3D volume rendering.
+Nothing on the parity list. What is left is polish, and the two notes below.
 
 Every gap in `docs/parity.md` is now closed. What is left is the "Nice" and "Cosmetic"
 tier plus the two Partials.

@@ -41,6 +41,28 @@ public static class GeoMath
     }
 
     /// <summary>
+    /// The other inverse of <see cref="BeamPath"/>: which beam passes through a point given
+    /// as a ground (arc) range and a height above the radar, and how far along that beam the
+    /// point lies. <see cref="SlantRangeForHeight"/> answers "how far along *this* beam";
+    /// this answers "*which* beam", which is what any product working in a Cartesian frame —
+    /// a cross-section, a volume grid — has to ask for every cell it fills.
+    ///
+    /// Exact on the 4/3 earth, by the triangle between the earth's centre, the radar, and
+    /// the point. A negative elevation is a real answer, not an error: it is what a point
+    /// below the radar horizon requires.
+    /// </summary>
+    public static (double ElevationRad, double SlantRangeM) BeamAngleTo(
+        double groundRangeM, double heightM)
+    {
+        double ka = EffectiveEarthRadiusM;
+        double phi = groundRangeM / ka;             // angle subtended at the earth's centre
+        double horizontal = (ka + heightM) * Math.Sin(phi);
+        double vertical = (ka + heightM) * Math.Cos(phi) - ka;
+        return (Math.Atan2(vertical, horizontal),
+                Math.Sqrt(horizontal * horizontal + vertical * vertical));
+    }
+
+    /// <summary>
     /// Spherical great-circle destination point: from (lat0, lon0), travel
     /// <paramref name="groundRangeM"/> along the initial azimuth. Degrees in, degrees out.
     /// </summary>

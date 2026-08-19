@@ -18,6 +18,10 @@
                                   Style="{StaticResource RailToggle}" Content="⇡"
                                   Checked="WindProfile_Changed" Unchecked="WindProfile_Changed"
                                   ToolTip="VAD wind profile — horizontal wind against height, fitted from this volume's velocity" />
+                    <ToggleButton x:Name="VolumeToggle" AutomationProperties.Name="3D volume view"
+                                  Style="{StaticResource RailToggle}" Content="◲" FontSize="15"
+                                  Checked="Volume_Changed" Unchecked="Volume_Changed"
+                                  ToolTip="3D — ray-march the whole volume; drag to orbit, wheel to zoom" />
                     <Button x:Name="HotspotButton" AutomationProperties.Name="Go to the heaviest precipitation in the USA" Style="{StaticResource RailButton}" Content="🎯"
                             Click="HotspotButton_Click"
                             ToolTip="Go to the heaviest precipitation in the USA right now" />
@@ -446,7 +450,7 @@
             <Border DockPanel.Dock="Top" Background="{StaticResource Chrome}"
                     BorderBrush="#FF272C35" BorderThickness="0,0,0,1" Padding="8,6">
                 <DockPanel>
-                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <StackPanel x:Name="TiltPanel" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock Text="Tilt" FontSize="12" Foreground="{StaticResource TextDim}"
                                    VerticalAlignment="Center" Margin="0,0,7,0" />
                         <ComboBox x:Name="TiltCombo" AutomationProperties.Name="Elevation cut" Width="92" Height="26" DisplayMemberPath="Label"
@@ -498,6 +502,64 @@
             <!-- Docked beside the map rather than floating over it: the D3D child window
                  always draws above WPF content inside its rectangle, so a panel over the
                  map would be invisible. -->
+            <Border x:Name="VolumePanel" DockPanel.Dock="Right" Width="212"
+                    Visibility="Collapsed" Background="{StaticResource Chrome}"
+                    BorderBrush="#FF272C35" BorderThickness="1,0,0,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="8,6,6,6">
+                    <TextBlock Text="3D VOLUME" FontWeight="Bold" FontSize="11"
+                               Foreground="{StaticResource TextDim}" Margin="0,0,0,6" />
+
+                    <TextBlock x:Name="VolumeNote" FontSize="10.5" FontStyle="Italic"
+                               TextWrapping="Wrap" Margin="0,0,0,8"
+                               Foreground="{StaticResource TextDim}"
+                               Text="Drag to orbit · wheel to zoom" />
+
+                    <TextBlock x:Name="VolumeThresholdLabel" Text="Threshold" FontSize="10.5"
+                               Foreground="{StaticResource TextDim}" />
+                    <Slider x:Name="VolumeThresholdSlider" Minimum="-10" Maximum="60" Value="15"
+                            TickFrequency="5" IsSnapToTickEnabled="True" Margin="0,3,0,8"
+                            AutomationProperties.Name="Display threshold"
+                            ValueChanged="VolumeThreshold_Changed"
+                            ToolTip="Anything weaker than this is not drawn at all" />
+
+                    <TextBlock x:Name="VolumeDensityLabel" Text="Density" FontSize="10.5"
+                               Foreground="{StaticResource TextDim}" />
+                    <Slider x:Name="VolumeDensitySlider" Minimum="0.05" Maximum="0.9" Value="0.30"
+                            Margin="0,3,0,8" AutomationProperties.Name="Density"
+                            ValueChanged="VolumeDensity_Changed"
+                            ToolTip="How solid the echo looks — low is an X-ray, high is a surface" />
+
+                    <TextBlock x:Name="VolumeStretchLabel" Text="Vertical stretch" FontSize="10.5"
+                               Foreground="{StaticResource TextDim}" />
+                    <Slider x:Name="VolumeStretchSlider" Minimum="1" Maximum="15" Value="6"
+                            TickFrequency="1" IsSnapToTickEnabled="True" Margin="0,3,0,4"
+                            AutomationProperties.Name="Vertical stretch"
+                            ValueChanged="VolumeStretch_Changed" />
+                    <TextBlock FontSize="10" TextWrapping="Wrap" Margin="0,0,0,8"
+                               Foreground="{StaticResource TextDim}"
+                               Text="A storm 12 km tall in a 300 km box is a smear at true scale, so the vertical is stretched. The figure above is the factor." />
+
+                    <TextBlock Text="Range" FontSize="10.5" Foreground="{StaticResource TextDim}" />
+                    <ComboBox x:Name="VolumeRangeCombo" Margin="0,3,0,8"
+                              AutomationProperties.Name="Box range"
+                              SelectionChanged="VolumeRange_Changed">
+                        <ComboBoxItem Content="60 km — one storm" Tag="60000" />
+                        <ComboBoxItem Content="100 km — a cluster" Tag="100000" />
+                        <ComboBoxItem Content="150 km — the whole scan" Tag="150000" IsSelected="True" />
+                        <ComboBoxItem Content="230 km — full range" Tag="230000" />
+                    </ComboBox>
+
+                    <Button x:Name="VolumeResetButton" Content="Reset the view" Padding="0,5"
+                            AutomationProperties.Name="Reset the 3D view"
+                            Click="VolumeReset_Click" />
+
+                    <TextBlock x:Name="VolumeSummary" FontSize="10" TextWrapping="Wrap"
+                               Margin="0,10,0,0" Foreground="{StaticResource TextDim}" Text="" />
+                </StackPanel>
+                </ScrollViewer>
+            </Border>
+
             <Border x:Name="DrawingPanel" DockPanel.Dock="Right" Width="212"
                     Visibility="Collapsed" Background="{StaticResource Chrome}"
                     BorderBrush="#FF272C35" BorderThickness="1,0,0,0">

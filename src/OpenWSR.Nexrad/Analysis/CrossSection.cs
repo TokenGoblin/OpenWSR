@@ -36,7 +36,6 @@ public static class CrossSection
 
         double radarLat = ordered[0].RadarLatDeg;
         double radarLon = ordered[0].RadarLonDeg;
-        double ka = GeoMath.EffectiveEarthRadiusM;
 
         double totalM = GeoMath.DistanceM(startLatDeg, startLonDeg, endLatDeg, endLonDeg);
         double pathBearing = GeoMath.BearingRad(startLatDeg, startLonDeg, endLatDeg, endLonDeg);
@@ -48,18 +47,14 @@ public static class CrossSection
 
             double groundM = GeoMath.DistanceM(radarLat, radarLon, lat, lon);
             double azimuthDeg = (GeoMath.BearingRad(radarLat, radarLon, lat, lon) * 180.0 / Math.PI + 360.0) % 360.0;
-            double phi = groundM / ka; // earth-centre angle to this point
 
             for (int row = 0; row < height; row++)
             {
                 double heightM = (1.0 - (row + 0.5) / height) * maxHeightKm * 1000.0;
 
-                // Geometry from the radar to (ground arc, height) on the 4/3 earth.
-                double horizontal = (ka + heightM) * Math.Sin(phi);
-                double vertical = (ka + heightM) * Math.Cos(phi) - ka;
-                double slantM = Math.Sqrt(horizontal * horizontal + vertical * vertical);
+                // Which beam passes through (ground arc, height), and how far along it.
+                var (elevationRad, slantM) = GeoMath.BeamAngleTo(groundM, heightM);
                 if (slantM < 1) continue;
-                double elevationRad = Math.Atan2(vertical, horizontal);
 
                 float sample = SampleBetweenCuts(ordered, elevationsRad, elevationRad, azimuthDeg, slantM);
                 if (!float.IsNaN(sample))

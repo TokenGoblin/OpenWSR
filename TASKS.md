@@ -634,3 +634,39 @@ writer gave it, which is the interoperability claim proved rather than asserted.
 Also fixed on the way past: tooltips were white text on WPF's default light popup, because
 a tooltip inherits `Foreground` from the control it belongs to and every control here is
 styled for a dark ground. `Theme.xaml` now templates ToolTip too.
+
+## 3D volume rendering
+
+- [x] `GeoMath.BeamAngleTo` — the other inverse of `BeamPath`: *which* beam passes through a
+      point, not how far along a known one. Closed form on the 4/3 earth. `CrossSection` had
+      this inline; it is now shared, which is why a slice through the 3D view and a
+      cross-section of the same volume agree by construction
+- [x] `VolumeGrid3D` — resamples a volume onto a Cartesian box by walking the grid and asking
+      which beam reached each cell. 256 × 256 × 64, about 4 MB, parallel over layers.
+      Voxel 0 means **unsampled**, never "weak": the cone of silence, everything below the
+      lowest beam and everything above the top cut have to be see-through
+- [x] `AzimuthIndex` hoisted out of `RotationTracks` and shared. Finding the nearest radial
+      by scanning is fine once and ruinous a few million times
+- [x] `VolumeRenderer` — ray marched, front to back, early-out at opacity. No isosurface, so
+      no dBZ threshold has to be invented; weak echo stays as haze and a core is solid
+      because it was integrated. Ground disc with range rings and a north line drawn in the
+      same shader, because a storm in a void has no scale
+- [x] Ray starts are jittered per pixel: marching every ray from the same place makes the
+      step size visible as bands the radar never measured
+- [x] `VolumeCamera` — orbit, not free flight. It is possible to get lost inside a
+      thunderstorm; orbiting cannot. Elevation clamps short of the poles so the frame never
+      collapses, and right is built horizontal so the horizon never rolls
+- [x] Drag orbits, right-drag pans, wheel zooms. Tilt is disabled in 3D — it is every cut
+      at once — while the product bar still applies
+- [x] Debounced rebuilds, and the previous volume stays up while a live one is still
+      scanning: otherwise the view blanks for a minute out of every five
+- [x] 35 tests: the beam inverse round trip, cone of silence, nothing above the top cut,
+      nothing outside the range disc, every filled voxel inside the scanned span, real gates
+      landing in the right voxels, camera orthonormality and a level horizon over forty
+      orbit steps, and a shader-compile test so a broken shader is a red test rather than a
+      black window
+
+**Gate:** [PASSED] 311/311 tests. Verified live: KFSD, 15 cuts 0.4°–12.3°, rendered at
+60 fps with visible vertical structure, cores, range rings and the ground disc; the guard
+for a still-scanning volume was seen firing on a real 1-cut live volume and was the reason
+the debounce and keep-previous behaviour were added.

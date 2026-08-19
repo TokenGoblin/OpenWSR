@@ -85,24 +85,40 @@ public sealed class MapView : IDisposable
 
     private bool _rightDragging;
     private int _rightStartX, _rightStartY;
+    private int _rightLastX, _rightLastY;
+
+    /// <summary>Viewport height as of the last frame; a pan has to scale by it.</summary>
+    private volatile int _lastViewportHeight = 1;
 
     public void OnRightDown(int x, int y)
     {
         _rightDragging = true;
-        _rightStartX = x;
-        _rightStartY = y;
+        _rightStartX = _rightLastX = x;
+        _rightStartY = _rightLastY = y;
     }
 
     public void OnRightMove(int x, int y)
     {
-        if (_rightDragging)
-            MeasureDragged?.Invoke(_rightStartX, _rightStartY, x, y, false);
+        if (!_rightDragging) return;
+
+        if (_volumeMode)
+        {
+            // Incremental, so the pan follows the hand rather than accelerating away from
+            // the point the drag started.
+            VolumeCamera.Pan(x - _rightLastX, y - _rightLastY, _lastViewportHeight);
+            _rightLastX = x;
+            _rightLastY = y;
+            return;
+        }
+
+        MeasureDragged?.Invoke(_rightStartX, _rightStartY, x, y, false);
     }
 
     public void OnRightUp(int x, int y)
     {
         if (!_rightDragging) return;
         _rightDragging = false;
+        if (_volumeMode) return;
         MeasureDragged?.Invoke(_rightStartX, _rightStartY, x, y, true);
     }
 
@@ -279,6 +295,60 @@ public sealed class MapView : IDisposable
         return GeoMath.FromMercator(mx, my);
     }
 
+    // ---- 3D volume ----
+
+    /// <summary>
+    /// The orbit camera for the 3D view. Held here rather than inside the renderer because
+    /// input arrives on the UI thread and the renderer belongs to the render thread; a
+    /// camera is small, immutable per frame, and safe to read across that line.
+    /// </summary>
+    public VolumeCamera VolumeCamera { get; } = new();
+
+    private volatile bool _volumeMode;
+
+    /// <summary>
+    /// When set, the map is replaced by the volume view. The two share a window and an
+    /// input path, but nothing else: a 3D view of one radar is not a layer over a map of
+    /// the country, and pretending otherwise would mean a camera that means two things.
+    /// </summary>
+    public bool VolumeMode
+    {
+        get => _volumeMode;
+        set => _volumeMode = value;
+    }
+
+    private readonly Lock _volumeLock = new();
+    private VolumeUpload? _pendingVolume;
+    private bool _volumeClearRequested;
+
+    /// <summary>Stage a resampled volume; the render thread uploads it next frame.</summary>
+    public void SetVolume(VolumeUpload upload)
+    {
+        lock (_volumeLock)
+        {
+            _pendingVolume = upload;
+            _volumeClearRequested = false;
+        }
+    }
+
+    public void ClearVolume()
+    {
+        lock (_volumeLock)
+        {
+            _pendingVolume = null;
+            _volumeClearRequested = true;
+        }
+    }
+
+    /// <summary>Vertical stretch of the 3D view; 1 is true scale. Read on the render thread.</summary>
+    public float VolumeExaggeration { get; set; } = 6f;
+
+    /// <summary>Display threshold for the 3D view, in the moment's own units.</summary>
+    public float VolumeThreshold { get; set; } = 15f;
+
+    /// <summary>How readily a voxel accumulates opacity: a thinner or waxier storm.</summary>
+    public float VolumeDensity { get; set; } = 0.30f;
+
     private readonly Lock _sweepLock = new();
     private (SweepGeometry Geometry, byte[] Palette, float Min, float Range)? _pendingSweep;
     private bool _sweepClearRequested;
@@ -420,12 +490,21 @@ public sealed class MapView : IDisposable
     {
         if (!_dragging)
         {
-            Hovered?.Invoke(x, y);
+            // Nothing to read out of a 3D view under the cursor: the ray passes through
+            // the whole storm, so there is no one value to report.
+            if (!_volumeMode) Hovered?.Invoke(x, y);
             return;
         }
         int dx = x - _lastX, dy = y - _lastY;
         _lastX = x;
         _lastY = y;
+
+        if (_volumeMode)
+        {
+            VolumeCamera.Orbit(dx, dy);
+            return;
+        }
+
         Camera.PanPixels(dx, dy);
 
         long now = Stopwatch.GetTimestamp();
@@ -443,6 +522,7 @@ public sealed class MapView : IDisposable
     {
         if (!_dragging) return;
         _dragging = false;
+        if (_volumeMode) return;
         if (Math.Abs(_lastX - _dragStartX) + Math.Abs(_lastY - _dragStartY) < 5)
         {
             Clicked?.Invoke(_lastX, _lastY);
@@ -453,8 +533,15 @@ public sealed class MapView : IDisposable
             Camera.SetInertia(_velX, _velY);
     }
 
-    public void OnMouseWheel(int clientX, int clientY, int delta) =>
+    public void OnMouseWheel(int clientX, int clientY, int delta)
+    {
+        if (_volumeMode)
+        {
+            VolumeCamera.Zoom(delta / 120.0);
+            return;
+        }
         Camera.ZoomAt(clientX, clientY, Math.Pow(1.25, delta / 120.0));
+    }
 
     // ---- Render thread ----
 
@@ -467,6 +554,7 @@ public sealed class MapView : IDisposable
         using var quads = new QuadRenderer(device.Device, device.Context);
         using var radar = new RadarSweepRenderer(device.Device, device.Context);
         using var overlay = new OverlayRenderer(device.Device, device.Context);
+        using var volume = new VolumeRenderer(device.Device, device.Context);
 
         var clearColor = new Color4(0.10f, 0.11f, 0.13f, 1f);
         long lastTicks = Stopwatch.GetTimestamp();
@@ -493,6 +581,7 @@ public sealed class MapView : IDisposable
 
             var cam = Camera.Snapshot();
             var ctx = device.Context;
+            _lastViewportHeight = device.Height;
             textures.BeginFrame();
             mosaicTextures.BeginFrame();
             satelliteTextures.BeginFrame();
@@ -500,6 +589,47 @@ public sealed class MapView : IDisposable
             ctx.OMSetRenderTargets(device.BackBufferView!);
             ctx.RSSetViewport(0, 0, device.Width, device.Height);
             ctx.ClearRenderTargetView(device.BackBufferView!, clearColor);
+
+            lock (_volumeLock)
+            {
+                if (_pendingVolume is not null)
+                {
+                    volume.SetVolume(_pendingVolume);
+                    _pendingVolume = null;
+                }
+                else if (_volumeClearRequested)
+                {
+                    volume.Clear();
+                    _volumeClearRequested = false;
+                }
+            }
+
+            if (_volumeMode)
+            {
+                volume.VerticalExaggeration = VolumeExaggeration;
+                volume.ThresholdValue = VolumeThreshold;
+                volume.Density = VolumeDensity;
+                volume.Draw(
+                    VolumeCamera.Snapshot(device.Height > 0 ? device.Width / (float)device.Height : 1f),
+                    device.Height);
+
+                // The colour scale still applies, and it is drawn in screen space, so it
+                // costs nothing to keep. Everything else on the map does not apply.
+                quads.Begin();
+                DrawLegend(cam, quads, device);
+
+                device.SwapChain.Present(1);
+                ServiceCaptureRequest(device);
+
+                fpsFrames++;
+                if (now - fpsWindowStart >= Stopwatch.Frequency)
+                {
+                    FramesPerSecond = fpsFrames / ((now - fpsWindowStart) / (double)Stopwatch.Frequency);
+                    fpsFrames = 0;
+                    fpsWindowStart = now;
+                }
+                continue;
+            }
 
             quads.Begin();
             DrawTiles(cam, textures, quads, _fetcher);

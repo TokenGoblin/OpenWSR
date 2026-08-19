@@ -41,9 +41,6 @@ public sealed record RotationTrackResult(
 /// </summary>
 public static class RotationTracks
 {
-    /// <summary>Azimuth bins in the radial lookup — 0.1°, finer than any radial spacing.</summary>
-    private const int AzimuthBins = 3600;
-
     /// <summary>
     /// Build a swath from per-scan shear sweeps, which must all come from the same site.
     /// Sweeps are expected to be <see cref="Moment.AzimuthalShear"/>; pass the same cut
@@ -83,7 +80,7 @@ public static class RotationTracks
             // makes the accumulation about coherent rotation — a couplet spans many gates
             // and survives it, a lone hot gate does not.
             var sweep = Smooth(raw);
-            var radialFor = BuildAzimuthIndex(sweep);
+            var radialFor = AzimuthIndex.Build(sweep);
             double elevation = sweep.ElevationAngleDeg * Math.PI / 180.0;
 
             // Walking the output grid and projecting each cell back into polar space avoids
@@ -109,7 +106,7 @@ public static class RotationTracks
 
                     double azimuthDeg = (GeoMath.BearingRad(radarLat, radarLon, lat, lon)
                                          * 180.0 / Math.PI + 360.0) % 360.0;
-                    int radial = radialFor[(int)(azimuthDeg / 360.0 * AzimuthBins) % AzimuthBins];
+                    int radial = AzimuthIndex.RadialFor(radialFor, azimuthDeg);
                     if (radial < 0) continue;
 
                     float shear = sweep.Data[radial * sweep.GateCount + gate];
@@ -172,30 +169,4 @@ public static class RotationTracks
     /// Nearest radial for each azimuth bin. Radials are not evenly spaced, and scanning
     /// them per sample would be a linear search inside a million-cell loop.
     /// </summary>
-    private static int[] BuildAzimuthIndex(Sweep sweep)
-    {
-        var index = new int[AzimuthBins];
-        Array.Fill(index, -1);
-
-        for (int radial = 0; radial < sweep.RadialCount; radial++)
-        {
-            int bin = (int)(sweep.AzimuthsDeg[radial] / 360.0 * AzimuthBins) % AzimuthBins;
-            if (bin < 0) bin += AzimuthBins;
-            index[bin] = radial;
-        }
-
-        // Fill the gaps outward, so every azimuth resolves to the nearest radial that
-        // exists. Two passes around the ring handle wrap in both directions.
-        for (int pass = 0; pass < 2; pass++)
-        {
-            int last = -1;
-            for (int i = 0; i < AzimuthBins * 2; i++)
-            {
-                int bin = i % AzimuthBins;
-                if (index[bin] >= 0) last = index[bin];
-                else if (last >= 0) index[bin] = last;
-            }
-        }
-        return index;
-    }
 }

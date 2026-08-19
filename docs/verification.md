@@ -156,6 +156,35 @@ a synthetic vortex has an angular seam at the antipode, and "a uniform wind has 
 azimuthal shear" is simply false near the radar. The second failure is why `MinRangeM`
 exists at all — the test found a real property, not a bug.
 
+### The volume grid — physics, because there is no reference
+
+Nothing else resamples a NEXRAD volume onto a Cartesian box the way this does, so there is
+nothing to diff against. The tests assert the geometry instead, which is stronger than a
+diff would have been because it cannot agree with a shared mistake:
+
+- `GeoMath.BeamAngleTo` must exactly undo `GeoMath.BeamPath`, at five elevations and ranges.
+  These are the two directions of the same 4/3-earth relation; if they disagree, every
+  Cartesian product built on them is quietly in the wrong place.
+- Straight overhead needs a vertical beam, and a point at ground level 200 km out needs a
+  *depression* angle. Both are the cone of silence and the sub-beam gap stated as geometry
+  rather than as an observation about a picture.
+- Every filled voxel must lie inside the scanned elevation span, and no voxel outside it may
+  be filled — checked over the whole grid, not sampled.
+- Nothing may appear outside the range disc: the box is square and the radar's reach is round.
+- A gate taken from the lowest cut, projected into the grid, must find a voxel holding
+  roughly that value. A grid cell is over a kilometre across and a gate is a point inside
+  it, so the assertion is 85 % of comparisons within 12 dBZ, not equality.
+- Zero means unsampled and must never be a weak echo, or the renderer punches holes through
+  the middle of storms.
+
+The camera is tested separately, and for the same reason: the two ways an orbit camera
+breaks — a frame that collapses when you look straight down, and a horizon that rolls — are
+exactly the ones a screenshot hides. Orthonormality and a level horizon are asserted across
+forty orbit steps.
+
+Shader compilation is a test (`ShaderCompileTests`). Shaders compile at run time on the
+render thread, where a syntax error becomes a black window and an exception nobody sees.
+
 ### NetCDF / HDF5 — h5py
 
 `MiniHdf5` is checked against **h5py 3.16.0** reading the same committed GLM file. This is

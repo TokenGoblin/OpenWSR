@@ -71,7 +71,7 @@ premium tiers elsewhere and two have no commercial equivalent:
 | Hail size contours | Expected | **Partial** — per-cell markers sized by severe-hail probability, not contours |
 | VWP / VAD wind profile | Nice | **Done** — fitted from Level II velocity rather than decoded from NVW, so it works on any volume back to 1991 |
 | Soundings / hodographs | Nice | **Open** — arguably out of scope |
-| 3D volume rendering | Cosmetic | **Open** |
+| 3D volume rendering | Cosmetic | **Done** — Cartesian resample, ray marched, orbit camera |
 
 The cross-section was called out in the original scan as *"the largest structural gap in
 the whole open-source field — no OSS viewer has it."* It is now done.
