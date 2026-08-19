@@ -49,7 +49,7 @@ premium tiers elsewhere and two have no commercial equivalent:
 | Gap | Impact | Status |
 |---|---|---|
 | National mosaic | Blocker | **Done** — Iowa State pre-rendered N0Q tiles as a second tile layer |
-| Lightning | Blocker | **Open** — GOES GLM is free on AWS but needs a NetCDF reader |
+| Lightning | Blocker | **Done** — GOES-19 GLM flashes, via a minimal HDF5 reader written for it |
 | Watches, SPS, mesoscale discussions | Costs users | **Done** — watch boxes and MCDs from IEM |
 | SPC convective outlooks | Costs users | **Done** — Day 1 categorical |
 | Local storm reports | Costs users | **Done** — last six hours |
@@ -130,6 +130,12 @@ tile pipeline, then do the real GRIB2 work on its own schedule rather than block
 everything behind it.
 
 That worked. The mosaic and satellite shipped the same day; GRIB2 landed afterwards and
-brought native HRRR future radar with it. **NetCDF was never done**, which is exactly why
-lightning is the one remaining Blocker-severity gap — it is the only feature still stuck
-behind the dependency the plan was designed to route around.
+brought native HRRR future radar with it. **NetCDF was never done**, which is exactly why lightning stayed the one remaining
+Blocker-severity gap for so long — it was the only feature still stuck behind the
+dependency the plan was designed to route around.
+
+> **Closed, 18 Aug 2026.** The dependency was finally paid down rather than routed around,
+> and it turned out to be far smaller than feared: GLM files use a narrow, consistent slice
+> of HDF5, and `MiniHdf5` implements only that slice — about 500 lines, following the same
+> reasoning that put `MiniPng` inside `OpenWSR.Grib2`. Every gap in the original scan is
+> now closed.

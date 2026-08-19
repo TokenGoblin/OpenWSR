@@ -425,3 +425,46 @@ Newcastle-Moore corridor — the EF5's path.
 Visible background speckle. Accumulating a maximum amplifies outliers, and the low Doppler
 cuts of VCP 12/212 carry no correlation coefficient to filter marginal gates on. Smoothing
 helps; a real quality mask would help more.
+
+
+## Lightning — the last blocker (2026-08-18)
+
+`docs/parity.md` called this out as the one remaining Blocker-severity gap, and named the
+reason: "it is the only feature still stuck behind the dependency the plan was designed to
+route around." The dependency was NetCDF. This pays it down.
+
+- [x] Reconnaissance first, per the project's own strategy note. IEM publishes no lightning
+      endpoint; GOES-16 is no longer filled (it was replaced as East in 2025 and returns an
+      empty listing, which looks exactly like "no lightning"); GOES-19 and GOES-18 both
+      carry GLM. There is no simpler source, so the format work was unavoidable
+- [x] `OpenWSR.NetCdf` with `MiniHdf5` — the slice of HDF5 that GLM files actually use:
+      superblock v2, version-2 object headers with continuation blocks, dense links in a
+      fractal heap, version-2 dataspaces, version-1 datatypes, version-3 contiguous and
+      chunked layouts on a version-1 B-tree, shuffle and deflate. Roughly 500 lines, and
+      pure — it is in `PurityTests` alongside `Nexrad`, `Geo`, `Grib2` and `Placefiles`
+- [x] The B-tree is skipped deliberately: every link in the group is wanted, so the fractal
+      heap's direct blocks are walked instead. That removes the most intricate structure in
+      the format and recovers all 54 links with nothing missing and nothing spurious
+- [x] `GlmFile`: flashes with position, energy and time, dropping the ones the producer
+      flags. 30 of 177 in the committed file are flagged
+- [x] `GlmClient`: anonymous S3, listing by day-of-year hour prefixes, bounded-parallel
+      fetch, and a window walked back two minutes because products publish behind real time
+- [x] `LightningController`: a fading cross per flash, sized in screen pixels, rebuilt on
+      zoom like the storm symbols
+- [x] 23 tests. The 17 decoder ones take every literal from **h5py 3.16.0** on the same
+      file; the 6 client ones cover day-of-year key parsing including leap years and junk
+
+Two format traps cost real time and are written up in `docs/formats.md`: the root group
+address sits at superblock offset **36**, not 40; and the version-2 filter pipeline omits
+the name-length field for filter IDs below 256, so parsing it as v1 walks off by two and
+reports a filter the file does not use.
+
+**Gate:** [PASSED] 197/197 tests; build clean in Debug and Release. Verified live: enabling
+the layer fetched and decoded **5,817 flashes from the last ten minutes** of GOES-19 in
+three seconds, and pressing the hotspot finder put them over a severe storm near KCYS with
+the crosses sitting in the convective cores.
+
+### Every parity gap is now closed
+
+`docs/parity.md` began with 31 gaps and 11 UI findings. All 31 are done or partial, and all
+11 UI findings are done.

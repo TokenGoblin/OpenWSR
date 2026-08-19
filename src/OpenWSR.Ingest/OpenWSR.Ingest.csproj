@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\OpenWSR.NetCdf\OpenWSR.NetCdf.csproj" />
     <ProjectReference Include="..\OpenWSR.Nexrad\OpenWSR.Nexrad.csproj" />
     <ProjectReference Include="..\OpenWSR.Geo\OpenWSR.Geo.csproj" />
     <ProjectReference Include="..\OpenWSR.Grib2\OpenWSR.Grib2.csproj" />

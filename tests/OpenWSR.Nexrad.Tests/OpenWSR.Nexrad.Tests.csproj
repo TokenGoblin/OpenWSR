@@ -19,6 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\OpenWSR.NetCdf\OpenWSR.NetCdf.csproj" />
     <ProjectReference Include="..\..\src\OpenWSR.Nexrad\OpenWSR.Nexrad.csproj" />
     <ProjectReference Include="..\..\src\OpenWSR.Geo\OpenWSR.Geo.csproj" />
     <ProjectReference Include="..\..\src\OpenWSR.Palettes\OpenWSR.Palettes.csproj" />

@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\OpenWSR.Render\OpenWSR.Render.csproj" />
     <ProjectReference Include="..\OpenWSR.Ingest\OpenWSR.Ingest.csproj" />
+    <ProjectReference Include="..\OpenWSR.NetCdf\OpenWSR.NetCdf.csproj" />
     <ProjectReference Include="..\OpenWSR.Nexrad\OpenWSR.Nexrad.csproj" />
     <ProjectReference Include="..\OpenWSR.Geo\OpenWSR.Geo.csproj" />
     <ProjectReference Include="..\OpenWSR.Palettes\OpenWSR.Palettes.csproj" />

@@ -20,6 +20,7 @@ public class PurityTests
     [InlineData("OpenWSR.Geo")]
     [InlineData("OpenWSR.Grib2")]
     [InlineData("OpenWSR.Placefiles")]
+    [InlineData("OpenWSR.NetCdf")]
     public void PureAssembliesReferenceNoForbiddenDependencies(string assemblyName)
     {
         var assembly = Assembly.Load(assemblyName);

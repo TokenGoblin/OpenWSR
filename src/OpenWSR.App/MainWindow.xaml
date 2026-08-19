@@ -283,6 +283,14 @@
                             <Slider x:Name="SatelliteOpacitySlider" AutomationProperties.Name="Satellite opacity" Minimum="0" Maximum="100" Value="60"
                                     Margin="18,0,0,4" ValueChanged="SatelliteOpacity_Changed" />
 
+                            <CheckBox x:Name="FilterLightning" AutomationProperties.Name="Lightning"
+                                      Content="Lightning (GOES GLM)"
+                                      ToolTip="Flashes from the Geostationary Lightning Mapper over the last 10 minutes, fading with age"
+                                      Checked="Lightning_Changed" Unchecked="Lightning_Changed" />
+                            <TextBlock x:Name="LightningNoteText" FontSize="10.5" FontStyle="Italic"
+                                       TextWrapping="Wrap" Foreground="{StaticResource TextDim}"
+                                       Margin="18,0,0,4" Text="" />
+
                             <Expander Header="ROTATION TRACKS" Style="{StaticResource PanelSection}" IsExpanded="False">
                                 <StackPanel>
                                     <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource TextDim}"

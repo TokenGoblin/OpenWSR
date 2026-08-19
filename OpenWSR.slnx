@@ -5,6 +5,7 @@
     <Project Path="src/OpenWSR.Grib2/OpenWSR.Grib2.csproj" />
     <Project Path="src/OpenWSR.Harness/OpenWSR.Harness.csproj" />
     <Project Path="src/OpenWSR.Ingest/OpenWSR.Ingest.csproj" />
+    <Project Path="src/OpenWSR.NetCdf/OpenWSR.NetCdf.csproj" />
     <Project Path="src/OpenWSR.Nexrad/OpenWSR.Nexrad.csproj" />
     <Project Path="src/OpenWSR.Palettes/OpenWSR.Palettes.csproj" />
     <Project Path="src/OpenWSR.Placefiles/OpenWSR.Placefiles.csproj" />

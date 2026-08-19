@@ -221,6 +221,52 @@ forecast hour**, which is what makes a six-hour future-radar loop practical.
 
 ---
 
+## NetCDF-4 / HDF5 (GOES lightning)
+
+GLM files are NetCDF-4, which is HDF5 underneath. `MiniHdf5` implements only the slice
+those files use — the same reasoning that put `MiniPng` inside `OpenWSR.Grib2`, since
+taking a full HDF5 stack for four arrays of floats would be the tail wagging the dog.
+
+### What is implemented, and what a GLM file actually uses
+
+Superblock v2; version-2 object headers **with continuation blocks**; dense links in a
+fractal heap; version-2 dataspaces; version-1 datatypes; version-3 layouts, both contiguous
+and chunked with a version-1 B-tree index; the shuffle and deflate filters. Anything else
+raises rather than guessing.
+
+### The traps
+
+- **Root group address is at superblock offset 36**, not 40. Reading 40 lands four bytes
+  into the field and picks up the checksum, which then looks like a wild continuation
+  address. This cost the first hour.
+- **Filter pipeline v2 omits the name-length field** for filter IDs below 256, so its
+  per-filter header is 6 bytes where v1's is 8. Parsing v2 as v1 walks off by two and reads
+  a neighbouring value as the filter ID — the symptom was a complaint about "filter 5"
+  (nbit) on a dataset that only uses shuffle and deflate.
+- **Object headers continue.** Any dataset with a few attributes spills into an `OCHK`
+  block, and the data layout message is frequently in the continuation rather than the
+  first chunk. Not following them makes datasets silently read as empty.
+- **The deflate filter writes zlib streams**, header and Adler-32 included — `ZLibStream`,
+  not a raw `DeflateStream`.
+- **Shuffle is not compression.** It stores every element's first byte, then every second
+  byte, so neighbouring values share high bytes and deflate does better. Undo it after
+  inflating, not before.
+
+### Skipping the B-tree on purpose
+
+Dense links live in a fractal heap with a version-2 B-tree beside it for lookup by name.
+Since every link in the group is wanted anyway, the heap's direct blocks are walked and the
+B-tree is never touched — removing the single most intricate structure in the format. The
+heap does not delimit its objects (the B-tree's heap IDs carry the offsets), so each
+candidate position is validated as a link record and the scan slides a byte on failure. On
+the committed GLM file this recovers all 54 links with nothing missing and nothing spurious.
+
+### Attributes are not read
+
+Which means scale factors are not either. `flash_energy`'s scale and offset are hard-coded
+from the published L2 specification — they are fixed for the product, not per-file. If a
+future field needs a per-file scale, attribute parsing is the piece to add.
+
 ## GRLevelX placefiles
 
 Reference: `grlevelx.com/manuals/gis/files_places.htm` (needs a browser User-Agent;

@@ -96,3 +96,22 @@ you need the pages again.
 [`resources/reference/nexrad-stations.txt`](../resources/reference/nexrad-stations.txt) —
 the NCEI HOMR station table (all 163 WSR-88D sites with coordinates and elevations). The
 shipping site table is embedded in `OpenWSR.Ingest`; this is the source it came from.
+
+
+## GOES lightning (GLM)
+
+`noaa-goes19` is GOES-**East** and covers the Americas; `noaa-goes18` is West. **GOES-16 is
+no longer filled** — it was replaced as East in 2025 and a listing against it returns an
+empty result rather than an error, which looks exactly like "no lightning right now".
+
+    https://noaa-goes19.s3.amazonaws.com/GLM-L2-LCFA/{yyyy}/{ddd}/{HH}/
+
+Anonymous, no key. Keys carry the scan start as `_sYYYYDDDHHMMSSt` — day-of-year, not
+month and day, and the trailing digit is tenths of a second. Files land every 20 seconds at
+roughly 250 kB, so a ten-minute window is about thirty small reads.
+
+Products publish a couple of minutes behind real time. Asking for the current minute
+reliably returns nothing, so the window is walked back from two minutes ago.
+
+The files are NetCDF-4, which is HDF5 underneath — see `formats.md` for what of it
+`MiniHdf5` implements.

@@ -24,7 +24,7 @@ Scratch directories are session-scoped and get lost.
 
 ```
 dotnet build OpenWSR.slnx                    # NOTE: .slnx, not .sln
-dotnet test OpenWSR.slnx                     # 168 tests
+dotnet test OpenWSR.slnx                     # 197 tests
 dotnet run --project src/OpenWSR.App
 dotnet publish src/OpenWSR.App -c Release    # single-file self-contained exe
 ```
@@ -36,13 +36,14 @@ The published and Debug binaries are both **`OpenWSR.exe`** (AssemblyName is set
 
 ```
 Nexrad ──┐
-Grib2 ───┼─→ Ingest ──┐
+Grib2 ───┤
+NetCdf ──┼─→ Ingest ──┐
 Geo ─────┤            ├─→ App
 Placefiles┤  Render ──┘
 Palettes ─┘
 ```
 
-**Purity is enforced by a test.** `Nexrad`, `Geo`, `Grib2` and `Placefiles` must not
+**Purity is enforced by a test.** `Nexrad`, `Geo`, `Grib2`, `NetCdf` and `Placefiles` must not
 reference WPF, Direct3D or the network. `PurityTests` asserts this against assembly
 references — if you need imaging or HTTP in one of them, that is a signal the code
 belongs somewhere else. `MiniPng` exists inside `Grib2` precisely because of this rule.
@@ -203,9 +204,12 @@ screen. `--soak` runs the live pipeline headless.
 
 ## Open work
 
-Lightning (GOES GLM, needs NetCDF), MRMS native rendering (reader is done and
-golden-tested; only the draw path is missing), VWP panel, placefile icon sheets, drawing
-tools, 3D volume rendering, independent site per pane, loops longer than 30 frames.
+MRMS native rendering (reader is done and golden-tested; only the draw path is missing),
+VWP panel, placefile icon sheets, drawing tools, 3D volume rendering, independent site per
+pane, loops longer than 30 frames.
+
+Every gap in `docs/parity.md` is now closed. What is left is the "Nice" and "Cosmetic"
+tier plus the two Partials.
 
 Rotation tracks work but carry visible background speckle: accumulating a maximum over a
 dozen scans is unforgiving, and the low Doppler cuts have no correlation coefficient to

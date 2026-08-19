@@ -52,6 +52,9 @@ No account, no API key, no subscription. Everything it reads is public data.
 - **Warnings** — live NWS polygons, filtered by type, click for the full text.
 - **SPC products** — Day 1 categorical outlook, mesoscale discussions, watch boxes.
 - **Storm reports** — what actually happened on the ground, last six hours.
+- **Lightning** — GOES-19 Lightning Mapper flashes from the last ten minutes, fading with
+  age. The one layer that is not inferred: reflectivity says what the beam scattered off,
+  but a flash is a discharge that actually happened.
 
 **Storm analysis**
 

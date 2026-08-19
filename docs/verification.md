@@ -156,6 +156,27 @@ a synthetic vortex has an angular seam at the antipode, and "a uniform wind has 
 azimuthal shear" is simply false near the radar. The second failure is why `MinRangeM`
 exists at all — the test found a real property, not a bug.
 
+### NetCDF / HDF5 — h5py
+
+`MiniHdf5` is checked against **h5py 3.16.0** reading the same committed GLM file. This is
+the easiest of the cross-checks to do well, because HDF5 decoding has exactly one right
+answer: every literal in `MiniHdf5Tests` was printed by h5py, not by this code, and they
+agree exactly rather than approximately.
+
+The tests deliberately cover more than the happy path:
+
+- a contiguous unfiltered scalar (`product_time`) and a chunked, shuffled, deflated float
+  array (`flash_lat`) — the two storage paths;
+- `flash_area`, whose values run near the top of the signed short range, so a decoder that
+  treated shorts as unsigned would still pass on the other arrays;
+- `event_lat` at 9134 values in chunks of 4096, which is three chunks and therefore
+  exercises walking the B-tree rather than finding a single entry;
+- that all 54 datasets are found, which is what proves the fractal-heap walk is complete.
+
+The GLM layer on top asserts things h5py cannot: that flagged flashes are dropped, that
+every flash is inside GOES-19's field of view from 75.2 W, and that energies come out at a
+plausible physical scale rather than as raw counts.
+
 ## A note on test expectations
 
 Six tests failed on first write during the build, and **all six were wrong

@@ -29,6 +29,7 @@ public partial class MainWindow : Window
     private readonly FutureRadarController _future;
     private readonly PlacefileController _placefiles;
     private readonly RotationTracksController _tracks;
+    private readonly LightningController _lightning;
     private readonly TrayNotifier _tray;
     private readonly PaneManager _panes;
     private readonly Geocoder _geocoder;
@@ -147,6 +148,15 @@ public partial class MainWindow : Window
         _tracks.ErrorRaised += text => Dispatcher.BeginInvoke(() => ReportError(text));
         _tracks.ProgressChanged += value => Dispatcher.BeginInvoke(() => ShowProgress(value));
 
+        _lightning = new LightningController(_mapView);
+        _lightning.GeometryChanged += () => Dispatcher.BeginInvoke(ComposeOverlay);
+        _lightning.StatusChanged += text => Dispatcher.BeginInvoke(() =>
+        {
+            Report(text);
+            LightningNoteText.Text = text;
+        });
+        _lightning.ErrorRaised += text => Dispatcher.BeginInvoke(() => ReportError(text));
+
         _tray = new TrayNotifier();
         _tray.Activated += () => Dispatcher.BeginInvoke(() =>
         {
@@ -208,6 +218,7 @@ public partial class MainWindow : Window
             UpdateAgeIndicator();
             // Storm symbols are sized in screen pixels, so a zoom change means new geometry.
             _storms.NotifyViewChanged();
+            _lightning.NotifyViewChanged();
         };
         _statusTimer.Start();
 
@@ -233,6 +244,7 @@ public partial class MainWindow : Window
             _tray.Dispose();
             _placefiles.Dispose();
             _tracks.Dispose();
+            _lightning.Dispose();
             _future.Dispose();
             _outlooks.Dispose();
             _geocoder.Dispose();
@@ -667,7 +679,7 @@ public partial class MainWindow : Window
         OverlayGeometry?[] sources =
         [
             _outlooks.Geometry, _warnings.Geometry, _placefiles.Geometry,
-            _storms.Geometry, _homeGeometry, _measureGeometry,
+            _storms.Geometry, _lightning.Geometry, _homeGeometry, _measureGeometry,
         ];
         var active = sources.Where(s => s is not null).Cast<OverlayGeometry>().ToArray();
         switch (active.Length)
@@ -1044,6 +1056,21 @@ public partial class MainWindow : Window
         _outlooks.ShowDiscussions = FilterDiscussions.IsChecked == true;
         _outlooks.ShowReports = FilterReports.IsChecked == true;
         await _outlooks.ApplyAsync();
+    }
+
+    private void Lightning_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_lightning is null || FilterLightning is null) return;
+        if (FilterLightning.IsChecked == true)
+        {
+            LightningNoteText.Text = "Fetching…";
+            _lightning.Enable();
+        }
+        else
+        {
+            _lightning.Disable();
+            LightningNoteText.Text = "";
+        }
     }
 
     private void SymbolKeyButton_Click(object sender, RoutedEventArgs e) =>
