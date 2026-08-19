@@ -56,7 +56,7 @@ premium tiers elsewhere and two have no commercial equivalent:
 | Satellite imagery | Expected | **Done** — GOES-East IR tiles |
 | Future radar (nowcast) | Expected | **Done** — HRRR simulated reflectivity, six-hour loop, native GRIB2 |
 | County and state boundaries | Expected | **Partial** — inherited from the basemap, not a controllable layer |
-| Placefile support | Expected | **Done** — full GRLevelX parser, minus icon sheets |
+| Placefile support | Expected | **Done** — full GRLevelX parser, icon sheets included |
 | Shapefile / GeoJSON / KML import | Nice | **Open** |
 | Terrain / topography | Cosmetic | **Open** — mostly a basemap style swap |
 

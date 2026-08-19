@@ -184,7 +184,11 @@ second-order spatial differencing (5.3) on a Lambert grid (3.30) — the hard pa
 one to be careful with. Scale factors are sign-and-magnitude, not two's complement. Fetch
 only the field you need using the `.idx` sidecar and an HTTP range request.
 
-**Placefiles.** Inside an `Object` block, "lat, lon" are **pixel offsets** from the
+**Placefiles.** Icon sheets frequently ship with **no alpha channel** — the IEM wind-barb
+sheet is grey artwork on an opaque black ground — and the convention is that black is the
+transparent colour when there is nothing else to go on. Key it out only when every pixel
+decodes opaque, or you punch holes in a legitimately black icon. Inside an `Object` block,
+"lat, lon" are **pixel offsets** from the
 anchor with +y upward, not degrees. Polygon contours close on a repeated first point and
 the next point starts a new contour. `;` starts a comment except inside quotes. The spec
 at grlevelx.com needs a browser User-Agent — WebFetch gets a 403.
@@ -223,7 +227,7 @@ screen. `--soak` runs the live pipeline headless.
 
 ## Open work
 
-Placefile icon sheets, drawing tools, 3D volume rendering, loops longer than 30 frames.
+Drawing tools, 3D volume rendering, loops longer than 30 frames.
 
 Every gap in `docs/parity.md` is now closed. What is left is the "Nice" and "Cosmetic"
 tier plus the two Partials.

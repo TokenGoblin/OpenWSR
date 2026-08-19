@@ -37,6 +37,16 @@ public sealed class PlacefileController : IDisposable
     private readonly List<LoadedPlacefile> _files = [];
     private double _lastViewWidthNm;
 
+    /// <summary>
+    /// Decoded icon sheets, keyed by resolved URL so two placefiles naming the same sheet
+    /// fetch it once. Decoding happens here rather than in the renderer because imaging is
+    /// WPF's job and OpenWSR.Render has no PNG decoder.
+    /// </summary>
+    private readonly Dictionary<string, MapView.IconSheet> _sheetCache = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Sheets handed to the renderer this rebuild, numbered as the layer sees them.</summary>
+    private readonly Dictionary<int, MapView.IconSheet> _activeSheets = [];
+
     public IReadOnlyList<LoadedPlacefile> Files => _files;
     public OverlayGeometry? Geometry { get; private set; }
     public IReadOnlyList<MapView.MapLabel> Labels { get; private set; } = [];
@@ -117,6 +127,7 @@ public sealed class PlacefileController : IDisposable
             }
 
             file.Document = PlacefileParser.Parse(text);
+            await LoadIconSheetsAsync(file);
             file.LastFetchUtc = DateTime.UtcNow;
             int count = file.Document.Items.Count;
             file.Status = file.Document.UnsupportedStatements.Count > 0
@@ -134,6 +145,94 @@ public sealed class PlacefileController : IDisposable
         }
     }
 
+    /// <summary>
+    /// Fetch and decode every icon sheet a file declares.
+    ///
+    /// A sheet name is usually relative to the placefile's own URL, which is why the
+    /// original source is needed to resolve it. A sheet that fails to load leaves its icons
+    /// drawn as plain markers rather than failing the whole file — one missing PNG should
+    /// not cost you the overlay.
+    /// </summary>
+    private async Task LoadIconSheetsAsync(LoadedPlacefile file)
+    {
+        if (file.Document is not { IconSheets.Count: > 0 } document) return;
+
+        foreach (var sheet in document.IconSheets)
+        {
+            string url = ResolveSheetUrl(file.Source, sheet.Source);
+            if (_sheetCache.ContainsKey(url)) continue;
+
+            try
+            {
+                byte[] bytes = url.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                    ? await _http.GetByteArrayAsync(url)
+                    : await File.ReadAllBytesAsync(url);
+
+                var decoded = DecodeSheet(bytes, sheet.WidthPx, sheet.HeightPx);
+                if (decoded is not null) _sheetCache[url] = decoded;
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Icon sheet failed: {Url}", url);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Sheet names are usually relative to the placefile. Absolute URLs and local paths are
+    /// taken as given.
+    /// </summary>
+    internal static string ResolveSheetUrl(string placefileSource, string sheetName)
+    {
+        if (sheetName.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return sheetName;
+
+        if (placefileSource.StartsWith("http", StringComparison.OrdinalIgnoreCase) &&
+            Uri.TryCreate(new Uri(placefileSource), sheetName, out var absolute))
+            return absolute.ToString();
+
+        var directory = Path.GetDirectoryName(placefileSource);
+        return string.IsNullOrEmpty(directory) ? sheetName : Path.Combine(directory, sheetName);
+    }
+
+    /// <summary>Decode to straight BGRA. WPF handles PNG and GIF, which is what these are.</summary>
+    internal static MapView.IconSheet? DecodeSheet(byte[] bytes, int cellWidth, int cellHeight)
+    {
+        using var stream = new MemoryStream(bytes);
+        var decoder = System.Windows.Media.Imaging.BitmapDecoder.Create(
+            stream,
+            System.Windows.Media.Imaging.BitmapCreateOptions.PreservePixelFormat,
+            System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
+        if (decoder.Frames.Count == 0) return null;
+
+        var frame = new System.Windows.Media.Imaging.FormatConvertedBitmap(
+            decoder.Frames[0], System.Windows.Media.PixelFormats.Bgra32, null, 0);
+        int width = frame.PixelWidth, height = frame.PixelHeight;
+        if (width <= 0 || height <= 0) return null;
+
+        var pixels = new byte[width * height * 4];
+        frame.CopyPixels(pixels, width * 4, 0);
+
+        // Sheets in the wild frequently have no alpha channel at all — the IEM wind-barb
+        // sheet is white-on-black RGB — and the GRLevelX convention is that black is the
+        // transparent colour when there is nothing else to go on. Without this the icons
+        // draw as solid black tiles with the artwork buried inside them.
+        bool opaqueThroughout = true;
+        for (int i = 3; i < pixels.Length; i += 4)
+        {
+            if (pixels[i] == 255) continue;
+            opaqueThroughout = false;
+            break;
+        }
+        if (opaqueThroughout)
+        {
+            for (int i = 0; i < pixels.Length; i += 4)
+                if (pixels[i] == 0 && pixels[i + 1] == 0 && pixels[i + 2] == 0)
+                    pixels[i + 3] = 0;
+        }
+
+        return new MapView.IconSheet(pixels, width, height, cellWidth, cellHeight);
+    }
+
     private double ViewWidthNm()
     {
         var camera = _mapView.Camera.Snapshot();
@@ -149,6 +248,8 @@ public sealed class PlacefileController : IDisposable
 
         var geometry = new OverlayGeometry();
         var labels = new List<MapView.MapLabel>();
+        var icons = new List<MapView.MapIcon>();
+        _activeSheets.Clear();
         bool any = false;
 
         foreach (var file in _files.Where(f => f.Enabled && f.Document is not null))
@@ -175,10 +276,35 @@ public sealed class PlacefileController : IDisposable
                     {
                         var point = ToMercatorWithOffset(
                             icon.LatDeg, icon.LonDeg, icon.OffsetXPx, icon.OffsetYPx, metresPerPixel);
-                        // Icon sheets are not fetched yet, so each icon shows as a marker.
-                        double r = 5 * metresPerPixel;
-                        geometry.Lines.Add((point.X - r, point.Y, point.X + r, point.Y, colour, 2f));
-                        geometry.Lines.Add((point.X, point.Y - r, point.X, point.Y + r, colour, 2f));
+
+                        var declared = file.Document!.IconSheets
+                            .FirstOrDefault(sheet => sheet.Number == icon.FileNumber);
+                        MapView.IconSheet? loaded = declared is null
+                            ? null
+                            : _sheetCache.GetValueOrDefault(ResolveSheetUrl(file.Source, declared.Source));
+
+                        if (declared is not null && loaded is not null)
+                        {
+                            // Sheets are renumbered per rebuild: a placefile's own numbering
+                            // is local to that file, and several files may all call theirs 1.
+                            int id = _activeSheets.FirstOrDefault(kv => ReferenceEquals(kv.Value, loaded)).Key;
+                            if (id == 0 || !_activeSheets.ContainsKey(id))
+                            {
+                                id = _activeSheets.Count + 1;
+                                _activeSheets[id] = loaded;
+                            }
+                            icons.Add(new MapView.MapIcon(
+                                point.X, point.Y, id, icon.IconNumber, icon.AngleDeg,
+                                declared.HotXPx / (double)declared.WidthPx,
+                                declared.HotYPx / (double)declared.HeightPx));
+                        }
+                        else
+                        {
+                            // No sheet: a plain marker still says something is here.
+                            double r = 5 * metresPerPixel;
+                            geometry.Lines.Add((point.X - r, point.Y, point.X + r, point.Y, colour, 2f));
+                            geometry.Lines.Add((point.X, point.Y - r, point.X, point.Y + r, colour, 2f));
+                        }
                         break;
                     }
                     case PlacefileLine line:
@@ -217,6 +343,12 @@ public sealed class PlacefileController : IDisposable
 
         Geometry = any ? geometry : null;
         Labels = any ? labels : [];
+
+        // Icons go straight to the renderer rather than through the composed overlay: they
+        // are textured and rotatable, which the triangle-and-line geometry cannot carry.
+        _mapView.SetIcons(
+            new Dictionary<int, MapView.IconSheet>(_activeSheets),
+            any ? icons : []);
     }
 
     /// <summary>

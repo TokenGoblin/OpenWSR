@@ -302,10 +302,30 @@ for (int i = 0; i < line.Length; i++) {
 GR appends `?lat=&lon=&version=` when fetching a placefile URL, and many server-generated
 placefiles vary their output based on them. OpenWSR does the same.
 
+### Icon sheets
+
+`IconFile: n, cellW, cellH, hotX, hotY, "source"` declares a sprite sheet. Cells run left
+to right then top to bottom, numbered **from one**, and `Icon:` names a cell along with a
+bearing to turn it to. The hot spot is the pixel that lands on the coordinate — a pin's
+tip, not the cell's centre — measured from the **bottom-left** of the cell, which is why
+`(2,31)` on a 18x32 cell means "near the top-left corner" on screen.
+
+The trap is transparency. **A sheet often has no alpha channel at all.** The IEM wind-barb
+sheet (`mesonet.agron.iastate.edu/request/grx/windbarbs.png`) is plain RGB, 128x128, every
+pixel opaque: grey and white barbs painted on a black ground. Drawn literally it is a grid
+of black tiles with the artwork buried inside, which is exactly what it looks like on the
+map. The convention these sheets are authored against is that **black is the transparent
+colour** when the image carries no alpha of its own. So: if every pixel decodes opaque,
+key out pure black; if the image has a real alpha channel, trust it and leave it alone.
+Guessing the other way round would punch holes in a legitimately black icon.
+
+The sheet name is resolved **relative to the placefile's URL**, so the file's own source
+has to be kept around to load it.
+
 ### Not implemented
 
 `Triangles` and `Image` blocks are parsed and skipped with a report rather than failing
-the file. Icon *sheets* are not downloaded, so `Icon` statements draw as generic markers.
+the file.
 
 ---
 

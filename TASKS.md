@@ -561,3 +561,25 @@ Azimuth Display idea, and it turns one number per gate into a wind.
 committed KTLX 2013-05-20 20:16Z volume: 40 levels to 12 km, surface flow 134° at 17 kt
 with 238-253° at 45-73 kt aloft — about 120° of directional shear between the inflow and
 the storm top, which is the hodograph that made that day what it was.
+
+## Placefile icon sheets
+
+- [x] `IconFile:` parsed into `PlacefileDocument.IconSheets`, resolved relative to the
+      placefile's own URL, fetched and cached by resolved URL so two files naming the same
+      sheet fetch it once
+- [x] `QuadRenderer` grew a rotated textured quad: the shader takes a clip-space pivot and
+      a cos/sin pair, with cos=1/sin=0 as the identity so every existing caller is unchanged
+      and pays nothing. Aspect is passed in so a rotation stays square on screen
+- [x] `MapView` icon layer: fixed screen size, pinned by the sheet's hot spot rather than
+      the cell's centre, per-sheet texture cache invalidated by reference
+- [x] **Black is the transparent colour when a sheet has no alpha.** The IEM wind-barb
+      sheet is plain opaque RGB, grey barbs on black; drawn literally it is a grid of black
+      tiles. Key out black only when every pixel decodes opaque — a sheet with real alpha is
+      trusted, or a legitimately black icon would be punched through
+- [x] A sheet that fails to load leaves its icons as plain markers rather than failing the
+      whole file; one missing PNG should not cost you the overlay
+- [x] 11 tests, including both sides of the alpha rule
+
+**Gate:** [PASSED] 240/240 tests. Verified live against the IEM ASOS placefile at KDMX:
+full station models across Iowa — temperature and dewpoint pairs with wind barb staffs
+turned to each station's own bearing, which is the `Icon: 0,0,70,1,1` rotation working.

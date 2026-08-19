@@ -120,6 +120,35 @@ public sealed class MapView : IDisposable
     /// <summary>Replace the label layer (storm IDs, dBZ). Swapped atomically.</summary>
     public void SetLabels(IReadOnlyList<MapLabel> labels) => _labels = labels;
 
+    /// <summary>
+    /// A decoded icon sheet: one image holding a grid of icons. Supplied already decoded
+    /// because imaging belongs to the app layer — this assembly has no PNG decoder and
+    /// should not grow one.
+    /// </summary>
+    public sealed record IconSheet(byte[] Bgra, int Width, int Height, int CellWidth, int CellHeight);
+
+    /// <summary>One icon to draw: which sheet, which cell, where, and turned how far.</summary>
+    public readonly record struct MapIcon(
+        double MercX, double MercY, int Sheet, int Cell,
+        double AngleDeg, double HotXFraction, double HotYFraction);
+
+    private IReadOnlyDictionary<int, IconSheet> _iconSheets =
+        new Dictionary<int, IconSheet>();
+    private IReadOnlyList<MapIcon> _icons = [];
+    private readonly Dictionary<int, (Vortice.Direct3D11.ID3D11Texture2D Texture,
+        Vortice.Direct3D11.ID3D11ShaderResourceView View, IconSheet Source)> _iconTextures = [];
+
+    /// <summary>
+    /// Replace the icon layer and the sheets it draws from. Both are swapped together
+    /// because an icon indexes into a sheet, and a half-updated pair draws the wrong
+    /// picture rather than none.
+    /// </summary>
+    public void SetIcons(IReadOnlyDictionary<int, IconSheet> sheets, IReadOnlyList<MapIcon> icons)
+    {
+        _iconSheets = sheets;
+        _icons = icons;
+    }
+
     /// <summary>A pre-rendered BGRA image pinned to a Mercator rectangle.</summary>
     public sealed record ImageOverlay(
         byte[] Bgra, int Width, int Height,
@@ -516,6 +545,7 @@ public sealed class MapView : IDisposable
 
             quads.Begin();
             DrawMarkers(cam, quads, device);
+            DrawIcons(cam, quads, device);
             DrawLabels(cam, quads, device);
             DrawLegend(cam, quads, device);
 
@@ -537,6 +567,12 @@ public sealed class MapView : IDisposable
         _glyphView = null;
         _glyphTexture?.Dispose();
         _glyphTexture = null;
+        foreach (var (texture, view, _) in _iconTextures.Values)
+        {
+            view.Dispose();
+            texture.Dispose();
+        }
+        _iconTextures.Clear();
         _legendView?.Dispose();
         _legendView = null;
         _legendTexture?.Dispose();
@@ -685,6 +721,89 @@ public sealed class MapView : IDisposable
                 }
                 x += glyphWidthPx * pxToClipX;
             }
+        }
+    }
+
+    /// <summary>
+    /// Draw the placefile icon layer.
+    ///
+    /// Icons are a fixed size on screen and can be rotated, which the wedge-and-line
+    /// overlay path cannot express — so they get their own pass, textured from the sheet
+    /// the placefile named. The hot spot is what sits on the coordinate: a pin's tip
+    /// rather than its middle.
+    /// </summary>
+    private unsafe void DrawIcons(CameraSnapshot cam, QuadRenderer quads, DeviceResources device)
+    {
+        var icons = _icons;
+        var sheets = _iconSheets;
+        if (icons.Count == 0 || sheets.Count == 0) return;
+
+        // Drop textures for sheets that are gone or have been replaced.
+        foreach (int id in _iconTextures.Keys.ToList())
+        {
+            if (sheets.TryGetValue(id, out var current) &&
+                ReferenceEquals(_iconTextures[id].Source, current)) continue;
+            var (texture, view, _) = _iconTextures[id];
+            view.Dispose();
+            texture.Dispose();
+            _iconTextures.Remove(id);
+        }
+
+        double halfW = cam.ViewportWidth * cam.MetersPerPixel / 2.0;
+        double halfH = cam.ViewportHeight * cam.MetersPerPixel / 2.0;
+        float pxToClipX = 2f / cam.ViewportWidth;
+        float pxToClipY = 2f / cam.ViewportHeight;
+
+        foreach (var icon in icons)
+        {
+            if (!sheets.TryGetValue(icon.Sheet, out var sheet)) continue;
+
+            float anchorX = (float)((icon.MercX - cam.CenterX) / halfW);
+            float anchorY = (float)((icon.MercY - cam.CenterY) / halfH);
+            if (anchorX < -1.2f || anchorX > 1.2f || anchorY < -1.2f || anchorY > 1.2f) continue;
+
+            if (!_iconTextures.TryGetValue(icon.Sheet, out var resource))
+            {
+                fixed (byte* p = sheet.Bgra)
+                {
+                    var desc = new Vortice.Direct3D11.Texture2DDescription
+                    {
+                        Width = (uint)sheet.Width,
+                        Height = (uint)sheet.Height,
+                        MipLevels = 1,
+                        ArraySize = 1,
+                        Format = Vortice.DXGI.Format.B8G8R8A8_UNorm,
+                        SampleDescription = new Vortice.DXGI.SampleDescription(1, 0),
+                        Usage = Vortice.Direct3D11.ResourceUsage.Immutable,
+                        BindFlags = Vortice.Direct3D11.BindFlags.ShaderResource,
+                    };
+                    var texture = device.Device.CreateTexture2D(desc,
+                        [new Vortice.Direct3D11.SubresourceData((IntPtr)p, (uint)(sheet.Width * 4))]);
+                    resource = (texture, device.Device.CreateShaderResourceView(texture), sheet);
+                }
+                _iconTextures[icon.Sheet] = resource;
+            }
+
+            // Cells run left to right, then top to bottom, numbered from one.
+            int columns = Math.Max(1, sheet.Width / sheet.CellWidth);
+            int rows = Math.Max(1, sheet.Height / sheet.CellHeight);
+            int index = Math.Clamp(icon.Cell - 1, 0, columns * rows - 1);
+            int cellX = index % columns, cellY = index / columns;
+
+            float u0 = (float)(cellX * sheet.CellWidth) / sheet.Width;
+            float v0 = (float)(cellY * sheet.CellHeight) / sheet.Height;
+            float u1 = (float)((cellX + 1) * sheet.CellWidth) / sheet.Width;
+            float v1 = (float)((cellY + 1) * sheet.CellHeight) / sheet.Height;
+
+            float width = sheet.CellWidth * pxToClipX;
+            float height = sheet.CellHeight * pxToClipY;
+            float left = -(float)icon.HotXFraction * width;
+            float top = (float)icon.HotYFraction * height;
+
+            quads.DrawTexturedRotated(
+                anchorX, anchorY, left, top, width, height,
+                (u0, v0, u1, v1), resource.View, (float)(icon.AngleDeg * Math.PI / 180.0),
+                cam.ViewportWidth / (float)cam.ViewportHeight);
         }
     }
 

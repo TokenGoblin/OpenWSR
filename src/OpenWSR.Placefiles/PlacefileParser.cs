@@ -20,6 +20,7 @@ public static class PlacefileParser
         TimeSpan? refresh = null;
         var items = new List<PlacefileItem>();
         var fonts = new List<PlacefileFont>();
+        var iconSheets = new List<PlacefileIconSheet>();
         var unsupported = new List<string>();
 
         var color = new PlaceColor(255, 255, 255);
@@ -153,13 +154,29 @@ public static class PlacefileParser
                     if (!unsupported.Contains(keyword)) unsupported.Add(keyword);
                     break;
                 case "iconfile":
-                    // Parsed for completeness; icon sheets are not downloaded yet.
-                    if (!unsupported.Contains("icon images")) unsupported.Add("icon images");
+                {
+                    // IconFile: number, cellWidth, cellHeight, hotX, hotY, "file"
+                    // The file may be a bare name relative to the placefile, or a full URL;
+                    // resolving it is the loader's job, not the parser's.
+                    var parts = SplitRespectingQuotes(rest);
+                    if (parts.Count >= 6 &&
+                        int.TryParse(parts[0].Trim(), out int number) &&
+                        int.TryParse(parts[1].Trim(), out int cellWidth) &&
+                        int.TryParse(parts[2].Trim(), out int cellHeight) &&
+                        int.TryParse(parts[3].Trim(), out int hotX) &&
+                        int.TryParse(parts[4].Trim(), out int hotY) &&
+                        cellWidth > 0 && cellHeight > 0)
+                    {
+                        iconSheets.Add(new PlacefileIconSheet(
+                            number, cellWidth, cellHeight, hotX, hotY,
+                            parts[5].Trim().Trim('"')));
+                    }
                     break;
+                }
             }
         }
 
-        return new PlacefileDocument(title, refresh, items, fonts, unsupported);
+        return new PlacefileDocument(title, refresh, items, fonts, iconSheets, unsupported);
     }
 
     private static string StripComment(string line)

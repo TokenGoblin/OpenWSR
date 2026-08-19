@@ -42,9 +42,21 @@ public sealed record PlacefileIcon(
 
 public sealed record PlacefileFont(int Number, int Pixels, int Flags, string Face);
 
+/// <summary>
+/// An <c>IconFile</c> declaration: one image holding a grid of icons, and the geometry
+/// needed to cut it up. Cells are numbered from one, left to right then top to bottom.
+///
+/// The hot spot is the pixel inside the cell that sits on the coordinate — the tip of a
+/// pin rather than its middle. Half the width and height means centred, which is what most
+/// community files use.
+/// </summary>
+public sealed record PlacefileIconSheet(
+    int Number, int WidthPx, int HeightPx, int HotXPx, int HotYPx, string Source);
+
 public sealed record PlacefileDocument(
     string? Title,
     TimeSpan? Refresh,
     IReadOnlyList<PlacefileItem> Items,
     IReadOnlyList<PlacefileFont> Fonts,
+    IReadOnlyList<PlacefileIconSheet> IconSheets,
     IReadOnlyList<string> UnsupportedStatements);
