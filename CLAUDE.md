@@ -24,7 +24,7 @@ Scratch directories are session-scoped and get lost.
 
 ```
 dotnet build OpenWSR.slnx                    # NOTE: .slnx, not .sln
-dotnet test OpenWSR.slnx                     # 160 tests
+dotnet test OpenWSR.slnx                     # 168 tests
 dotnet run --project src/OpenWSR.App
 dotnet publish src/OpenWSR.App -c Release    # single-file self-contained exe
 ```
@@ -148,6 +148,11 @@ correction must never cross a hairline region boundary, because corrections chai
 stacked guesses turn −22 m/s into +82 m/s. `MinBoundaryGates` carries the measurements
 behind its value — read them before touching it.
 
+**Two image-overlay slots.** `MapView.SetImageOverlay` takes an `OverlaySlot`: `Field`
+draws under the radar sweep (model output, mosaics) and `Analysis` draws over it (derived
+products read *against* the echo). They are independent, so the HRRR forecast and a
+rotation-track swath no longer fight over one slot.
+
 **Derived products.** `Moment.AzimuthalShear` sits in the moment enum so the product bar
 and palettes treat it uniformly, but the decoder never emits it — `RadarDisplayController`
 materialises it from velocity on demand and caches per cut. Add further derived products at
@@ -199,10 +204,13 @@ screen. `--soak` runs the live pipeline headless.
 ## Open work
 
 Lightning (GOES GLM, needs NetCDF), MRMS native rendering (reader is done and
-golden-tested; only the draw path is missing), rotation *tracks* (azimuthal shear exists as
-a product; accumulating it into a time swath does not), VWP panel, placefile icon sheets,
-drawing tools, 3D volume rendering, independent site per pane, loops longer than 30
-frames.
+golden-tested; only the draw path is missing), VWP panel, placefile icon sheets, drawing
+tools, 3D volume rendering, independent site per pane, loops longer than 30 frames.
+
+Rotation tracks work but carry visible background speckle: accumulating a maximum over a
+dozen scans is unforgiving, and the low Doppler cuts have no correlation coefficient to
+filter marginal gates on. A 3x3 smoothing pass before accumulation cut the peak from 0.18
+to 0.12 1/s; a real quality mask would do better.
 
 Velocity dealiasing corrects about two thirds as many gates as Py-ART. A signal-quality
 gatefilter will **not** close that gap — measured on the Moore volume, the corrected gates

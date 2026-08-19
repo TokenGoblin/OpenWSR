@@ -125,16 +125,37 @@ public sealed class MapView : IDisposable
         byte[] Bgra, int Width, int Height,
         double MinX, double MinY, double MaxX, double MaxY, float Opacity);
 
-    private ImageOverlay? _imageOverlay;
-    private ImageOverlay? _uploadedImage;
-    private Vortice.Direct3D11.ID3D11Texture2D? _imageTexture;
-    private Vortice.Direct3D11.ID3D11ShaderResourceView? _imageView;
+    /// <summary>
+    /// Which pass a georeferenced raster is drawn in. The distinction is z-order: a field
+    /// like model output stands in for the radar and belongs under it, while an analysis
+    /// product is read against the radar and belongs over it.
+    /// </summary>
+    public enum OverlaySlot
+    {
+        /// <summary>Under the radar sweep — model fields, mosaics.</summary>
+        Field = 0,
+        /// <summary>Over the radar sweep — derived products read against the echo.</summary>
+        Analysis = 1,
+    }
+
+    private const int OverlaySlotCount = 2;
+    private readonly ImageOverlay?[] _imageOverlays = new ImageOverlay?[OverlaySlotCount];
+    private readonly ImageOverlay?[] _uploadedImages = new ImageOverlay?[OverlaySlotCount];
+    private readonly Vortice.Direct3D11.ID3D11Texture2D?[] _imageTextures =
+        new Vortice.Direct3D11.ID3D11Texture2D?[OverlaySlotCount];
+    private readonly Vortice.Direct3D11.ID3D11ShaderResourceView?[] _imageViews =
+        new Vortice.Direct3D11.ID3D11ShaderResourceView?[OverlaySlotCount];
 
     /// <summary>
     /// Show a georeferenced raster over the basemap — model output or any gridded field
     /// already resampled into Web Mercator. Null clears it.
     /// </summary>
-    public void SetImageOverlay(ImageOverlay? overlay) => _imageOverlay = overlay;
+    public void SetImageOverlay(ImageOverlay? overlay) =>
+        SetImageOverlay(OverlaySlot.Field, overlay);
+
+    /// <summary>Show a georeferenced raster in one of the two z-order slots. Null clears it.</summary>
+    public void SetImageOverlay(OverlaySlot slot, ImageOverlay? overlay) =>
+        _imageOverlays[(int)slot] = overlay;
 
     private readonly Lock _captureLock = new();
     private (byte[] Bgra, int Width, int Height)? _capture;
@@ -459,7 +480,7 @@ public sealed class MapView : IDisposable
             // The mosaic is only published to zoom 12; above that we stretch its deepest tile.
             if (_mosaicEnabled)
                 DrawTiles(cam, mosaicTextures, quads, _mosaicFetcher, _mosaicOpacity, maxZoom: 12);
-            DrawImageOverlay(cam, quads, device);
+            DrawImageOverlay(OverlaySlot.Field, cam, quads, device);
 
             lock (_sweepLock)
             {
@@ -479,6 +500,11 @@ public sealed class MapView : IDisposable
             radar.Smoothing = _radarSmoothing;
             radar.Draw(cam);
             LastSweepUploadMs = radar.LastUploadMs;
+
+            // Analysis rasters sit above the sweep: they are read against the echo, not
+            // instead of it.
+            quads.Begin();
+            DrawImageOverlay(OverlaySlot.Analysis, cam, quads, device);
 
             OverlayGeometry? overlayGeometry;
             lock (_overlayLock)
@@ -516,11 +542,14 @@ public sealed class MapView : IDisposable
         _legendTexture?.Dispose();
         _legendTexture = null;
         _uploadedLegend = null;
-        _imageView?.Dispose();
-        _imageView = null;
-        _imageTexture?.Dispose();
-        _imageTexture = null;
-        _uploadedImage = null;
+        for (int slot = 0; slot < OverlaySlotCount; slot++)
+        {
+            _imageViews[slot]?.Dispose();
+            _imageViews[slot] = null;
+            _imageTextures[slot]?.Dispose();
+            _imageTextures[slot] = null;
+            _uploadedImages[slot] = null;
+        }
     }
 
     private void DrawTiles(
@@ -565,24 +594,26 @@ public sealed class MapView : IDisposable
     private Vortice.Direct3D11.ID3D11Texture2D? _legendTexture;
     private Vortice.Direct3D11.ID3D11ShaderResourceView? _legendView;
 
-    private unsafe void DrawImageOverlay(CameraSnapshot cam, QuadRenderer quads, DeviceResources device)
+    private unsafe void DrawImageOverlay(
+        OverlaySlot slot, CameraSnapshot cam, QuadRenderer quads, DeviceResources device)
     {
-        var overlay = _imageOverlay;
+        int i = (int)slot;
+        var overlay = _imageOverlays[i];
         if (overlay is null)
         {
-            if (_uploadedImage is not null)
+            if (_uploadedImages[i] is not null)
             {
-                _imageView?.Dispose(); _imageView = null;
-                _imageTexture?.Dispose(); _imageTexture = null;
-                _uploadedImage = null;
+                _imageViews[i]?.Dispose(); _imageViews[i] = null;
+                _imageTextures[i]?.Dispose(); _imageTextures[i] = null;
+                _uploadedImages[i] = null;
             }
             return;
         }
 
-        if (!ReferenceEquals(_uploadedImage, overlay))
+        if (!ReferenceEquals(_uploadedImages[i], overlay))
         {
-            _imageView?.Dispose();
-            _imageTexture?.Dispose();
+            _imageViews[i]?.Dispose();
+            _imageTextures[i]?.Dispose();
             fixed (byte* p = overlay.Bgra)
             {
                 var desc = new Vortice.Direct3D11.Texture2DDescription
@@ -596,15 +627,15 @@ public sealed class MapView : IDisposable
                     Usage = Vortice.Direct3D11.ResourceUsage.Immutable,
                     BindFlags = Vortice.Direct3D11.BindFlags.ShaderResource,
                 };
-                _imageTexture = device.Device.CreateTexture2D(desc,
+                _imageTextures[i] = device.Device.CreateTexture2D(desc,
                     [new Vortice.Direct3D11.SubresourceData((IntPtr)p, (uint)(overlay.Width * 4))]);
-                _imageView = device.Device.CreateShaderResourceView(_imageTexture);
+                _imageViews[i] = device.Device.CreateShaderResourceView(_imageTextures[i]);
             }
-            _uploadedImage = overlay;
+            _uploadedImages[i] = overlay;
         }
 
         var clip = cam.ToClip(overlay.MinX, overlay.MinY, overlay.MaxX, overlay.MaxY);
-        quads.DrawTextured(clip, (0, 0, 1, 1), _imageView!, overlay.Opacity);
+        quads.DrawTextured(clip, (0, 0, 1, 1), _imageViews[i]!, overlay.Opacity);
     }
 
     private unsafe void EnsureGlyphTexture(DeviceResources device)

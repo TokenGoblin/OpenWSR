@@ -380,3 +380,48 @@ was at 20:17Z. The product locates it without being told where to look.
 
 Rotation *tracks* - accumulating shear across a volume's scans into a swath - are the
 natural follow-on and are not done.
+
+
+## Rotation tracks (2026-08-18)
+
+A single scan says where rotation is now. A damage survey, or the question "did that
+couplet hold together or fall apart", needs where it has *been* — and a mesocyclone that
+tracks for fifty kilometres draws a line no individual scan shows.
+
+- [x] `RotationTracks.Accumulate`: signed maximum of azimuthal shear per cell across a run
+      of scans, on a Mercator grid. Signed rather than absolute, so a strong anticyclonic
+      couplet cannot paint what looks like a tornado track
+- [x] Reverse mapping — walk the output grid and project each cell back into polar space —
+      because a forward mapping leaves holes wherever gates spread wider than a cell. Per
+      sweep, an azimuth lookup table replaces what would otherwise be a linear radial
+      search inside a million-cell loop
+- [x] Each scan is smoothed 3x3 before accumulation. Taking a maximum over a dozen scans is
+      unforgiving: one spurious gate in one scan survives into the swath forever. On the
+      Moore volume this took the peak from 0.1796 to 0.1225 1/s
+- [x] `MapView.OverlaySlot` — image overlays gained a second slot. `Field` draws under the
+      radar (model output, mosaics), `Analysis` over it (products read against the echo),
+      so the HRRR forecast and a rotation swath no longer fight over one slot
+- [x] `RotationTracksController`: fetch, decode, unfold, shear and accumulate off the UI
+      thread, with progress; opacity control and a one-line summary
+- [x] The swath ends where the timeline is, not at midnight — the useful hour is the one
+      leading up to whatever you are looking at
+- [x] 8 tests: keeps the strongest value rather than the latest, a moving couplet draws a
+      line, the swath geolocates (a feature due east appears due east), anticyclonic
+      rotation does not masquerade as a track, and the corners beyond radar range stay
+      unsampled rather than zero
+
+Fixed along the way: **changing the radar site never moved the camera** except in live
+mode and on the very first archive load. Picking a new site later left the map over the old
+one while the data quietly changed underneath — which is how this was found, with a Moore
+tornado swath rendering correctly off-screen in Utah.
+
+**Gate:** [PASSED] 168/168 tests; build clean in Debug and Release. Verified live on KTLX
+2013-05-20, scrubbed to 20:16:43Z: a swath over 19:30-20:17Z draws a concentrated band of
+strong cyclonic rotation running west-southwest from the radar through the
+Newcastle-Moore corridor — the EF5's path.
+
+### Known limitation
+
+Visible background speckle. Accumulating a maximum amplifies outliers, and the low Doppler
+cuts of VCP 12/212 carry no correlation coefficient to filter marginal gates on. Smoothing
+helps; a real quality mask would help more.

@@ -73,6 +73,17 @@ Supplemental scans repeat a low elevation mid-volume. Sweep assembly must key on
 (elevation number, azimuth) and tolerate the same nominal elevation appearing more than
 once in a volume, otherwise supplemental cuts overwrite the base cut.
 
+### Rotation tracks accumulate a maximum, and that is unforgiving
+
+The swath keeps the strongest shear seen at each point, which is what makes it a track — a
+cell that rotated hard once holds that value as the storm moves on. It also means one
+spurious gate in one scan survives into the result forever, so each scan is smoothed 3x3
+before accumulation. On the Moore volume that alone took the peak from 0.18 to 0.12 1/s.
+
+Signed maximum, not absolute: anticyclonic rotation is real but is a different question,
+and folding it in by magnitude would let a strong anticyclonic couplet paint what looks
+like a tornado track.
+
 ### Azimuthal shear is derived, not decoded
 
 Nothing in Message 31 carries it. `Moment.AzimuthalShear` exists so the product bar and the

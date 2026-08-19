@@ -283,7 +283,32 @@
                             <Slider x:Name="SatelliteOpacitySlider" AutomationProperties.Name="Satellite opacity" Minimum="0" Maximum="100" Value="60"
                                     Margin="18,0,0,4" ValueChanged="SatelliteOpacity_Changed" />
 
-                            <CheckBox x:Name="FilterSites" Content="Radar sites" IsChecked="True"
+                            <Expander Header="ROTATION TRACKS" Style="{StaticResource PanelSection}" IsExpanded="False">
+                                <StackPanel>
+                                    <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource TextDim}"
+                                               Text="The strongest rotation seen at each point over the last hour of the loaded archive day — where a couplet has been, not just where it is now." />
+                                    <Grid Margin="0,6,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Button x:Name="TracksBuildButton" Content="Build swath"
+                                                AutomationProperties.Name="Build rotation tracks"
+                                                Click="TracksBuild_Click" Margin="0,0,4,0" />
+                                        <Button x:Name="TracksClearButton" Grid.Column="1" Content="Clear"
+                                                AutomationProperties.Name="Clear rotation tracks"
+                                                IsEnabled="False" Click="TracksClear_Click" />
+                                    </Grid>
+                                    <Slider x:Name="TracksOpacitySlider" AutomationProperties.Name="Rotation track opacity"
+                                            Minimum="0" Maximum="100" Value="85" Margin="0,4,0,0"
+                                            ValueChanged="TracksOpacity_Changed" />
+                                    <TextBlock x:Name="TracksStatusText" FontSize="10.5" FontStyle="Italic"
+                                               TextWrapping="Wrap" Foreground="{StaticResource TextDim}"
+                                               Margin="0,2,0,0" Text="Archive mode only." />
+                                </StackPanel>
+                            </Expander>
+
+                            <CheckBox x:Name="FilterSites" AutomationProperties.Name="Radar sites" Content="Radar sites" IsChecked="True"
                                       ToolTip="All 210 WSR-88D locations — hidden at national zoom, labelled up close"
                                       Checked="SiteMarkers_Changed" Unchecked="SiteMarkers_Changed" />
 

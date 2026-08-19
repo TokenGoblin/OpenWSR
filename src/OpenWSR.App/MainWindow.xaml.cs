@@ -28,6 +28,7 @@ public partial class MainWindow : Window
     private readonly OutlookOverlayController _outlooks;
     private readonly FutureRadarController _future;
     private readonly PlacefileController _placefiles;
+    private readonly RotationTracksController _tracks;
     private readonly TrayNotifier _tray;
     private readonly PaneManager _panes;
     private readonly Geocoder _geocoder;
@@ -137,6 +138,15 @@ public partial class MainWindow : Window
                 b.IsEnabled = true;
         });
 
+        _tracks = new RotationTracksController(_mapView);
+        _tracks.StatusChanged += text => Dispatcher.BeginInvoke(() =>
+        {
+            Report(text);
+            TracksStatusText.Text = text;
+        });
+        _tracks.ErrorRaised += text => Dispatcher.BeginInvoke(() => ReportError(text));
+        _tracks.ProgressChanged += value => Dispatcher.BeginInvoke(() => ShowProgress(value));
+
         _tray = new TrayNotifier();
         _tray.Activated += () => Dispatcher.BeginInvoke(() =>
         {
@@ -222,6 +232,7 @@ public partial class MainWindow : Window
             _statusTimer.Stop();
             _tray.Dispose();
             _placefiles.Dispose();
+            _tracks.Dispose();
             _future.Dispose();
             _outlooks.Dispose();
             _geocoder.Dispose();
@@ -600,6 +611,11 @@ public partial class MainWindow : Window
         if (SiteCombo.SelectedItem is not RadarSite site) return;
         _mapView.SetSelectedMarker(site.LatDeg, site.LonDeg);
         if (!IsLoaded) return;
+
+        // Follow the selection. Only live mode used to move the camera, and the archive
+        // path only on the very first load — so picking a new site later left the map
+        // sitting over the old one while the data quietly changed underneath.
+        _mapView.Camera.MoveTo(site.LatDeg, site.LonDeg, 250);
 
         if (_vm.IsLive)
         {
@@ -1032,6 +1048,39 @@ public partial class MainWindow : Window
 
     private void SymbolKeyButton_Click(object sender, RoutedEventArgs e) =>
         InfoWindow.ShowSymbolKey(this);
+
+    // ---- rotation tracks ----
+
+    private async void TracksBuild_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_vm.IsArchive)
+        {
+            ReportError("Rotation tracks accumulate archived scans — switch to ARCHIVE and load a day.");
+            return;
+        }
+        TracksBuildButton.IsEnabled = false;
+        try
+        {
+            await _tracks.BuildAsync(_playback.DayVolumes, (int)TimeSlider.Value);
+            TracksClearButton.IsEnabled = _tracks.IsLoaded;
+        }
+        finally
+        {
+            TracksBuildButton.IsEnabled = true;
+        }
+    }
+
+    private void TracksClear_Click(object sender, RoutedEventArgs e)
+    {
+        _tracks.Clear();
+        TracksClearButton.IsEnabled = false;
+        TracksStatusText.Text = "Cleared.";
+    }
+
+    private void TracksOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_tracks is not null) _tracks.Opacity = (float)(e.NewValue / 100.0);
+    }
 
     // ---- vertical cross-section ----
 

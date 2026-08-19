@@ -39,6 +39,9 @@ No account, no API key, no subscription. Everything it reads is public data.
 - **Azimuthal shear** — rotation as a number rather than a judgement call, computed from
   the unfolded velocity field. A uniform wind has no azimuthal gradient, so differentiating
   across the beam removes both the background flow and the storm's own translation.
+- **Rotation tracks** — the strongest rotation seen at each point over the hour leading up
+  to wherever you are in the timeline. A single scan says where rotation is; a swath says
+  where it has been, which is the question a damage survey asks.
 
 **National context**
 
