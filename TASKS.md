@@ -504,3 +504,27 @@ Captured at national scale once the workstation was unlocked —
 `docs/screenshots/mrms-native.jpg`, a seamless CONUS composite three minutes old with no
 radar-by-radar seams. (The first attempt failed because the session locked partway
 through, and a locked session blocks synthetic input and window capture.)
+
+
+## Independent site per pane (2026-08-19)
+
+The last "Expected"-severity gap in `docs/parity.md`: panes shared one volume, so a split
+view could compare products but never places.
+
+- [x] `PaneFeed`: a pane's own data source. Live mode runs its own `LiveFeed`; archive mode
+      lists that site's day and shows the scan **nearest** the primary's time, because
+      radars are not synchronised with each other. Supporting both matters — a pinned pane
+      that went blank the moment you scrubbed would be worse than not offering the option
+- [x] A header strip per pane with a site selector ("Follow primary" or any WSR-88D) and a
+      live readout of what that pane is showing. The strip is WPF *above* the D3D child
+      window, never over it
+- [x] **Pinning moves the pane's camera to the site and drops it from camera linking.**
+      Found by testing: without this the link immediately dragged the pane back, so it
+      showed Oklahoma's data over Utah
+- [x] Pane state — including the camera-link snapshot — moved onto the `Pane` object.
+      Positional arrays were already the cause of C-08, and filtering pinned panes out of
+      the link would have reintroduced exactly that bug
+
+**Gate:** [PASSED] 210/210 tests; build clean in Debug and Release. Verified live with two
+panes: KMTX reflectivity over Utah beside KTLX velocity over Oklahoma, each on its own
+feed, each with its own scan time — then unpinned and watched the pane rejoin the primary.

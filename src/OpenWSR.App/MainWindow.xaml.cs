@@ -81,9 +81,14 @@ public partial class MainWindow : Window
         PreviewKeyDown += Window_PreviewKeyDown;
 
         _panes = new PaneManager(PaneGrid, _mapView, _radar, MapHost, provider);
+        _panes.StatusChanged += text => Dispatcher.BeginInvoke(() => Report(text));
 
         _playback = new ArchivePlaybackController(_mapView, _radar);
-        _playback.VolumeLoaded += volume => _panes.ShowVolume(volume);
+        _playback.VolumeLoaded += volume =>
+        {
+            _panes.ShowVolume(volume);
+            SyncPaneContext();
+        };
         _playback.StatusChanged += text => Dispatcher.BeginInvoke(() => Report(text));
         _playback.ErrorRaised += text => Dispatcher.BeginInvoke(() => ReportError(text));
         _playback.ProgressChanged += value => Dispatcher.BeginInvoke(() => ShowProgress(value));
@@ -214,7 +219,9 @@ public partial class MainWindow : Window
         });
         _liveFeed.VolumeUpdated += (volume, _) => Dispatcher.BeginInvoke(() =>
         {
-            if (_vm.IsLive) _panes.ShowVolume(volume);
+            if (!_vm.IsLive) return;
+            _panes.ShowVolume(volume);
+            SyncPaneContext();
         });
 
         _statusTimer = new DispatcherTimer(DispatcherPriority.Background)
@@ -432,6 +439,7 @@ public partial class MainWindow : Window
         ForecastModeButton.IsChecked = mode == DataMode.Forecast;
         _suppressModeEvents = false;
 
+        SyncPaneContext();
         LiveTransport.Visibility = mode == DataMode.Live ? Visibility.Visible : Visibility.Collapsed;
         ArchiveTransport.Visibility = mode == DataMode.Archive ? Visibility.Visible : Visibility.Collapsed;
         ForecastTransport.Visibility = mode == DataMode.Forecast ? Visibility.Visible : Visibility.Collapsed;
@@ -679,6 +687,25 @@ public partial class MainWindow : Window
 
     private void SpeedCombo_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
         _playback?.SetSpeed(SpeedCombo.SelectedIndex switch { 0 => 2, 2 => 8, _ => 4 });
+
+    /// <summary>
+    /// Tell the panes what the app is showing, so any pinned to their own site can match
+    /// it. Called after every change to mode, day or scrub position — the three things
+    /// that move the app through time.
+    /// </summary>
+    private void SyncPaneContext()
+    {
+        var day = DayPicker.SelectedDate is { } picked
+            ? DateOnly.FromDateTime(picked)
+            : DateOnly.FromDateTime(DateTime.UtcNow);
+
+        // In archive mode the target is the scan on screen; live means "now".
+        var target = _vm.IsArchive && _radar.DisplayedSweepTimeUtc is { } scan
+            ? scan
+            : DateTime.UtcNow;
+
+        _panes.NotifyContext(_vm.Mode, day, target);
+    }
 
     /// <summary>Merge warning polygons, storm features, and the measure line into one overlay.</summary>
     private void ComposeOverlay()

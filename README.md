@@ -74,7 +74,9 @@ No account, no API key, no subscription. Everything it reads is public data.
 - **Placefiles** — the GRLevelX community overlay format, by URL or file, with each
   file's own refresh interval and per-item zoom thresholds honoured.
 - **Palettes** — import GR2Analyst `.pal` colour tables.
-- **Multi-pane** — 1/2/4 panes with linked or independent pan.
+- **Multi-pane** — 1/2/4 panes with linked or independent pan. A pane either follows
+  the main one (same volume, different product) or is pinned to a radar of its own,
+  which turns the split from a product comparison into a place comparison.
 - **Tools** — hover inspector (value, azimuth, ranges, beam height), geodesic
   distance/bearing measuring, colour scale on the map.
 - **Export** — PNG stills and animated GIFs of the loop, carrying every layer on screen.

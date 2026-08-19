@@ -68,6 +68,12 @@ is queued as a request and serviced after present.
 
 ## Things that cost real time to discover
 
+**A pinned pane owns its own place.** Pinning a pane to a site moves its camera there
+and drops it out of camera linking — otherwise the link drags it straight back and you are
+looking at the right data over the wrong ground. Pane state (including the link snapshot)
+lives on the `Pane` object rather than in arrays indexed by position, because that position
+shifts whenever panes are added, removed or pinned.
+
 **Airspace.** The D3D child HWND always draws above WPF content inside its rectangle.
 WPF controls cannot overlay the map. Anything that must appear *over* the map is either
 drawn in the D3D scene (the colour scale, storm labels — see `GlyphAtlas` and
@@ -209,8 +215,8 @@ screen. `--soak` runs the live pipeline headless.
 
 ## Open work
 
-VWP panel, placefile icon sheets, drawing tools, 3D volume rendering, independent site
-per pane, loops longer than 30 frames.
+VWP panel, placefile icon sheets, drawing tools, 3D volume rendering, loops longer than
+30 frames.
 
 Every gap in `docs/parity.md` is now closed. What is left is the "Nice" and "Cosmetic"
 tier plus the two Partials.

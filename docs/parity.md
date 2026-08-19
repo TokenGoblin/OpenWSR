@@ -86,7 +86,7 @@ the whole open-source field — no OSS viewer has it."* It is now done.
 | Saved locations | Expected | **Partial** — one home point, not a list |
 | Per-type alert toggles and audio | Expected | **Done** — warning-type filters |
 | GIF / video export | Expected | **Done** — and now actually verified end-to-end; it could not write a file before (`audit.md` C-01) |
-| Independent site per pane | Expected | **Open** — panes share one volume; pan links or unlinks, site does not |
+| Independent site per pane | Expected | **Done** — any pane can be pinned to its own radar, in live or archive; pinned panes leave the camera link |
 | Units preference | Expected | **Done** |
 | Longer loops | Nice | **Open** — still capped at 30 frames, already parameterised |
 | Drawing and annotation | Nice | **Open** |
