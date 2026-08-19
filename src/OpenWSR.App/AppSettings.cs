@@ -31,6 +31,15 @@ public sealed class AppSettings
     /// <summary>Draw the WSR-88D site layer (hidden at national zoom regardless).</summary>
     public bool ShowSiteMarkers { get; set; } = true;
 
+    /// <summary>
+    /// How many volumes an archive loop spans. This is a real cost, not a preference: every
+    /// frame is a decoded sweep held in memory — about 5 MB for a super-res reflectivity cut
+    /// — and each one has to be downloaded and decoded before the loop can play. Thirty is
+    /// roughly two and a half hours of a five-minute VCP, which covers a storm's life
+    /// without a long wait. See <see cref="ArchivePlaybackController.MaxLoopFrames"/>.
+    /// </summary>
+    public int LoopFrames { get; set; } = ArchivePlaybackController.DefaultLoopFrames;
+
     public string UserAgent =>
         string.IsNullOrWhiteSpace(Contact) ? "OpenWSR/0.1" : $"OpenWSR/0.1 ({Contact})";
 

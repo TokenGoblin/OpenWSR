@@ -21,6 +21,14 @@ public partial class SettingsWindow : Window
             UnitSystem.Nautical => 2,
             _ => 0,
         };
+        LoopFramesCombo.SelectedIndex = settings.LoopFrames switch
+        {
+            <= 12 => 0,
+            <= 30 => 1,
+            <= 60 => 2,
+            _ => 3,
+        };
+
         RadiusCombo.SelectedIndex = settings.AlertRadiusKm switch
         {
             <= 15 => 0, <= 40 => 1, <= 80 => 2, _ => 3,
@@ -82,6 +90,14 @@ public partial class SettingsWindow : Window
             2 => UnitSystem.Nautical,
             _ => UnitSystem.Imperial,
         };
+        _settings.LoopFrames = LoopFramesCombo.SelectedIndex switch
+        {
+            0 => 12,
+            1 => 30,
+            2 => 60,
+            _ => ArchivePlaybackController.MaxLoopFrames,
+        };
+
         _settings.AlertRadiusKm = RadiusCombo.SelectedIndex switch
         {
             0 => 15, 2 => 80, 3 => 160, _ => 40,

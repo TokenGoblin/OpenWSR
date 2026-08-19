@@ -43,6 +43,16 @@
         <TextBlock Style="{StaticResource Hint}"
                    Text="Applies to the inspector readout, the measuring tool, storm details and alerts." />
 
+        <TextBlock Text="ARCHIVE LOOP" Style="{StaticResource Head}" />
+        <ComboBox x:Name="LoopFramesCombo" AutomationProperties.Name="Loop length">
+            <ComboBoxItem Content="12 volumes — about 1 hour" Tag="12" />
+            <ComboBoxItem Content="30 volumes — about 2½ hours" Tag="30" IsSelected="True" />
+            <ComboBoxItem Content="60 volumes — about 5 hours" Tag="60" />
+            <ComboBoxItem Content="144 volumes — about 12 hours" Tag="144" />
+        </ComboBox>
+        <TextBlock Style="{StaticResource Hint}"
+                   Text="Every frame is downloaded, decoded and held in memory — roughly 5 MB each for reflectivity. A longer loop takes proportionally longer to build and takes effect the next time one is built." />
+
         <!-- Home and alert radius live here rather than in the layers panel: they are set
              once and never touched again, and the layers panel is used every session. -->
         <TextBlock Text="MY AREA" Style="{StaticResource Head}" />

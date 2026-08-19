@@ -87,7 +87,7 @@ public partial class MainWindow : Window
         _panes = new PaneManager(PaneGrid, _mapView, _radar, MapHost, provider);
         _panes.StatusChanged += text => Dispatcher.BeginInvoke(() => Report(text));
 
-        _playback = new ArchivePlaybackController(_mapView, _radar);
+        _playback = new ArchivePlaybackController(_mapView, _radar) { LoopFrames = _settings.LoopFrames };
         _playback.VolumeLoaded += volume =>
         {
             _panes.ShowVolume(volume);
@@ -249,6 +249,7 @@ public partial class MainWindow : Window
 
         Loaded += async (_, _) =>
         {
+            SyncLoopTooltip();
             foreach (var source in settings.Placefiles.ToList())
                 await _placefiles.AddAsync(source);
             await LoadStartupAsync();
@@ -1146,6 +1147,19 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Keep the play button honest about how far back the loop reaches. It used to state a
+    /// hardcoded thirty, which stopped being true the moment the span became a setting.
+    /// </summary>
+    private void SyncLoopTooltip()
+    {
+        if (PlayButton is null) return;
+        int frames = _playback.LoopFrames;
+        PlayButton.ToolTip =
+            $"Loop the most recent {frames} volumes of the loaded day — roughly "
+            + $"{frames * 5 / 60.0:0.#} hours at a five-minute scan. Change the span in Settings.";
+    }
+
     // ---- wind profile ----
 
     /// <summary>One row of the profile, shaped for the panel's template.</summary>
@@ -1547,6 +1561,8 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog() != true) return;
 
         Units.System = _settings.Units;
+        _playback.LoopFrames = _settings.LoopFrames;
+        SyncLoopTooltip();
         _threats.Configure(_settings.HomeLatDeg, _settings.HomeLonDeg, _settings.AlertRadiusKm);
         RebuildHomeGeometry();
         ComposeOverlay();

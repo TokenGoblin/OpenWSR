@@ -167,7 +167,7 @@
                                         SelectedDateChanged="DayPicker_SelectedDateChanged" />
                             <Button x:Name="PlayButton" AutomationProperties.Name="Play or pause the loop" Grid.Column="1" Content="▶" Width="34" Height="26"
                                     Padding="0" FontSize="13" Margin="10,0,0,0" Click="PlayButton_Click"
-                                    ToolTip="Loop the most recent 30 volumes of the loaded day" />
+                                    ToolTip="Loop the most recent volumes of the loaded day" />
                             <ComboBox x:Name="SpeedCombo" Grid.Column="2" Width="66" Height="26"
                                       Margin="6,0,10,0" SelectionChanged="SpeedCombo_SelectionChanged"
                                       ToolTip="Loop speed">

@@ -583,3 +583,22 @@ the storm top, which is the hodograph that made that day what it was.
 **Gate:** [PASSED] 240/240 tests. Verified live against the IEM ASOS placefile at KDMX:
 full station models across Iowa — temperature and dewpoint pairs with wind barb staffs
 turned to each station's own bearing, which is the `Icon: 0,0,70,1,1` rotation working.
+
+## Configurable loop length
+
+- [x] `LoopFrames` was a `const`, not a setting — the note claiming otherwise was wrong.
+      It is now an instance property clamped to 2..144, persisted in `settings.json`, and
+      chosen in Settings as a duration ("about 5 hours") rather than a count
+- [x] Ceiling of 144 volumes — twelve hours of a five-minute VCP. A full UTC day is around
+      250 volumes at roughly 5 MB of held geometry each, which is over a gigabyte and a
+      download long enough that the loop is no longer about the weather you were watching
+- [x] The span is part of `LoopSignature()`, so changing it rebuilds rather than silently
+      replaying the old window
+- [x] The play button's tooltip stated a hardcoded thirty; it now reports the configured
+      span and its rough duration
+- [x] 11 tests: the clamp at both ends, the default, a settings round trip through the real
+      serializer, and a pre-existing settings file with no `loopFrames` key at all
+
+**Gate:** [PASSED] 251/251 tests. Verified live end to end: chose "60 volumes" in the real
+Settings dialog, confirmed `"loopFrames": 60` in settings.json, and watched the build
+report `Downloading loop volumes… 13/60`.

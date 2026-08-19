@@ -15,7 +15,34 @@ namespace OpenWSR.App;
 public sealed class ArchivePlaybackController(
     MapView mapView, RadarDisplayController radar) : IDisposable
 {
-    public const int LoopFrames = 30;
+    /// <summary>Two and a half hours of a five-minute VCP — a storm's life, without a long wait.</summary>
+    public const int DefaultLoopFrames = 30;
+
+    /// <summary>
+    /// A ceiling rather than a judgement about what is useful. A full UTC day is around 250
+    /// volumes; at roughly 5 MB of held geometry each that is over a gigabyte, and the
+    /// download alone would run long enough that the loop is no longer about the weather you
+    /// were watching. Twelve hours is as far as this goes.
+    /// </summary>
+    public const int MaxLoopFrames = 144;
+
+    private int _loopFrames = DefaultLoopFrames;
+
+    /// <summary>
+    /// How many of the day's most recent volumes the loop spans. Clamped on the way in, so
+    /// a hand-edited settings file cannot ask for a loop that will not fit.
+    /// </summary>
+    public int LoopFrames
+    {
+        get => _loopFrames;
+        set => _loopFrames = ClampLoopFrames(value);
+    }
+
+    /// <summary>
+    /// The clamp, reachable without a render device so it can be tested. Two frames is the
+    /// floor because one frame is not a loop.
+    /// </summary>
+    public static int ClampLoopFrames(int frames) => Math.Clamp(frames, 2, MaxLoopFrames);
 
     private readonly ArchiveClient _archive = new();
     private readonly DispatcherTimer _loopTimer = new() { Interval = TimeSpan.FromMilliseconds(250) };
@@ -47,7 +74,7 @@ public sealed class ArchivePlaybackController(
     public bool CanBuildLoop => _dayVolumes.Count > 0;
 
     /// <summary>Index into <see cref="DayVolumes"/> of the first frame in the loop window.</summary>
-    public int LoopWindowStart => Math.Max(0, _dayVolumes.Count - LoopFrames);
+    public int LoopWindowStart => Math.Max(0, _dayVolumes.Count - _loopFrames);
 
     /// <summary>Show one loop frame without playing — used when recording a GIF.</summary>
     public void ShowLoopFrame(int index)
@@ -124,12 +151,13 @@ public sealed class ArchivePlaybackController(
     }
 
     /// <summary>
-    /// What the current loop would have to match to be reusable: the day's volume set and
-    /// the product it was built for. Rebuilding 30 volumes is minutes of work, so a
-    /// pause-and-resume (or a GIF recording) must not trigger one.
+    /// What the current loop would have to match to be reusable: the day's volume set, the
+    /// product it was built for, and how far back it reaches. Rebuilding a loop is minutes
+    /// of work, so a pause-and-resume (or a GIF recording) must not trigger one.
     /// </summary>
     private string LoopSignature() =>
-        $"{radar.CurrentMoment}|{_dayVolumes.Count}|{(_dayVolumes.Count > 0 ? _dayVolumes[^1].Key : "")}";
+        $"{radar.CurrentMoment}|{_loopFrames}|{_dayVolumes.Count}|"
+        + $"{(_dayVolumes.Count > 0 ? _dayVolumes[^1].Key : "")}";
 
     /// <summary>
     /// Build the loop frames for the current day and product unless usable frames already
@@ -144,7 +172,7 @@ public sealed class ArchivePlaybackController(
         _buildCts?.Dispose();
         var cts = _buildCts = new CancellationTokenSource();
 
-        var window = _dayVolumes.TakeLast(LoopFrames).ToList();
+        var window = _dayVolumes.TakeLast(_loopFrames).ToList();
         var table = radar.CurrentTable;
         var palette = table.BuildRgba256();
 
