@@ -227,7 +227,7 @@ screen. `--soak` runs the live pipeline headless.
 
 ## Open work
 
-Drawing tools, 3D volume rendering.
+3D volume rendering.
 
 Every gap in `docs/parity.md` is now closed. What is left is the "Nice" and "Cosmetic"
 tier plus the two Partials.

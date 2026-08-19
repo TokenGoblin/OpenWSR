@@ -602,3 +602,35 @@ turned to each station's own bearing, which is the `Icon: 0,0,70,1,1` rotation w
 **Gate:** [PASSED] 251/251 tests. Verified live end to end: chose "60 volumes" in the real
 Settings dialog, confirmed `"loopFrames": 60` in settings.json, and watched the build
 report `Downloading loop volumes… 13/60`.
+
+## Drawing tools
+
+- [x] Lines, filled areas, circles and labels placed on the map, in six colours and eight
+      thicknesses. Held in geographic coordinates, so an annotation stays on the storm
+      through a pan, a zoom, or a change of radar
+- [x] **Saved as ordinary GRLevelX placefiles**, not a format of our own. A drawing opens
+      in GR, can be handed to someone else, and comes back in through the parser that is
+      already golden-tested. `OpenWSR.Placefiles` gained a writer and gained one dependency,
+      `Geo` — a circle cannot be written without geodesy, because the ring has to be a true
+      ground radius rather than a Mercator one
+- [x] A circle survives the trip as a circle: the ring is preceded by a comment naming the
+      centre and radius, matched back **by geometry** on read. GR ignores the comment; a
+      tool that strips it costs the circle-ness and nothing else
+- [x] Vertices are placed by clicking, not dragging — a left drag already pans the map, and
+      taking that away for one tool would make the map feel broken while it was armed.
+      Enter finishes, Esc abandons, Backspace takes back a point then a shape
+- [x] Any placefile can be opened to trace over, and shapes are added rather than replacing
+      what is there
+- [x] 25 tests: every shape kind round-tripped, colour and width, a circle's true ground
+      radius at 61°N where Mercator distortion is severe, two same-radius circles not
+      stealing each other's hint, a stripped hint, syntax characters inside a label, a
+      double save-and-reopen, and a foreign placefile importing
+
+**Gate:** [PASSED] 276/276 tests. Verified live at KDMX: all four shape kinds drawn on the
+map by synthetic clicks and rendered correctly, then a written file loaded back through
+OpenWSR's own placefile pipeline — it appears in the layers panel under the title the
+writer gave it, which is the interoperability claim proved rather than asserted.
+
+Also fixed on the way past: tooltips were white text on WPF's default light popup, because
+a tooltip inherits `Foreground` from the control it belongs to and every control here is
+styled for a dark ground. `Theme.xaml` now templates ToolTip too.

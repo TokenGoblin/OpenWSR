@@ -27,6 +27,44 @@
     <SolidColorBrush x:Key="TextDim" Color="{StaticResource TextDimColor}" />
     <SolidColorBrush x:Key="TextDisabled" Color="{StaticResource TextDisabledColor}" />
 
+    <!-- ============ ToolTip ============ -->
+    <!-- A tooltip inherits Foreground from the control it belongs to, and every control
+         here is styled near-white for the dark ground. WPF's default tooltip chrome is
+         light, so without this the rail's tooltips were white text on a white popup. -->
+    <Style TargetType="ToolTip">
+        <Setter Property="Background" Value="{StaticResource Surface}" />
+        <Setter Property="Foreground" Value="{StaticResource Text}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="8,5" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="HasDropShadow" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToolTip">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="3" Padding="{TemplateBinding Padding}">
+                        <!-- Wrapped, because several of these are a full sentence and a
+                             tooltip that runs off the screen edge says nothing. A plain
+                             string becomes a TextBlock here, so the scoped style reaches it. -->
+                        <Border.Resources>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="TextWrapping" Value="Wrap" />
+                                <!-- The wrap width belongs on the text, not on the ToolTip:
+                                     a MaxWidth up there lets the text measure unconstrained
+                                     and then clips it, so a long tooltip loses its last words. -->
+                                <Setter Property="MaxWidth" Value="300" />
+                            </Style>
+                        </Border.Resources>
+                        <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- ============ Button ============ -->
     <Style TargetType="Button">
         <Setter Property="Background" Value="{StaticResource Surface}" />

@@ -30,6 +30,8 @@ public enum MapTool
     CrossSection,
     /// <summary>The next left-click sets the home location.</summary>
     SetHome,
+    /// <summary>Clicks place vertices; Enter finishes the shape.</summary>
+    Draw,
 }
 
 /// <summary>One product button in the bar above the map.</summary>
@@ -152,6 +154,7 @@ public sealed partial class MainViewModel : ObservableObject
         MapTool.Measure => "Right-drag to measure distance and bearing",
         MapTool.CrossSection => "Right-drag a line to slice the storm vertically",
         MapTool.SetHome => "Click the map to set your home location",
+        MapTool.Draw => "Click to place points · Enter finishes · Esc abandons",
         _ => "Hover to read values · right-drag to measure",
     };
 }

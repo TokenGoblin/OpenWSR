@@ -36,6 +36,7 @@ public partial class MainWindow : Window
     private readonly Geocoder _geocoder;
     private readonly AppSettings _settings;
     private OverlayGeometry? _measureGeometry;
+    private readonly DrawingController _drawing;
     private OverlayGeometry? _homeGeometry;
     private bool _suppressSliderEvents;
     private bool _suppressModeEvents;
@@ -81,7 +82,11 @@ public partial class MainWindow : Window
         // One place interprets map keys. Wiring both this and Window.KeyDown to the same
         // handler double-stepped the tilt and let text typed into the search box change
         // the product; PreviewKeyDown below covers the WPF-focus case with a guard.
-        _mapView.KeyPressed += key => _radar.OnKey(key);
+        _mapView.KeyPressed += key =>
+        {
+            if (_vm.Tool == MapTool.Draw && _drawing.OnKey(key)) return;
+            _radar.OnKey(key);
+        };
         PreviewKeyDown += Window_PreviewKeyDown;
 
         _panes = new PaneManager(PaneGrid, _mapView, _radar, MapHost, provider);
@@ -193,6 +198,14 @@ public partial class MainWindow : Window
         });
         _warnings.AlertsUpdated += alerts => Dispatcher.BeginInvoke(() => _threats.EvaluateWarnings(alerts));
         _threats.ThreatDetected += threat => Dispatcher.BeginInvoke(() => OnThreat(threat));
+        _drawing = new DrawingController(_mapView);
+        _drawing.Changed += () => Dispatcher.BeginInvoke(() =>
+        {
+            ComposeOverlay();
+            SyncDrawingButtons();
+        });
+        _drawing.HintChanged += text => Dispatcher.BeginInvoke(() => DrawHint.Text = text);
+
         _mapView.Clicked += RouteMapClick;
 
         _threats.Configure(settings.HomeLatDeg, settings.HomeLonDeg, settings.AlertRadiusKm);
@@ -347,6 +360,12 @@ public partial class MainWindow : Window
         if (OwnsKeys(focused)) return;
         // The map's child window already raised KeyPressed for this key.
         if (focused is D3DHostControl) return;
+
+        if (_vm.Tool == MapTool.Draw && _drawing.OnKey(KeyInterop.VirtualKeyFromKey(e.Key)))
+        {
+            e.Handled = true;
+            return;
+        }
 
         if (_radar.OnKey(KeyInterop.VirtualKeyFromKey(e.Key)))
             e.Handled = true;
@@ -524,11 +543,19 @@ public partial class MainWindow : Window
         MeasureTool.IsChecked = _vm.Tool == MapTool.Measure;
         CrossSectionTool.IsChecked = _vm.Tool == MapTool.CrossSection;
         SetHomeTool.IsChecked = _vm.Tool == MapTool.SetHome;
+        DrawTool.IsChecked = _vm.Tool == MapTool.Draw;
         _suppressToolEvents = false;
 
         CrossSectionPanel.Visibility = _vm.Tool == MapTool.CrossSection
             ? Visibility.Visible
             : Visibility.Collapsed;
+        DrawingPanel.Visibility = _vm.Tool == MapTool.Draw
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        // Arming the tool is not a change to the drawing, so nothing else would have got
+        // round to greying out what cannot be done on an empty one.
+        SyncDrawingButtons();
+        if (_vm.Tool == MapTool.Draw) _drawing.RefreshHint();
         Report(MainViewModel.ToolHint(_vm.Tool));
     }
 
@@ -720,12 +747,15 @@ public partial class MainWindow : Window
             labels.AddRange(outlookLabels);
         if (_placefiles.Labels is { Count: > 0 } placefileLabels)
             labels.AddRange(placefileLabels);
+        if (_drawing.Labels is { Count: > 0 } drawnLabels)
+            labels.AddRange(drawnLabels);
         _mapView.SetLabels(labels);
 
         OverlayGeometry?[] sources =
         [
             _outlooks.Geometry, _warnings.Geometry, _placefiles.Geometry,
             _storms.Geometry, _lightning.Geometry, _homeGeometry, _measureGeometry,
+            _drawing.Geometry,
         ];
         var active = sources.Where(s => s is not null).Cast<OverlayGeometry>().ToArray();
         switch (active.Length)
@@ -799,6 +829,12 @@ public partial class MainWindow : Window
     {
         if (_stormPopup is not null) _stormPopup.IsOpen = false;
         _stormPopup = null;
+
+        if (_vm.Tool == MapTool.Draw)
+        {
+            _drawing.OnClick(x, y);
+            return;
+        }
 
         var (lat, lon) = _mapView.ScreenToLatLon(x, y);
         if (_vm.Tool == MapTool.SetHome)
@@ -1158,6 +1194,142 @@ public partial class MainWindow : Window
         PlayButton.ToolTip =
             $"Loop the most recent {frames} volumes of the loaded day — roughly "
             + $"{frames * 5 / 60.0:0.#} hours at a five-minute scan. Change the span in Settings.";
+    }
+
+    // ---- drawing ----
+
+    private void DrawKind_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        // Fires during InitializeComponent, before the rest of the panel exists.
+        if (DrawTextBox is null) return;
+
+        if (DrawKindCombo.SelectedItem is ComboBoxItem { Tag: string tag } &&
+            Enum.TryParse<DrawingKind>(tag, out var kind))
+            _drawing.Kind = kind;
+
+        // The label box is only meaningful for labels, and an always-visible text field
+        // invites typing into it while drawing a line.
+        var show = _drawing.Kind == DrawingKind.Text ? Visibility.Visible : Visibility.Collapsed;
+        DrawTextLabel.Visibility = show;
+        DrawTextBox.Visibility = show;
+        _drawing.RefreshHint();
+        SyncDrawingButtons();
+    }
+
+    private void DrawColor_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_drawing is null) return;
+        if (DrawColorCombo.SelectedItem is ComboBoxItem { Tag: string tag })
+        {
+            var parts = tag.Split(',');
+            if (parts.Length == 3 &&
+                byte.TryParse(parts[0], out byte r) &&
+                byte.TryParse(parts[1], out byte g) &&
+                byte.TryParse(parts[2], out byte b))
+                _drawing.Color = new OpenWSR.Placefiles.PlaceColor(r, g, b);
+        }
+    }
+
+    private void DrawWidth_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_drawing is null) return;
+        _drawing.WidthPx = (float)e.NewValue;
+    }
+
+    private void DrawText_Changed(object sender, TextChangedEventArgs e)
+    {
+        if (_drawing is null) return;
+        _drawing.PendingText = DrawTextBox.Text;
+        _drawing.RefreshHint();
+        SyncDrawingButtons();
+    }
+
+    private void DrawFinish_Click(object sender, RoutedEventArgs e) => _drawing.Finish();
+
+    /// <summary>Backspace's job: the point being placed if there is one, else the last shape.</summary>
+    private void DrawUndo_Click(object sender, RoutedEventArgs e)
+    {
+        if (_drawing.IsDrawing) _drawing.UndoPoint();
+        else _drawing.UndoShape();
+    }
+
+    private void DrawClear_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_drawing.HasContent) return;
+        // Losing an annotation is not recoverable, so it is worth one question.
+        var answer = MessageBox.Show(
+            this,
+            $"Delete all {_drawing.ShapeCount} shapes? Save first if you want to keep them.",
+            "Clear drawing", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+        if (answer != MessageBoxResult.OK) return;
+        _drawing.Clear();
+        Report("Drawing cleared.");
+    }
+
+    private void DrawSave_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_drawing.HasContent)
+        {
+            Report("Nothing drawn yet.");
+            return;
+        }
+
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "Save drawing",
+            Filter = "Placefile (*.txt)|*.txt|All files (*.*)|*.*",
+            DefaultExt = ".txt",
+            AddExtension = true,
+            // Somewhere the user can find it again, rather than wherever the process
+            // happens to have been started from.
+            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            FileName = $"drawing-{DateTime.Now:yyyyMMdd-HHmm}.txt",
+        };
+        if (dialog.ShowDialog(this) != true) return;
+
+        try
+        {
+            _drawing.Save(dialog.FileName);
+            Report($"Saved {_drawing.ShapeCount} shapes to {System.IO.Path.GetFileName(dialog.FileName)} " +
+                   "— it is a placefile, so it opens in GR too.");
+        }
+        catch (Exception ex)
+        {
+            Report($"Could not save the drawing: {ex.Message}");
+        }
+    }
+
+    private void DrawOpen_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Open a drawing or placefile",
+            Filter = "Placefile (*.txt)|*.txt|All files (*.*)|*.*",
+            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+        };
+        if (dialog.ShowDialog(this) != true) return;
+
+        try
+        {
+            int added = _drawing.Load(dialog.FileName);
+            Report(added == 0
+                ? "That file had no shapes this can draw."
+                : $"Added {added} shapes from {System.IO.Path.GetFileName(dialog.FileName)}.");
+        }
+        catch (Exception ex)
+        {
+            Report($"Could not open that drawing: {ex.Message}");
+        }
+    }
+
+    /// <summary>Grey out what cannot be done yet, rather than letting it fail on click.</summary>
+    private void SyncDrawingButtons()
+    {
+        if (DrawFinishButton is null) return;
+        DrawFinishButton.IsEnabled = _drawing.IsDrawing;
+        DrawUndoButton.IsEnabled = _drawing.IsDrawing || _drawing.HasContent;
+        DrawSaveButton.IsEnabled = _drawing.HasContent;
+        DrawClearButton.IsEnabled = _drawing.HasContent;
     }
 
     // ---- wind profile ----

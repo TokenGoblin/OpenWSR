@@ -6,4 +6,11 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <!-- Geo, and nothing else. A circle cannot be written to a placefile without geodesy:
+       the ring it becomes has to be a true ground radius, not a Mercator one. Geo is the
+       lowest pure library here, so depending on it costs no purity. -->
+  <ItemGroup>
+    <ProjectReference Include="..\OpenWSR.Geo\OpenWSR.Geo.csproj" />
+  </ItemGroup>
+
 </Project>

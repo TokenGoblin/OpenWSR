@@ -39,6 +39,9 @@
                     <ToggleButton x:Name="CrossSectionTool" AutomationProperties.Name="Cross-section tool" Style="{StaticResource RailToggle}" Content="⌇"
                                   Tag="CrossSection" Checked="ToolButton_Checked" Unchecked="ToolButton_Unchecked"
                                   ToolTip="Cross-section — right-drag a line to slice the storm vertically" />
+                    <ToggleButton x:Name="DrawTool" AutomationProperties.Name="Drawing tool" Style="{StaticResource RailToggle}" Content="✎"
+                                  Tag="Draw" Checked="ToolButton_Checked" Unchecked="ToolButton_Unchecked"
+                                  ToolTip="Draw — annotate the map with lines, areas, circles and labels" />
                     <ToggleButton x:Name="SetHomeTool" AutomationProperties.Name="Set home location" Style="{StaticResource RailToggle}" Content="📍"
                                   Tag="SetHome" Checked="ToolButton_Checked" Unchecked="ToolButton_Unchecked"
                                   ToolTip="Set home — click the map to place your alert location" />
@@ -490,6 +493,82 @@
                         </ItemsControl>
                     </Border>
                 </DockPanel>
+            </Border>
+
+            <!-- Docked beside the map rather than floating over it: the D3D child window
+                 always draws above WPF content inside its rectangle, so a panel over the
+                 map would be invisible. -->
+            <Border x:Name="DrawingPanel" DockPanel.Dock="Right" Width="212"
+                    Visibility="Collapsed" Background="{StaticResource Chrome}"
+                    BorderBrush="#FF272C35" BorderThickness="1,0,0,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="8,6,6,6">
+                    <TextBlock Text="DRAW" FontWeight="Bold" FontSize="11"
+                               Foreground="{StaticResource TextDim}" Margin="0,0,0,6" />
+
+                    <TextBlock Text="Shape" FontSize="10.5" Foreground="{StaticResource TextDim}" />
+                    <ComboBox x:Name="DrawKindCombo" Margin="0,3,0,8"
+                              AutomationProperties.Name="Shape to draw"
+                              SelectionChanged="DrawKind_Changed">
+                        <ComboBoxItem Content="Line" Tag="Line" IsSelected="True" />
+                        <ComboBoxItem Content="Area (filled)" Tag="Polygon" />
+                        <ComboBoxItem Content="Circle" Tag="Circle" />
+                        <ComboBoxItem Content="Label" Tag="Text" />
+                    </ComboBox>
+
+                    <TextBlock x:Name="DrawTextLabel" Text="Label text" FontSize="10.5"
+                               Visibility="Collapsed" Foreground="{StaticResource TextDim}" />
+                    <TextBox x:Name="DrawTextBox" Margin="0,3,0,8" Visibility="Collapsed"
+                             AutomationProperties.Name="Label text"
+                             TextChanged="DrawText_Changed" />
+
+                    <TextBlock Text="Colour" FontSize="10.5" Foreground="{StaticResource TextDim}" />
+                    <ComboBox x:Name="DrawColorCombo" Margin="0,3,0,8"
+                              AutomationProperties.Name="Drawing colour"
+                              SelectionChanged="DrawColor_Changed">
+                        <ComboBoxItem Content="Amber" Tag="255,200,40" IsSelected="True" />
+                        <ComboBoxItem Content="White" Tag="255,255,255" />
+                        <ComboBoxItem Content="Red" Tag="255,70,70" />
+                        <ComboBoxItem Content="Cyan" Tag="80,220,255" />
+                        <ComboBoxItem Content="Lime" Tag="120,255,120" />
+                        <ComboBoxItem Content="Magenta" Tag="255,110,220" />
+                    </ComboBox>
+
+                    <TextBlock Text="Thickness" FontSize="10.5" Foreground="{StaticResource TextDim}" />
+                    <Slider x:Name="DrawWidthSlider" Minimum="1" Maximum="8" Value="2"
+                            TickFrequency="1" IsSnapToTickEnabled="True" Margin="0,3,0,8"
+                            AutomationProperties.Name="Line thickness"
+                            ValueChanged="DrawWidth_Changed" />
+
+                    <TextBlock x:Name="DrawHint" FontSize="10.5" FontStyle="Italic"
+                               TextWrapping="Wrap" Margin="0,0,0,8"
+                               Foreground="{StaticResource TextDim}"
+                               Text="Click to start. Each click adds a corner." />
+
+                    <UniformGrid Columns="2" Margin="0,0,0,6">
+                        <Button x:Name="DrawFinishButton" Content="Finish" Padding="0,5" Margin="0,0,3,0"
+                                AutomationProperties.Name="Finish this shape" Click="DrawFinish_Click"
+                                ToolTip="Close off the shape being drawn (Enter)" />
+                        <Button x:Name="DrawUndoButton" Content="Undo" Padding="0,5" Margin="3,0,0,0"
+                                AutomationProperties.Name="Undo the last shape" Click="DrawUndo_Click"
+                                ToolTip="Take back the last point, or the last finished shape (Backspace)" />
+                    </UniformGrid>
+                    <UniformGrid Columns="2" Margin="0,0,0,6">
+                        <Button x:Name="DrawOpenButton" Content="Open…" Padding="0,5" Margin="0,0,3,0"
+                                AutomationProperties.Name="Open a drawing" Click="DrawOpen_Click"
+                                ToolTip="Add the shapes from a placefile to this drawing" />
+                        <Button x:Name="DrawSaveButton" Content="Save…" Padding="0,5" Margin="3,0,0,0"
+                                AutomationProperties.Name="Save this drawing" Click="DrawSave_Click"
+                                ToolTip="Save as a placefile — it opens in GR as well as here" />
+                    </UniformGrid>
+                    <Button x:Name="DrawClearButton" Content="Clear all" Padding="0,5"
+                            AutomationProperties.Name="Clear the whole drawing" Click="DrawClear_Click" />
+
+                    <TextBlock FontSize="10" TextWrapping="Wrap" Margin="0,8,0,0"
+                               Foreground="{StaticResource TextDim}"
+                               Text="Saved as an ordinary GRLevelX placefile, so a drawing opens in GR too — and any placefile can be opened here to trace over." />
+                </StackPanel>
+                </ScrollViewer>
             </Border>
 
             <Border x:Name="WindProfilePanel" DockPanel.Dock="Right" Width="196"
