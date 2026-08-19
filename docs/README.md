@@ -14,7 +14,10 @@ for users) or [CLAUDE.md](../CLAUDE.md) (which is the working brief).
 | [screenshots/build-log/](screenshots/build-log/) | Working captures from the build, including the symptoms of bugs worth recognising again |
 
 Related: [`resources/`](../resources/) holds the runnable inputs — cross-check scripts,
-sample placefiles, reference tables.
+sample placefiles, reference tables — and
+[`resources/measurements/`](../resources/measurements/) the harnesses that re-derive every
+number quoted in `verification.md`. A figure nobody can reproduce is a figure nobody can
+argue with.
 
 ---
 
@@ -84,6 +87,34 @@ exported real sweep data, which is far faster to iterate on than rebuilding the 
 GRLevelX community placefiles, with per-file refresh intervals and per-item zoom
 thresholds honoured.
 
+![Placefile icon sheets](screenshots/placefile-icons.jpg)
+
+Icon sheets, drawn from the sprite grid the placefile names and turned to the bearing each
+`Icon` statement carries — here the IEM ASOS feed, so every station shows its temperature,
+dewpoint and wind barb. Sheets frequently ship with no alpha channel at all; the
+convention is that black is the transparent colour, and keying it out is what turns a grid
+of black tiles into artwork.
+
+![Drawing tools](screenshots/drawing-tools.jpg)
+
+Lines, filled areas, circles and labels drawn by hand and saved as **ordinary GRLevelX
+placefiles** — so a drawing opens in GR, can be handed to someone else, and comes back
+through the parser that is already golden-tested.
+
 ![Multi-pane](screenshots/multi-pane.jpg)
 
 1/2/4 panes with linked or independent pan.
+
+### 3D volume
+
+![3D volume rendering](screenshots/volume-3d.jpg)
+
+The whole volume resampled onto a Cartesian grid and ray marched, with a ground disc and
+range rings for scale. Ray marching rather than an isosurface, so no dBZ threshold has to
+be invented: weak echo stays as haze and a core is solid because a lot of it was
+integrated. The vertical is stretched — a 12 km storm in a 300 km box is a smear at true
+scale — and the factor is on screen rather than hidden.
+
+Drag orbits, right-drag pans, the wheel zooms. Voxel zero means *unsampled*, never "weak",
+which is what lets you see straight through the cone of silence and everything below the
+lowest beam.

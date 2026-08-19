@@ -15,7 +15,8 @@ disagree. The other reference docs:
 | `docs/data-sources.md` | Endpoints, specs, and which ones have already moved |
 | `docs/parity.md` | Competitive gaps, annotated with what's closed |
 | `docs/audit.md` | The 2026-08-18 code/feature/UI audit — 21 findings, all closed |
-| `resources/crosscheck/` | MetPy and ecCodes dump scripts — run these before trusting a decode |
+| `resources/crosscheck/` | MetPy, ecCodes and Py-ART dump scripts — run these before trusting a decode |
+| `resources/measurements/` | Harnesses that re-derive every number quoted in `verification.md` |
 
 Anything worth keeping goes in `docs/` or `resources/`, not in a scratch directory.
 Scratch directories are session-scoped and get lost.
