@@ -21,9 +21,17 @@ public sealed record Sweep(
     int GateCount,
     float[] Data,               // radialCount * gateCount, NaN = below threshold / range folded
     ScaleInfo Scale,
-    BitArray RangeFoldedMask)   // parallel to Data; true where the gate was range folded
+    BitArray RangeFoldedMask,   // parallel to Data; true where the gate was range folded
+    float? NyquistMs = null)    // RRAD block; the velocity fold limit for this cut
 {
     public int RadialCount => AzimuthsDeg.Length;
+
+    /// <summary>
+    /// The width of one aliasing interval, 2·V<sub>nyquist</sub>. A true velocity outside
+    /// ±V<sub>nyquist</sub> is reported folded by a whole number of these, which is why a
+    /// strong couplet can read with the sign reversed until it is unfolded.
+    /// </summary>
+    public float? AliasingIntervalMs => NyquistMs is { } v and > 0 ? 2f * v : null;
 }
 
 /// <summary>A fully decoded volume scan: site metadata plus all sweeps in scan order.</summary>

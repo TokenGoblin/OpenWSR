@@ -1,4 +1,5 @@
 using OpenWSR.Nexrad;
+using OpenWSR.Nexrad.Analysis;
 using OpenWSR.Palettes;
 using OpenWSR.Render;
 
@@ -27,6 +28,18 @@ public sealed class RadarDisplayController(MapView mapView)
 
     public Moment CurrentMoment => _moment;
 
+    /// <summary>
+    /// Unfold velocities past the Nyquist limit. Off by default: it rewrites measured
+    /// values, and on a quiet day there is nothing to unfold.
+    /// </summary>
+    public bool DealiasVelocity { get; set; }
+
+    /// <summary>True when the displayed sweep is actually being unfolded — the moment is
+    /// velocity, the option is on, and the cut reported a Nyquist velocity to unfold against.</summary>
+    public bool IsDealiasing =>
+        DealiasVelocity && _moment == Moment.Velocity &&
+        CutsForMoment(_moment).ElementAtOrDefault(_cutPosition)?.AliasingIntervalMs is not null;
+
     /// <summary>Which products the loaded volume actually carries — the rest grey out.</summary>
     public IReadOnlyCollection<Moment> AvailableMoments =>
         _volume is null ? [] : _volume.Sweeps.Select(s => s.Moment).Distinct().ToHashSet();
@@ -54,8 +67,15 @@ public sealed class RadarDisplayController(MapView mapView)
 
     /// <summary>Step up or down through the cuts of the current product.</summary>
     public void StepCut(int direction) => MoveCut(direction);
+    /// <summary>
+    /// An imported table always wins. Otherwise unfolded velocity gets the wider scale,
+    /// because the standard one tops out at 35 m/s and would clip everything the unfold
+    /// just recovered into one saturated colour.
+    /// </summary>
     public ColorTable CurrentTable =>
-        _customTables.TryGetValue(_moment, out var custom) ? custom : BuiltinTables.For(_moment);
+        _customTables.TryGetValue(_moment, out var custom) ? custom
+        : IsDealiasing ? BuiltinTables.DealiasedVelocity
+        : BuiltinTables.For(_moment);
 
     /// <summary>Scan time of the sweep currently on screen — feeds the data-age indicator.</summary>
     public DateTime? DisplayedSweepTimeUtc { get; private set; }
@@ -64,7 +84,22 @@ public sealed class RadarDisplayController(MapView mapView)
     public Sweep? DisplayedSweep { get; private set; }
 
     /// <summary>Every sweep of the current moment, for analysis across the whole volume.</summary>
-    public IReadOnlyList<Sweep> SweepsForCurrentMoment() => CutsForMoment(_moment);
+    public IReadOnlyList<Sweep> SweepsForCurrentMoment() => [.. CutsForMoment(_moment).Select(Prepare)];
+
+    /// <summary>
+    /// The corrections that turn a decoded sweep into the displayed one, in the order they
+    /// have to happen: unfold first, because storm-relative subtracts a real motion and
+    /// subtracting it from a folded value just moves the discontinuity. Every consumer —
+    /// the map, the loop, the cross-section — goes through here so they cannot disagree.
+    /// </summary>
+    private Sweep Prepare(Sweep sweep)
+    {
+        if (DealiasVelocity)
+            sweep = VelocityDealiasing.Dealias(sweep);
+        if (StormRelative && sweep.Moment == Moment.Velocity && StormMotion.SpeedKmh > 0)
+            sweep = ToStormRelative(sweep, StormMotion.SpeedKmh, StormMotion.BearingDeg);
+        return sweep;
+    }
 
     /// <summary>Apply an imported .pal table to the current moment and re-render.</summary>
     public void SetCustomTable(ColorTable table)
@@ -122,7 +157,7 @@ public sealed class RadarDisplayController(MapView mapView)
             .OrderBy(s => s.ElevationIndex)
             .ToList();
         if (cuts.Count == 0) return null;
-        return cuts[Math.Clamp(_cutPosition, 0, cuts.Count - 1)];
+        return Prepare(cuts[Math.Clamp(_cutPosition, 0, cuts.Count - 1)]);
     }
 
     /// <summary>
@@ -186,19 +221,23 @@ public sealed class RadarDisplayController(MapView mapView)
             return;
         }
         _cutPosition = Math.Clamp(_cutPosition, 0, cuts.Count - 1);
-        var sweep = cuts[_cutPosition];
-
+        var raw = cuts[_cutPosition];
         bool relative = StormRelative && _moment == Moment.Velocity && StormMotion.SpeedKmh > 0;
-        if (relative)
-            sweep = ToStormRelative(sweep, StormMotion.SpeedKmh, StormMotion.BearingDeg);
+        bool unfolded = DealiasVelocity && raw.AliasingIntervalMs is not null &&
+                        _moment == Moment.Velocity;
+        var sweep = Prepare(raw);
 
         DisplayedSweepTimeUtc = sweep.ScanTimeUtc;
         DisplayedSweep = sweep;
         mapView.ShowSweep(sweep, CurrentTable);
         SelectionChanged?.Invoke();
+
+        string product = relative ? "Storm-relative velocity" : _moment.ToString();
+        if (unfolded) product += " (unfolded)";
+        // The Nyquist is deliberately not repeated here — the layers panel states it, and
+        // this line shares its row with the inspector readout, which gets trimmed away.
         StatusChanged?.Invoke(
-            $"{sweep.SiteId}  {sweep.ScanTimeUtc:HH:mm:ss}Z  " +
-            (relative ? "Storm-relative velocity" : _moment.ToString()) + "  " +
+            $"{sweep.SiteId}  {sweep.ScanTimeUtc:HH:mm:ss}Z  {product}  " +
             $"{sweep.ElevationAngleDeg:F1}°  (tilt {_cutPosition + 1} of {cuts.Count})" +
             (relative ? $"  [motion {StormMotion.SpeedKmh:F0} km/h from {StormMotion.BearingDeg:F0}°]" : ""));
     }

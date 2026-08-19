@@ -28,6 +28,22 @@ public static class BuiltinTables
         (20, new Rgba(0xE0, 0x30, 0x30, 0xFF)),
         (35, new Rgba(0x8A, 0x0A, 0x0A, 0xFF)));
 
+    /// <summary>
+    /// Velocity after unfolding, which can reach three times the Nyquist. The green/red
+    /// core is unchanged so the picture still reads the same way; cyan and magenta mark
+    /// the extremes, which by definition only exist because a fold was corrected.
+    /// </summary>
+    public static ColorTable DealiasedVelocity { get; } = ColorTable.FromStops("Velocity (m/s, unfolded)",
+        (-80, new Rgba(0x00, 0xE0, 0xE0, 0xFF)),
+        (-50, new Rgba(0x0B, 0x61, 0x0B, 0xFF)),
+        (-25, new Rgba(0x1E, 0xC2, 0x1E, 0xFF)),
+        (-2, new Rgba(0xAF, 0xE3, 0xAF, 0xFF)),
+        (0, new Rgba(0x8E, 0x8E, 0x9E, 0xB0)),
+        (2, new Rgba(0xF0, 0xC0, 0xC0, 0xFF)),
+        (25, new Rgba(0xE0, 0x30, 0x30, 0xFF)),
+        (50, new Rgba(0x8A, 0x0A, 0x0A, 0xFF)),
+        (80, new Rgba(0xE0, 0x00, 0xE0, 0xFF)));
+
     public static ColorTable SpectrumWidth { get; } = ColorTable.FromStops("Spectrum width (m/s)",
         (0, new Rgba(0x20, 0x28, 0x30, 0x80)),
         (4, new Rgba(0x3C, 0x8B, 0xC8, 0xFF)),

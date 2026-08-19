@@ -311,7 +311,11 @@ public partial class MainWindow : Window
     /// <summary>Redraw the product bar from the controller, so keyboard and mouse agree.</summary>
     private void SyncProductBar()
     {
+        // The segments' IsChecked is bound to the view model, so writing the selection
+        // here echoes straight back through Checked/Unchecked.
+        _suppressMomentEvents = true;
         _vm.SyncMoments(_radar.AvailableMoments, _radar.CurrentMoment);
+        _suppressMomentEvents = false;
 
         var elevations = _radar.ElevationsForCurrentMoment;
         _vm.SyncTilts(elevations, _radar.CutPosition);
@@ -327,11 +331,23 @@ public partial class MainWindow : Window
             : Visibility.Collapsed;
     }
 
-    private void MomentSegment_Click(object sender, RoutedEventArgs e)
+    private bool _suppressMomentEvents;
+
+    private void MomentSegment_Checked(object sender, RoutedEventArgs e)
     {
+        if (_suppressMomentEvents) return;
         if (sender is FrameworkElement { Tag: MomentOption option })
             _radar.SelectMoment(option.Moment);
-        SyncProductBar(); // clicking the armed segment would otherwise un-check it
+        SyncProductBar();
+    }
+
+    /// <summary>A product is always showing, so the armed segment cannot be un-armed.</summary>
+    private void MomentSegment_Unchecked(object sender, RoutedEventArgs e)
+    {
+        if (_suppressMomentEvents) return;
+        if (sender is ToggleButton { Tag: MomentOption option } button &&
+            option.Moment == _radar.CurrentMoment)
+            button.IsChecked = true;
     }
 
     private void TiltCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -951,6 +967,26 @@ public partial class MainWindow : Window
 
         _radar.StormMotion = (speed, bearing);
         if (_radar.StormRelative) _radar.Refresh();
+    }
+
+    /// <summary>
+    /// Unfolding rewrites measured values, so the panel says plainly whether it is doing
+    /// anything: a cut with no Nyquist velocity in its header cannot be unfolded at all,
+    /// and silently ignoring the checkbox would look like a bug.
+    /// </summary>
+    private void Dealias_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_radar is null || FilterDealias is null) return;
+        _radar.DealiasVelocity = FilterDealias.IsChecked == true;
+        _radar.Refresh();
+
+        DealiasNoteText.Text = FilterDealias.IsChecked != true
+            ? ""
+            : _radar.CurrentMoment != Moment.Velocity
+                ? "Applies to velocity — switch to VEL to see it."
+                : _radar.DisplayedSweep?.NyquistMs is { } nyquist
+                    ? $"Unfolding against ±{nyquist:F1} m/s."
+                    : "This cut reports no Nyquist velocity, so nothing can be unfolded.";
     }
 
     private void StormRelative_Changed(object sender, RoutedEventArgs e)

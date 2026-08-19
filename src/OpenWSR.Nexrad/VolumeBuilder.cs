@@ -91,6 +91,11 @@ public sealed class VolumeBuilder
                     folded[i * gateCount + g] = true;
         }
 
+        // The RRAD block rides on individual radials and can be absent from some of them;
+        // take the first one that carried it. Nyquist is a property of the cut's PRF, so
+        // it is the same across the cut when present at all.
+        float? nyquist = withMoment.Select(r => r.NyquistMs).FirstOrDefault(n => n is > 0);
+
         return new Sweep(
             _icao ?? "????",
             withMoment[0].TimeUtc,
@@ -98,6 +103,6 @@ public sealed class VolumeBuilder
             elevationNumber, withMoment[0].ElevationDeg,
             moment, azimuths,
             first.FirstGateM, first.GateSpacingM,
-            gateCount, data, first.Scale, folded);
+            gateCount, data, first.Scale, folded, nyquist);
     }
 }

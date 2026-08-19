@@ -33,6 +33,9 @@ No account, no API key, no subscription. Everything it reads is public data.
 - **Vertical cross-section** — right-drag a line and get a true vertical slice through
   the volume, interpolated between elevation cuts.
 - **Storm-relative velocity** — subtracts tracked storm motion so rotation stands out.
+- **Velocity unfolding** — recovers velocities past the Nyquist limit, where a strong
+  couplet otherwise reads with its sign reversed. Region-based, needing no sounding or
+  previous volume, and cross-checked against Py-ART.
 
 **National context**
 

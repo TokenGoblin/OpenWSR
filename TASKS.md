@@ -279,3 +279,46 @@ A full audit of the tree (`docs/audit.md`) found 21 issues. All are closed.
 - [x] Accessibility: 28 glyph-only controls given automation names; mode and tool segments answer to `TogglePattern`
 
 **Gate:** [PASSED] 125/125 tests; build clean. Verified live against KMTX: product bar switches products, all three modes exercised end-to-end (live chunk streaming, archive day + 13-frame loop, HRRR 00z forecast), loop frames survive a pause, GIF export produces a valid animation carrying every layer.
+
+
+## Velocity dealiasing (2026-08-18)
+
+Velocity folds at the Nyquist limit, so a strong couplet reads with its sign reversed —
+the field does not merely omit information, it asserts the opposite of the truth. This was
+the largest remaining analytical gap in `docs/parity.md`.
+
+- [x] Carry the Nyquist velocity from the RRAD block into `Sweep`. It rides on individual
+      radials and is absent from some, so the builder takes the first in the cut that has
+      it; nullable, because pre-2000 archives carry no RRAD block at all
+- [x] `VelocityDealiasing`: region-based unfolding after Py-ART's `dealias_region_based` —
+      segment the sweep into regions of continuous velocity, measure the mean step across
+      every shared boundary, and pick a whole-interval shift per region that makes the
+      boundaries agree. No sounding and no previous volume, so live partial volumes and
+      1991 archives both work
+- [x] Conservative by construction: a correction only crosses a boundary of at least a few
+      gates, and only when the step really lands near a whole interval. Without this, two
+      spurious folds chained through low-SNR speckle at 250 km turned −22 m/s into +82 m/s
+- [x] `BuiltinTables.DealiasedVelocity` — the standard scale stops at 35 m/s and would clip
+      everything the unfold just recovered into one saturated colour
+- [x] One `Prepare` path in `RadarDisplayController` so the map, the loop and the
+      cross-section cannot disagree; unfold runs before storm-relative, since subtracting a
+      real motion from a folded value only moves the discontinuity
+- [x] `resources/crosscheck/dealias_pyart.py` against Py-ART 2.2.5
+- [x] 24 tests: synthetic fold-and-recover across fold depths (including a couplet whose
+      sign is reversed by folding), whole-interval invariants, and golden structural
+      agreement with Py-ART on the Moore volume
+- [x] Moment segments switched from `Click` to `Checked`, matching the mode and tool
+      segments — `TogglePattern.Toggle()` does not raise `Click`, so they were unreachable
+      to assistive technology
+
+**Gate:** [PASSED] 149/149 tests; build clean in Debug and Release. Verified live on the
+committed KTLX 2013-05-20 20:16Z volume: Nyquist decodes to 26.12 m/s (Py-ART: 26.1200),
+raw pinned at exactly ±26.00, unfolded field reaches the 78.36 m/s single-unfold ceiling,
+corrections land in the same azimuth sectors Py-ART finds, in the same rank order.
+
+### Known limitation
+
+No quality mask. The low Doppler cuts of VCP 12/212 carry no correlation coefficient, so
+there is nothing to filter marginal gates on, and the implementation compensates by
+demanding more evidence than Py-ART — correcting about two thirds as many gates. Adding a
+gatefilter is the obvious next improvement.

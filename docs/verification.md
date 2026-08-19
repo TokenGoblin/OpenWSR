@@ -88,6 +88,37 @@ networking. This is what keeps the decoders testable headlessly.
 
 ---
 
+### Velocity dealiasing — Py-ART, and why not gate-for-gate
+
+Dealiasing is the one decoder-adjacent feature where matching the reference exactly is the
+*wrong* bar. Region-based dealiasing makes a chain of discrete judgement calls, and two
+correct implementations legitimately differ on which marginal folds they commit to.
+
+`resources/crosscheck/dealias_pyart.py` dumps Py-ART 2.2.5's `dealias_region_based` on the
+same sweep. What is asserted in `VelocityDealiasingGoldenTests` is structural agreement:
+
+| | Py-ART | OpenWSR |
+|---|---|---|
+| Nyquist | 26.1200 m/s | identical |
+| Valid gates (0.5° cut) | 155 912 | identical |
+| Raw min/max | −26.00 / +26.00 | identical |
+| Shift values used | −1, 0, +1 | identical |
+| Corrected, 1.3° cut | 4 116 (2.71 %) | 2 788 (1.84 %) |
+| Corrected mean range | 176 km | 171 km |
+| Top azimuth sectors | 30-45, 210-225, 195-210, 15-30 | same, same order |
+
+OpenWSR is deliberately the more conservative of the two, correcting roughly two thirds as
+many gates. It demands a boundary of at least a few gates before letting a correction
+cross, because without a quality mask a chain of two spurious folds through low-SNR
+speckle at 250 km turned −22 m/s into +82 m/s. Refusing to unfold leaves a measured value
+in place; unfolding wrongly invents one.
+
+The strongest tests are not the reference comparison at all — they are synthetic. A uniform
+wind field faster than Nyquist is folded, dealiased, and compared against the truth it was
+built from. Since dealiasing can only ever recover a field up to one global interval, the
+assertion is that `recovered − truth` is the *same* whole interval at every gate: that is
+the shape being exactly right.
+
 ## A note on test expectations
 
 Six tests failed on first write during the build, and **all six were wrong

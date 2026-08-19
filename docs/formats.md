@@ -73,6 +73,33 @@ Supplemental scans repeat a low elevation mid-volume. Sweep assembly must key on
 (elevation number, azimuth) and tolerate the same nominal elevation appearing more than
 once in a volume, otherwise supplemental cuts overwrite the base cut.
 
+### Velocity aliasing and the RRAD block
+
+Radial velocity is measured from Doppler phase shift, which wraps. Anything outside
+±V_nyquist is reported shifted by a whole number of `2 * V_nyquist` intervals, so the raw
+field is hard-clipped at the fold limit — on KTLX 2013-05-20 the 0.5° cut reads exactly
+−26.00 to +26.00 m/s and nothing outside it. That pinning is the diagnostic: real data
+scatters, folded data saturates.
+
+The Nyquist velocity lives in the **RRAD block** at byte offset 16, as a `u16` in
+hundredths of a metre per second. It rides on individual radials and is **not present on
+every one**, so take the first radial in the cut that carries it (`VolumeBuilder`), rather
+than assuming radial zero has it.
+
+Two traps:
+
+- **Split cuts.** VCP 12/212 scan the low elevations twice — a long-PRT surveillance cut
+  carrying reflectivity, then a Doppler cut at the same elevation carrying velocity and
+  spectrum width. The Nyquist differs between them (8.3 vs 26.12 m/s on the same volume),
+  and the surveillance cut has no velocity at all. Py-ART's sweep 0 is the surveillance
+  cut; asking it to dealias yields an empty array.
+- **No dual-pol on the Doppler cut.** The low Doppler cuts carry no correlation
+  coefficient, so the usual quality mask for dealiasing is unavailable there. Spectrum
+  width is co-located and is the only quality field you get.
+
+Pre-2000 archives frequently carry no RRAD block at all. `Sweep.NyquistMs` is nullable for
+exactly this reason, and unfolding is skipped rather than guessing an interval.
+
 ### Real-time chunks
 
 The chunks bucket serves a volume as S (start) / I (intermediate) / E (end) parts. They

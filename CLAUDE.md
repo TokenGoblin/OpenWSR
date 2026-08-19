@@ -24,7 +24,7 @@ Scratch directories are session-scoped and get lost.
 
 ```
 dotnet build OpenWSR.slnx                    # NOTE: .slnx, not .sln
-dotnet test OpenWSR.slnx                     # 125 tests
+dotnet test OpenWSR.slnx                     # 149 tests
 dotnet run --project src/OpenWSR.App
 dotnet publish src/OpenWSR.App -c Release    # single-file self-contained exe
 ```
@@ -139,6 +139,14 @@ stopped being distributed around 2021 — the decoder still works for archives, 
 why live cell labels usually show an ID with no dBZ. Stand-alone tabular products put the
 tabular pointer in the *symbology* offset slot.
 
+**Velocity aliasing.** The Nyquist velocity comes from the RRAD block, is absent on some
+radials (take the first that has it), differs between the split surveillance and Doppler
+cuts of VCP 12/212, and is missing entirely from pre-2000 archives — hence
+`Sweep.NyquistMs` is nullable. Raw velocity pinned at exactly ±V_nyquist is the signature
+of folding, not of real data. Unfolding is region-based and deliberately conservative:
+without a quality mask, a chain of spurious folds through long-range speckle will happily
+turn −22 m/s into +82 m/s. Never let a correction cross a hairline region boundary.
+
 **GRIB2.** MRMS uses PNG packing (template 5.41) — easy. HRRR uses complex packing with
 second-order spatial differencing (5.3) on a Lambert grid (3.30) — the hard path, and the
 one to be careful with. Scale factors are sign-and-magnitude, not two's complement. Fetch
@@ -184,9 +192,13 @@ screen. `--soak` runs the live pipeline headless.
 ## Open work
 
 Lightning (GOES GLM, needs NetCDF), MRMS native rendering (reader is done and
-golden-tested; only the draw path is missing), velocity dealiasing, azimuthal shear, VWP
-panel, placefile icon sheets, drawing tools, 3D volume rendering, independent site per
-pane, loops longer than 30 frames.
+golden-tested; only the draw path is missing), azimuthal shear, VWP panel, placefile icon
+sheets, drawing tools, 3D volume rendering, independent site per pane, loops longer than
+30 frames.
+
+Velocity dealiasing works but has no quality mask — the low Doppler cuts carry no
+correlation coefficient to filter on. Adding one (from CC where present, or spectrum
+width) would let it match Py-ART's correction rate instead of running at two thirds of it.
 
 Note for storm labels: **NSS (storm structure) has not been distributed since ~2021**, so
 `MaxDbz` / `CellBasedVil` / `EchoTopKft` are always null on live data. The layers panel says

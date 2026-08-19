@@ -261,6 +261,11 @@
                                        ToolTip="Blend between radar cells: raw gates → soft consumer-style display" />
                             <Slider x:Name="SmoothSlider" AutomationProperties.Name="Radar smoothing" Minimum="0" Maximum="100" Value="0"
                                     ValueChanged="SmoothSlider_ValueChanged" />
+                            <CheckBox x:Name="FilterDealias" Content="Unfold velocity" Margin="0,8,0,0"
+                                      ToolTip="Recover velocities past the Nyquist limit, where a strong couplet otherwise reads with its sign reversed"
+                                      Checked="Dealias_Changed" Unchecked="Dealias_Changed" />
+                            <TextBlock x:Name="DealiasNoteText" FontSize="10.5" FontStyle="Italic" TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextDim}" Margin="18,2,0,0" Text="" />
                         </StackPanel>
                     </Expander>
 
@@ -422,7 +427,9 @@
                                                   IsEnabled="{Binding IsAvailable}"
                                                   ToolTip="{Binding Tooltip}"
                                                   AutomationProperties.Name="{Binding Description}"
-                                                  Tag="{Binding}" Click="MomentSegment_Click">
+                                                  Tag="{Binding}"
+                                                  Checked="MomentSegment_Checked"
+                                                  Unchecked="MomentSegment_Unchecked">
                                         <StackPanel>
                                             <TextBlock Text="{Binding Label}" HorizontalAlignment="Center"
                                                        FontSize="12" FontWeight="SemiBold" />

@@ -66,7 +66,7 @@ premium tiers elsewhere and two have no commercial equivalent:
 |---|---|---|
 | Vertical cross-section | Costs users | **Done** — interpolated between bracketing elevation cuts |
 | Storm-relative velocity | Costs users | **Done** |
-| Velocity dealiasing | Costs users | **Open** — velocity still folds at the Nyquist limit |
+| Velocity dealiasing | Costs users | **Done** — region-based, cross-checked against Py-ART; no quality mask yet |
 | Azimuthal shear / rotation tracks | Expected | **Open** |
 | Hail size contours | Expected | **Partial** — per-cell markers sized by severe-hail probability, not contours |
 | VWP / VAD wind profile | Nice | **Open** — parsing is easy, the panel is the work |
