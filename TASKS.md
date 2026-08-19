@@ -468,3 +468,40 @@ the crosses sitting in the convective cores.
 
 `docs/parity.md` began with 31 gaps and 11 UI findings. All 31 are done or partial, and all
 11 UI findings are done.
+
+
+## MRMS native rendering (2026-08-19)
+
+The GRIB2 reader has decoded MRMS since Phase 03 and is golden-tested against ecCodes;
+what was missing was everything after the decode. The tile mosaic covered the picture, but
+it is published only to zoom 12 and stretched above that, so the seamless national view
+turns to mush exactly when you lean in on a storm.
+
+- [x] `MrmsClient`: newest composite from `noaa-mrms-pds`, anonymous, walking back a day
+      because just after midnight UTC today's folder can be empty. Files land every two
+      minutes at about 845 kB
+- [x] `MrmsController`: decode off the UI thread, then **quantise to palette levels rather
+      than keeping floats** — 24 MB instead of 98 MB for the same picture, since the grid
+      is only ever drawn through a 256-entry table
+- [x] **Rasterise the visible window, not the country.** A single CONUS texture at 2048
+      would be about 3.4 km per pixel — coarser than the tiles it is meant to improve on.
+      Cutting the viewport (with 35 % overscan so small pans reuse it) keeps it sharp at
+      any zoom, and re-cuts only when the view leaves the area last drawn
+- [x] Mutual exclusion: native MRMS and the tile mosaic are the same field, and the HRRR
+      forecast wants the same overlay slot, so enabling any one switches the others off
+- [x] `Quantise` and `RenderRegion` are pure and public, so the draw path is testable with
+      no graphics device — 5 tests covering the no-coverage flag, transparency off-grid,
+      that the strongest cell actually paints, and that two different parts of the country
+      do not render identically
+
+**Gate:** [PASSED] 210/210 tests; build clean in Debug and Release. Verified live: the
+layer fetched, decoded 24.5 million points and drew in about three seconds, on a composite
+one minute old — `MRMS composite 14:50Z (1 min old), 7000×3500 at 0.01°`.
+
+### Verification note
+
+Rendering was confirmed on screen at local zoom, under a live radar sweep. The intended
+national-scale screenshot was not captured: the workstation locked partway through, and a
+locked session blocks synthetic input and window capture. The draw path's correctness is
+covered by the headless tests instead, which is the more durable check — but a national
+screenshot for `docs/screenshots/` is still owed.

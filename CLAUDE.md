@@ -24,7 +24,7 @@ Scratch directories are session-scoped and get lost.
 
 ```
 dotnet build OpenWSR.slnx                    # NOTE: .slnx, not .sln
-dotnet test OpenWSR.slnx                     # 197 tests
+dotnet test OpenWSR.slnx                     # 210 tests
 dotnet run --project src/OpenWSR.App
 dotnet publish src/OpenWSR.App -c Release    # single-file self-contained exe
 ```
@@ -149,6 +149,11 @@ correction must never cross a hairline region boundary, because corrections chai
 stacked guesses turn −22 m/s into +82 m/s. `MinBoundaryGates` carries the measurements
 behind its value — read them before touching it.
 
+**The Field overlay slot has three claimants** — the HRRR forecast, the native MRMS
+composite, and anything gridded added later. They are mutually exclusive by construction:
+enabling MRMS leaves forecast mode, and entering forecast mode switches MRMS off. Native
+MRMS and the tile mosaic are the same field, so each turns the other off too.
+
 **Two image-overlay slots.** `MapView.SetImageOverlay` takes an `OverlaySlot`: `Field`
 draws under the radar sweep (model output, mosaics) and `Analysis` draws over it (derived
 products read *against* the echo). They are independent, so the HRRR forecast and a
@@ -204,9 +209,8 @@ screen. `--soak` runs the live pipeline headless.
 
 ## Open work
 
-MRMS native rendering (reader is done and golden-tested; only the draw path is missing),
-VWP panel, placefile icon sheets, drawing tools, 3D volume rendering, independent site per
-pane, loops longer than 30 frames.
+VWP panel, placefile icon sheets, drawing tools, 3D volume rendering, independent site
+per pane, loops longer than 30 frames.
 
 Every gap in `docs/parity.md` is now closed. What is left is the "Nice" and "Cosmetic"
 tier plus the two Partials.

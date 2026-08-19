@@ -124,6 +124,8 @@ The scan's central finding was a dependency, not a feature:
 > this point — its GRIB2 issue blocks its mosaic, wind and precipitation-type work, and
 > it has been open for two years.
 
+MRMS native rendering closed on 19 Aug 2026 — the tile mosaic remains as the lightweight option, and the native layer is there for when the tiles run out of resolution.
+
 The chosen route was to **decouple the layers from the formats**: ship the national
 mosaic and satellite from Iowa State's pre-rendered tiles in hours using the existing
 tile pipeline, then do the real GRIB2 work on its own schedule rather than blocking

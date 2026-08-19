@@ -45,7 +45,9 @@ No account, no API key, no subscription. Everything it reads is public data.
 
 **National context**
 
-- **National mosaic** — seamless CONUS reflectivity.
+- **National mosaic** — seamless CONUS reflectivity, either from pre-rendered tiles or
+  decoded natively from MRMS GRIB2. The tiles are published only to zoom 12 and are
+  stretched above it; the native grid is 0.01° and stays sharp all the way in.
 - **Satellite** — GOES-East infrared beneath the radar layers.
 - **Future radar** — HRRR simulated reflectivity for the next six hours, decoded from
   GRIB2 and resampled from its Lambert grid into Mercator.

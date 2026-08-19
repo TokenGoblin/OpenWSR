@@ -277,7 +277,18 @@
                             <Slider x:Name="MosaicOpacitySlider" AutomationProperties.Name="National mosaic opacity" Minimum="0" Maximum="100" Value="75"
                                     Margin="18,0,0,4" ValueChanged="MosaicOpacity_Changed" />
 
-                            <CheckBox x:Name="FilterSatellite" Content="Satellite (GOES IR)"
+                            <CheckBox x:Name="FilterMrms" AutomationProperties.Name="MRMS composite"
+                                      Content="MRMS composite (full res)"
+                                      ToolTip="The same national field decoded from MRMS GRIB2 rather than pre-rendered tiles — stays sharp past zoom 12, where the tiles are stretched"
+                                      Checked="Mrms_Changed" Unchecked="Mrms_Changed" />
+                            <Slider x:Name="MrmsOpacitySlider" AutomationProperties.Name="MRMS opacity"
+                                    Minimum="0" Maximum="100" Value="75" Margin="18,0,0,0"
+                                    ValueChanged="MrmsOpacity_Changed" />
+                            <TextBlock x:Name="MrmsNoteText" FontSize="10.5" FontStyle="Italic"
+                                       TextWrapping="Wrap" Foreground="{StaticResource TextDim}"
+                                       Margin="18,0,0,4" Text="" />
+
+                            <CheckBox x:Name="FilterSatellite" AutomationProperties.Name="Satellite" Content="Satellite (GOES IR)"
                                       ToolTip="Infrared cloud tops from GOES-East, under the radar layers"
                                       Checked="SatelliteFilter_Changed" Unchecked="SatelliteFilter_Changed" />
                             <Slider x:Name="SatelliteOpacitySlider" AutomationProperties.Name="Satellite opacity" Minimum="0" Maximum="100" Value="60"

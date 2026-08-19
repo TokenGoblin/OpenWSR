@@ -30,6 +30,7 @@ public partial class MainWindow : Window
     private readonly PlacefileController _placefiles;
     private readonly RotationTracksController _tracks;
     private readonly LightningController _lightning;
+    private readonly MrmsController _mrms;
     private readonly TrayNotifier _tray;
     private readonly PaneManager _panes;
     private readonly Geocoder _geocoder;
@@ -157,6 +158,14 @@ public partial class MainWindow : Window
         });
         _lightning.ErrorRaised += text => Dispatcher.BeginInvoke(() => ReportError(text));
 
+        _mrms = new MrmsController(_mapView);
+        _mrms.StatusChanged += text => Dispatcher.BeginInvoke(() =>
+        {
+            Report(text);
+            MrmsNoteText.Text = text;
+        });
+        _mrms.ErrorRaised += text => Dispatcher.BeginInvoke(() => ReportError(text));
+
         _tray = new TrayNotifier();
         _tray.Activated += () => Dispatcher.BeginInvoke(() =>
         {
@@ -219,6 +228,7 @@ public partial class MainWindow : Window
             // Storm symbols are sized in screen pixels, so a zoom change means new geometry.
             _storms.NotifyViewChanged();
             _lightning.NotifyViewChanged();
+            _mrms.NotifyViewChanged();
         };
         _statusTimer.Start();
 
@@ -245,6 +255,7 @@ public partial class MainWindow : Window
             _placefiles.Dispose();
             _tracks.Dispose();
             _lightning.Dispose();
+            _mrms.Dispose();
             _future.Dispose();
             _outlooks.Dispose();
             _geocoder.Dispose();
@@ -449,6 +460,9 @@ public partial class MainWindow : Window
                 _ = LoadSelectedDayAsync();
                 break;
             case DataMode.Forecast:
+                // The forecast raster and the MRMS composite occupy the same layer under
+                // the radar, so one has to yield.
+                if (FilterMrms.IsChecked == true) FilterMrms.IsChecked = false;
                 Report("Forecast: load the HRRR run to see the next six hours.");
                 break;
         }
@@ -939,8 +953,10 @@ public partial class MainWindow : Window
 
     private void MosaicFilter_Changed(object sender, RoutedEventArgs e)
     {
-        if (_mapView is not null)
-            _mapView.MosaicEnabled = FilterMosaic.IsChecked == true;
+        if (_mapView is null) return;
+        _mapView.MosaicEnabled = FilterMosaic.IsChecked == true;
+        if (FilterMosaic.IsChecked == true && FilterMrms?.IsChecked == true)
+            FilterMrms.IsChecked = false;
     }
 
     private void MosaicOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -1056,6 +1072,32 @@ public partial class MainWindow : Window
         _outlooks.ShowDiscussions = FilterDiscussions.IsChecked == true;
         _outlooks.ShowReports = FilterReports.IsChecked == true;
         await _outlooks.ApplyAsync();
+    }
+
+    /// <summary>
+    /// Native MRMS and the pre-rendered tile mosaic are the same field, so showing both
+    /// just draws one over the other; picking either turns the other off.
+    /// </summary>
+    private void Mrms_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_mrms is null || FilterMrms is null) return;
+        if (FilterMrms.IsChecked == true)
+        {
+            if (FilterMosaic.IsChecked == true) FilterMosaic.IsChecked = false;
+            if (_vm.IsForecast) ApplyMode(DataMode.Archive);
+            MrmsNoteText.Text = "Fetching…";
+            _mrms.Enable();
+        }
+        else
+        {
+            _mrms.Disable();
+            MrmsNoteText.Text = "";
+        }
+    }
+
+    private void MrmsOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_mrms is not null) _mrms.Opacity = (float)(e.NewValue / 100.0);
     }
 
     private void Lightning_Changed(object sender, RoutedEventArgs e)
