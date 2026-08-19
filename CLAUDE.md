@@ -143,9 +143,10 @@ tabular pointer in the *symbology* offset slot.
 radials (take the first that has it), differs between the split surveillance and Doppler
 cuts of VCP 12/212, and is missing entirely from pre-2000 archives — hence
 `Sweep.NyquistMs` is nullable. Raw velocity pinned at exactly ±V_nyquist is the signature
-of folding, not of real data. Unfolding is region-based and deliberately conservative:
-without a quality mask, a chain of spurious folds through long-range speckle will happily
-turn −22 m/s into +82 m/s. Never let a correction cross a hairline region boundary.
+of folding, not of real data. Unfolding is region-based and deliberately conservative: a
+correction must never cross a hairline region boundary, because corrections chain, and two
+stacked guesses turn −22 m/s into +82 m/s. `MinBoundaryGates` carries the measurements
+behind its value — read them before touching it.
 
 **GRIB2.** MRMS uses PNG packing (template 5.41) — easy. HRRR uses complex packing with
 second-order spatial differencing (5.3) on a Lambert grid (3.30) — the hard path, and the
@@ -196,9 +197,12 @@ golden-tested; only the draw path is missing), azimuthal shear, VWP panel, place
 sheets, drawing tools, 3D volume rendering, independent site per pane, loops longer than
 30 frames.
 
-Velocity dealiasing works but has no quality mask — the low Doppler cuts carry no
-correlation coefficient to filter on. Adding one (from CC where present, or spectrum
-width) would let it match Py-ART's correction rate instead of running at two thirds of it.
+Velocity dealiasing corrects about two thirds as many gates as Py-ART. A signal-quality
+gatefilter will **not** close that gap — measured on the Moore volume, the corrected gates
+average 29 dBZ against 16 dBZ for untouched ones, so filtering weak returns discards the
+wrong gates. Nor will loosening `MinBoundaryGates`: at 3 the rate matches Py-ART but
+corrections start chaining to ±2 intervals and fabricate 130 m/s winds. Closing it properly
+means Py-ART's multi-pass structure, not a threshold tweak.
 
 Note for storm labels: **NSS (storm structure) has not been distributed since ~2021**, so
 `MaxDbz` / `CellBasedVil` / `EchoTopKft` are always null on live data. The layers panel says

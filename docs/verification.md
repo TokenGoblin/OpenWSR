@@ -108,10 +108,26 @@ same sweep. What is asserted in `VelocityDealiasingGoldenTests` is structural ag
 | Top azimuth sectors | 30-45, 210-225, 195-210, 15-30 | same, same order |
 
 OpenWSR is deliberately the more conservative of the two, correcting roughly two thirds as
-many gates. It demands a boundary of at least a few gates before letting a correction
-cross, because without a quality mask a chain of two spurious folds through low-SNR
-speckle at 250 km turned −22 m/s into +82 m/s. Refusing to unfold leaves a measured value
-in place; unfolding wrongly invents one.
+many gates. It demands a boundary of at least five gate pairs before letting a correction
+cross. That number is measured rather than chosen — sweeping it on the Moore volume:
+
+| `MinBoundaryGates` | corrected (0.5° cut) | largest shift | peak |
+|---|---|---|---|
+| 5 | 0.47 % | ±1 | 78.2 m/s |
+| 3 | 0.96 % | ±2 | 130.5 m/s |
+| 2 | 1.01 % | ±2 | 130.5 m/s |
+
+There is a cliff between 3 and 5. Below it the rate matches Py-ART's 0.89 % almost exactly
+— and the algorithm starts chaining corrections through already-shifted regions to reach
+±2 intervals, which no single boundary can justify since the raw field spans exactly one.
+A 130 m/s wind is two stacked guesses, not a measurement. Refusing to unfold leaves a
+measured value in place; unfolding wrongly invents one, so the conservative side is the
+right one to err on.
+
+It is worth stating what this is *not*, because it looks like a signal-quality problem and
+is not one: the corrected gates average 29.3 dBZ against 15.8 dBZ for the untouched ones,
+and at 250 km the tenth percentile is still 14.5 dBZ. A gatefilter on weak returns would
+discard the wrong gates entirely.
 
 The strongest tests are not the reference comparison at all — they are synthetic. A uniform
 wind field faster than Nyquist is folded, dealiased, and compared against the truth it was

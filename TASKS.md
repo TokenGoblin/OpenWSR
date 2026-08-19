@@ -316,9 +316,19 @@ committed KTLX 2013-05-20 20:16Z volume: Nyquist decodes to 26.12 m/s (Py-ART: 2
 raw pinned at exactly ±26.00, unfolded field reaches the 78.36 m/s single-unfold ceiling,
 corrections land in the same azimuth sectors Py-ART finds, in the same rank order.
 
-### Known limitation
+### Known limitation, and what will not fix it
 
-No quality mask. The low Doppler cuts of VCP 12/212 carry no correlation coefficient, so
-there is nothing to filter marginal gates on, and the implementation compensates by
-demanding more evidence than Py-ART — correcting about two thirds as many gates. Adding a
-gatefilter is the obvious next improvement.
+Corrects about two thirds as many gates as Py-ART. Two candidate fixes were tested and
+both are dead ends:
+
+- **A signal-quality gatefilter.** Measured on the Moore volume, the corrected gates
+  average 29.3 dBZ against 15.8 dBZ for untouched ones, and at 250 km the tenth percentile
+  is still 14.5 dBZ. The gates in question carry strong, real returns — filtering on weak
+  signal would discard exactly the wrong ones. (This was written up as "the obvious next
+  improvement" before it was measured. It is not.)
+- **Loosening `MinBoundaryGates`.** At 3 the correction rate reaches 0.96 % against
+  Py-ART's 0.89 %, but the largest shift becomes ±2 and the peak velocity jumps to
+  130.5 m/s. Matching the count by fabricating a 290 mph wind is not matching.
+
+Closing the gap properly means adopting Py-ART's multi-pass structure — several passes at
+different `IntervalSplits`, reconciled — rather than tuning a single pass.

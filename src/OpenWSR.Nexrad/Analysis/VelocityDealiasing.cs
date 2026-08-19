@@ -29,10 +29,26 @@ public static class VelocityDealiasing
     private const int MinRegionGates = 10;
 
     /// <summary>
-    /// A boundary this thin cannot support a claim that the two sides are a whole interval
-    /// apart — its mean is one or two noisy gate pairs, not an average. Such a region
-    /// inherits its neighbour's shift instead of inventing a fold. Without this, low-SNR
-    /// far-range speckle produced 80 m/s readings out of −22 m/s data.
+    /// A correction only travels across a boundary at least this many gate pairs wide. A
+    /// thinner one is one or two gate pairs, not an average, and cannot support a claim
+    /// that its two sides are a whole interval apart.
+    ///
+    /// The value is measured, not guessed, against the KTLX 2013-05-20 20:16Z volume:
+    ///
+    ///   width 5 -> 0.47 % of gates corrected, largest shift 1, peak 78.2 m/s
+    ///   width 3 -> 0.96 %,                    largest shift 2, peak 130.5 m/s
+    ///   width 2 -> 1.01 %,                    largest shift 2, peak 130.5 m/s
+    ///
+    /// There is a cliff between 3 and 5. Below it, corrections chain — one region reached
+    /// through another already-shifted one — and reach ±2 intervals, which no single
+    /// boundary can justify, because the raw field spans exactly one. 130 m/s is not a
+    /// wind; it is two stacked guesses. Py-ART uses only ±1 on this volume too, so the
+    /// conservative setting agrees with the reference on the conclusion even though it
+    /// corrects fewer gates on the way there.
+    ///
+    /// Note this is not a signal-quality problem, though it looks like one: the corrected
+    /// gates average 29 dBZ against 16 dBZ for untouched ones, and even at 250 km the
+    /// tenth percentile is 14.5 dBZ. Filtering weak returns would discard the wrong gates.
     /// </summary>
     private const int MinBoundaryGates = 5;
 
