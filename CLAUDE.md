@@ -43,6 +43,9 @@ Placefiles┤  Render ──┘
 Palettes ─┘
 ```
 
+`Placefiles` depends on `Geo` — the only edge between the pure libraries. A drawn circle
+has to be written out as a ring of a true *ground* radius, which is geodesy, not geometry.
+
 **Purity is enforced by a test.** `Nexrad`, `Geo`, `Grib2`, `NetCdf` and `Placefiles` must not
 reference WPF, Direct3D or the network. `PurityTests` asserts this against assembly
 references — if you need imaging or HTTP in one of them, that is a signal the code
@@ -97,7 +100,11 @@ two-thirds of the window — which looks exactly like a broken layout. Always
 
 **WPF's default control templates are unreadable on a dark ground.** `Theme.xaml`
 provides explicit templates for Button, ToggleButton, ComboBox, TextBox, CheckBox,
-Slider, DatePicker and ScrollBar. Style through it; don't hardcode colours.
+Slider, DatePicker, ScrollBar and ToolTip. Style through it; don't hardcode colours.
+The ToolTip one is not optional: a tooltip inherits `Foreground` from the control it
+belongs to, so every one of them was near-white text on WPF's default *light* popup —
+invisible. Its wrap width has to sit on the inner `TextBlock`; a `MaxWidth` on the ToolTip
+lets the text measure unconstrained and then clips the end of the sentence off.
 
 **Map keyboard has exactly one route.** `MapView.KeyPressed` (raised from the D3D child
 window's `WM_KEYDOWN`) is it. Do not also handle `Window.KeyDown` for the same keys: it is

@@ -322,6 +322,20 @@ Guessing the other way round would punch holes in a legitimately black icon.
 The sheet name is resolved **relative to the placefile's URL**, so the file's own source
 has to be kept around to load it.
 
+### Writing them
+
+OpenWSR writes placefiles as well as reading them — a drawing is saved as one, so it opens
+in GR and comes back through the same golden-tested parser. Two things the writer has to
+respect: a `Polygon` is always filled, so an outline that happens to close is a `Line` and
+not a `Polygon`; and a contour signals its end by **repeating its first point**, which the
+parser then consumes rather than handing back, so a round-tripped four-point ring returns
+as three points and is no less closed for it.
+
+A placefile has no circle. One is written as a 60-point ring preceded by a comment naming
+the centre and radius (`; OpenWSR-Circle: lat, lon, radiusM`); GR ignores the comment, and
+OpenWSR matches it back to the ring **by geometry**, so a reordered or hand-edited file
+still reassembles and a comment-stripping tool costs only the circle-ness, not the shape.
+
 ### Not implemented
 
 `Triangles` and `Image` blocks are parsed and skipped with a report rather than failing
