@@ -12,6 +12,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/OpenWSR.Geo.Tests/OpenWSR.Geo.Tests.csproj" />
+    <Project Path="tests/OpenWSR.App.Tests/OpenWSR.App.Tests.csproj" />
     <Project Path="tests/OpenWSR.Nexrad.Tests/OpenWSR.Nexrad.Tests.csproj" />
   </Folder>
 </Solution>

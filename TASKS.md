@@ -41,7 +41,7 @@ phase is done only when its **gate** passes. Check items off as they land.
 ## Phase 2 â€” Geo math (`OpenWSR.Geo`)
 
 - [x] `BeamPath` â€” 4/3 effective-earth-radius formulas from the plan
-- [ ] `Offset` â€” spherical great-circle (or geodesic) destination point
+- [x] `Offset` â€” spherical great-circle (or geodesic) destination point
 - [x] `ToMercator` / `FromMercator` (EPSG:3857)
 - [x] Analytic tests: 0.5Â°/100 km slant â†’ â‰ˆ1461 m above radar level; Mercator round-trip < 1e-9Â°; offset vs known geodesic cases
 
@@ -57,7 +57,7 @@ phase is done only when its **gate** passes. Check items off as they land.
 - [x] Visible-tile computation for current zoom/viewport (XYZ scheme)
 - [x] Async tile fetch (OSM default, MapTiler via settings key; provider + key in settings.json from day one)
 - [x] Disk tile cache under `%LOCALAPPDATA%\OpenWSR\tiles`; VRAM LRU cache capped ~512 MB
-- [ ] Parent-zoom tile stretch while children load â€” no blank checkerboard
+- [x] Parent-zoom tile stretch while children load â€” no blank checkerboard
 - [x] Debug marker layer: radar site lat/lons rendered as dots for alignment check
 - [x] Establish the airspace pattern now: side-docked WPF panels; Popup/ToolTip for anything floating over the map
 
@@ -67,9 +67,9 @@ phase is done only when its **gate** passes. Check items off as they land.
 
 ## Phase 4 â€” Radar rendering
 
-- [ ] Sweep data upload as `R32_FLOAT` (or `R16_UNORM`+scale) texture, `gateCount Ã— radialCount`
+- [x] Sweep data upload as `R32_FLOAT` (or `R16_UNORM`+scale) texture, `gateCount Ã— radialCount`
 - [x] Azimuth wedge-edge buffer (radialCount+1, sorted, wrap-safe); palette as 256-entry 1D texture
-- [ ] Vertex shader: geometry from `SV_VertexID` â†’ (radial, gate) â†’ beam path â†’ offset from radar origin â†’ Mercator; single indexed/instanced draw
+- [x] Vertex shader: geometry from `SV_VertexID` â†’ (radial, gate) â†’ beam path â†’ offset from radar origin â†’ Mercator; single indexed/instanced draw
 - [x] Pixel shader: point-sample data, normalize, palette lookup; discard below-threshold; range-fold rendered NWS purple
 - [x] Premultiplied alpha blend over basemap; opacity property (UI slider later)
 - [x] Product/palette switch = texture swap; measured 0.7–11.1 ms including CPU prep
@@ -96,15 +96,15 @@ phase is done only when its **gate** passes. Check items off as they land.
 
 ## Phase 6 â€” Real-time chunks
 
-- [ ] Volume-directory discovery in `unidata-nexrad-level2-chunks`: probe candidate dirs among 1â€“999, newest object wins; persist last-known index, probe forward
+- [x] Volume-directory discovery in `unidata-nexrad-level2-chunks`: probe candidate dirs among 1â€“999, newest object wins; persist last-known index, probe forward
 - [x] Chunk key parsing incl. volume-start-timestamp grouping
 - [x] `LiveVolumeAssembler`: S header capture; I/E decoded as bare LDM streams; order-independent by design (records are self-contained)
 - [x] Edge cases tested: mid-volume join, randomized order, duplicates, missing chunks; two assemblers held across volume overlap
 - [x] Partial-volume render: snapshot emitted per newly completed cut (first render ~5 s after connect)
-- [ ] Adaptive polling: tighten while chunks flow, back off when idle (VCP-aware, 2â€“10 min scans)
-- [ ] Pipeline on `System.Threading.Channels`: poller â†’ thread-pool decoder â†’ render queue; never decode on UI/render thread
+- [x] Adaptive polling: tighten while chunks flow, back off when idle (VCP-aware, 2â€“10 min scans)
+- [x] Pipeline on `System.Threading.Channels`: poller â†’ thread-pool decoder â†’ render queue; never decode on UI/render thread
 - [x] Feed-health UI: data-age always shown, amber past 10 min live; poll errors surface in status and retry
-- [ ] Offline replay test: chunk corpus in randomized order â†’ decoded sweeps identical to archive version (byte-identical reassembly = bonus)
+- [x] Offline replay test: chunk corpus in randomized order â†’ decoded sweeps identical to archive version (byte-identical reassembly = bonus)
 - [x] 30-minute live soak vs KTLX: 8/8 consecutive volumes complete across 7 directory rollovers, 100 snapshots, 0 errors, 0 duplicates, memory flat (0.1→1.0 MB managed)
 
 **Gate:** [PASSED] 30-min soak PASS (8/8 volumes, 0 errors, no leak) + randomized replay float-exact vs archive.
@@ -113,12 +113,12 @@ phase is done only when its **gate** passes. Check items off as they land.
 
 ## Phase 7 â€” Warnings, palettes, tools
 
-- [ ] `api.weather.gov/alerts/active` poller: descriptive User-Agent w/ contact, â‰¥60 s interval, backoff on error
-- [ ] GeoJSON â†’ Mercator polygon tessellation; fill + stroke per NWS convention (red TOR, yellow SVR, green FFW); z-order above radar
+- [x] `api.weather.gov/alerts/active` poller: descriptive User-Agent w/ contact, â‰¥60 s interval, backoff on error
+- [x] GeoJSON â†’ Mercator polygon tessellation; fill + stroke per NWS convention (red TOR, yellow SVR, green FFW); z-order above radar
 - [x] Polygon hit-test (`GeoMath.PointInRing`, unit-tested incl. concave) + detail Popup (headline, expiry, description, instruction)
-- [ ] GR2Analyst `.pal` parser in `OpenWSR.Palettes`; map breakpoints â†’ 256-entry texture (with interpolation flags honored)
-- [ ] Inspector: hover â†’ value, azimuth, slant range, ground range, beam height AGL
-- [ ] Distance/bearing tool â€” geodesic math from lat/lon, never Mercator lengths
+- [x] GR2Analyst `.pal` parser in `OpenWSR.Palettes`; map breakpoints â†’ 256-entry texture (with interpolation flags honored)
+- [x] Inspector: hover â†’ value, azimuth, slant range, ground range, beam height AGL
+- [x] Distance/bearing tool â€” geodesic math from lat/lon, never Mercator lengths
 - [x] Warning expiry: pruned on every access + rebuilt each 60 s poll
 
 **Gate:** live warnings appear/expire correctly; imported third-party `.pal` matches its reference screenshot.
@@ -241,3 +241,41 @@ Placefiles, velocity dealiasing, azimuthal shear, MRMS native render, NetCDF/GLM
 
 ### Known limitation
 IconFile sheets are not downloaded; Icon statements draw as markers in the placefile's colour. Triangles and Image blocks are skipped.
+
+
+## Audit remediation — code, features, UI (2026-08-18)
+
+A full audit of the tree (`docs/audit.md`) found 21 issues. All are closed.
+
+**Defects**
+
+- [x] **C-01** GIF export could never write a file: `StopLoop()` discarded `_loop` immediately before the recorder read `LoopGeometryCount`. Split into `PauseLoop()` (keeps frames) and `StopLoop()` (discards); the recorder now builds the loop on demand, so the feature no longer requires a playing loop to reach it. Verified end-to-end: 13-frame 7.7 MB GIF with the NETSCAPE loop block and 25 cs delays
+- [x] **C-02/C-03** Map shortcuts were wired from both the D3D child window and `Window.KeyDown`, so typing "Vail" into the search box selected velocity and ↑/↓ double-stepped the tilt. One route now, with a focus guard for text-entry controls
+- [x] **C-04** `LiveFeed.Stop()` blocked the UI thread up to 5 s from three call sites; now `StartAsync`/`StopAsync`, and `Dispose` closes the S3 client on a continuation instead of under an in-flight request
+- [x] **C-05** A geocoder failure reached the dispatcher and ended the session. Caught locally; the global handler now marks non-fatal exceptions handled and surfaces them
+- [x] **C-06** Proximity alerts measured to polygon *vertices*, so a warning whose nearest edge ran 5 km away but whose nearest corner was 60 km away never fired. `GeoMath.DistanceToRingM`/`DistanceToSegmentM` measure to edges; 6 regression tests
+- [x] **C-07** Storm symbols were sized in Mercator metres — sub-pixel at national zoom, screen-filling up close. Now screen pixels, rebuilt when the zoom moves >5 %. Mesocyclone rings keep metres (a real radius) with a pixel floor
+- [x] **C-08** `PaneManager._lastSnapshots` was never cleared on a pane-count change, so the wrong pane drove the linked camera for a tick
+- [x] **C-10** Alert cache window and poll interval were both exactly 60 s, so an early tick was silently a no-op; cache lowered to 50 s
+- [x] **C-11** `TrayNotifier.Activated`'s custom accessors leaked a subscriber per add and ignored remove
+
+**Debt**
+
+- [x] **C-09** `CommunityToolkit.Mvvm` was referenced and unused — now carries `MainViewModel`
+- [x] **C-12** Nothing covered App/Render/Ingest. Added `OpenWSR.App.Tests` (43) plus 6 Geo ring-distance tests: **76 → 125**
+- [x] **C-13** 13 stale `TASKS.md` checkboxes ticked after verifying each in the tree
+
+**UI reorganisation** — the shell is now arranged around the four questions the app answers, each with exactly one place: WHERE (top bar) → WHAT product (bar above the map) → WHEN (time bar) → WHAT'S ON TOP (right panel).
+
+- [x] **U-01** Product and tilt had no UI at all — keyboard only, documented in a MessageBox. Segmented `REF VEL SW ZDR PHI CC` bar with each button carrying its shortcut letter, unavailable products greyed, plus a tilt dropdown with steppers and an "n of m" readout
+- [x] **U-02** Three data modes expressed three different ways, with the forecast transport living in the layers panel. One `LIVE · ARCHIVE · FORECAST` switcher owns the time bar; leaving a mode takes its data with it
+- [x] **U-03** The layers panel was a 30-control scroll doing six jobs. Collapsible sections; per-layer opacity; home/alert radius moved to Settings; the symbol key became a reference card
+- [x] **U-04** Measure and cross-section were both bound to right-drag simultaneously. Map tools are now one armed mode, with the gesture named in the status bar
+- [x] **U-05** Every outcome shared one status line, so a failed alert fetch was gone in under a second. Errors persist in a dismissible bar (Esc), progress has a determinate strip, status keeps the running commentary
+- [x] **U-06** The Phase 3 debug marker layer shipped as-is: 210 red squares at every zoom, no labels, no toggle. Now zoom-gated, ICAO-labelled up close, selected site drawn amber, toggleable
+- [x] **U-07** First run opened on a hard-coded 2013 storm. Now opens on home's nearest radar live, or the national view with an empty-state hint
+- [x] **U-08** Mode and product state moved out of control properties into `MainViewModel`
+- [x] Keyboard/gesture reference card on `?` and **F1**, shown once on first run
+- [x] Accessibility: 28 glyph-only controls given automation names; mode and tool segments answer to `TogglePattern`
+
+**Gate:** [PASSED] 125/125 tests; build clean. Verified live against KMTX: product bar switches products, all three modes exercised end-to-end (live chunk streaming, archive day + 13-frame loop, HRRR 00z forecast), loop frames survive a pause, GIF export produces a valid animation carrying every layer.

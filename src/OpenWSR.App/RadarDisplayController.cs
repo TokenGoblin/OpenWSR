@@ -17,9 +17,43 @@ public sealed class RadarDisplayController(MapView mapView)
 
     public event Action<string>? StatusChanged;
 
+    /// <summary>
+    /// The moment or tilt on screen changed. The product bar renders from this rather than
+    /// from whatever last called a setter, so keyboard and mouse stay in step.
+    /// </summary>
+    public event Action? SelectionChanged;
+
     private readonly Dictionary<Moment, ColorTable> _customTables = [];
 
     public Moment CurrentMoment => _moment;
+
+    /// <summary>Which products the loaded volume actually carries — the rest grey out.</summary>
+    public IReadOnlyCollection<Moment> AvailableMoments =>
+        _volume is null ? [] : _volume.Sweeps.Select(s => s.Moment).Distinct().ToHashSet();
+
+    /// <summary>Elevation angles of the current moment's cuts, in scan order.</summary>
+    public IReadOnlyList<float> ElevationsForCurrentMoment =>
+        [.. CutsForMoment(_moment).Select(s => s.ElevationAngleDeg)];
+
+    /// <summary>Index into <see cref="ElevationsForCurrentMoment"/> of the displayed cut.</summary>
+    public int CutPosition => _cutPosition;
+
+    /// <summary>Show a product. No-op when it is already showing.</summary>
+    public void SelectMoment(Moment moment) => SetMoment(moment);
+
+    /// <summary>Show a specific cut of the current product.</summary>
+    public void SelectCut(int position)
+    {
+        int count = CutsForMoment(_moment).Count;
+        if (count == 0) return;
+        int clamped = Math.Clamp(position, 0, count - 1);
+        if (clamped == _cutPosition) return;
+        _cutPosition = clamped;
+        Apply();
+    }
+
+    /// <summary>Step up or down through the cuts of the current product.</summary>
+    public void StepCut(int direction) => MoveCut(direction);
     public ColorTable CurrentTable =>
         _customTables.TryGetValue(_moment, out var custom) ? custom : BuiltinTables.For(_moment);
 
@@ -91,19 +125,25 @@ public sealed class RadarDisplayController(MapView mapView)
         return cuts[Math.Clamp(_cutPosition, 0, cuts.Count - 1)];
     }
 
-    /// <summary>Map keyboard: R/V/W/D/P/C select the moment, Up/Down move through cuts.</summary>
-    public void OnKey(int virtualKey)
+    /// <summary>
+    /// Map keyboard: R/V/W/D/P/C select the moment, Up/Down move through cuts. The single
+    /// place these are interpreted — it used to be wired from both the map's child window
+    /// and the WPF window, which double-stepped the tilt and let the search box change the
+    /// product. Returns true when the key was one of ours.
+    /// </summary>
+    public bool OnKey(int virtualKey)
     {
         switch (virtualKey)
         {
-            case 0x52: SetMoment(Moment.Reflectivity); break;            // R
-            case 0x56: SetMoment(Moment.Velocity); break;                // V
-            case 0x57: SetMoment(Moment.SpectrumWidth); break;           // W
-            case 0x44: SetMoment(Moment.DifferentialReflectivity); break; // D
-            case 0x50: SetMoment(Moment.DifferentialPhase); break;       // P
-            case 0x43: SetMoment(Moment.CorrelationCoefficient); break;  // C
-            case 0x26: MoveCut(+1); break;                               // Up
-            case 0x28: MoveCut(-1); break;                               // Down
+            case 0x52: SetMoment(Moment.Reflectivity); return true;             // R
+            case 0x56: SetMoment(Moment.Velocity); return true;                 // V
+            case 0x57: SetMoment(Moment.SpectrumWidth); return true;            // W
+            case 0x44: SetMoment(Moment.DifferentialReflectivity); return true; // D
+            case 0x50: SetMoment(Moment.DifferentialPhase); return true;        // P
+            case 0x43: SetMoment(Moment.CorrelationCoefficient); return true;   // C
+            case 0x26: MoveCut(+1); return true;                                // Up
+            case 0x28: MoveCut(-1); return true;                                // Down
+            default: return false;
         }
     }
 
@@ -139,6 +179,9 @@ public sealed class RadarDisplayController(MapView mapView)
         if (cuts.Count == 0)
         {
             mapView.ClearSweep();
+            DisplayedSweep = null;
+            DisplayedSweepTimeUtc = null;
+            SelectionChanged?.Invoke();
             StatusChanged?.Invoke($"{_moment}: no data in this volume");
             return;
         }
@@ -152,6 +195,7 @@ public sealed class RadarDisplayController(MapView mapView)
         DisplayedSweepTimeUtc = sweep.ScanTimeUtc;
         DisplayedSweep = sweep;
         mapView.ShowSweep(sweep, CurrentTable);
+        SelectionChanged?.Invoke();
         StatusChanged?.Invoke(
             $"{sweep.SiteId}  {sweep.ScanTimeUtc:HH:mm:ss}Z  " +
             (relative ? "Storm-relative velocity" : _moment.ToString()) + "  " +

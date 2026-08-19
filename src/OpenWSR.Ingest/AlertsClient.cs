@@ -36,10 +36,17 @@ public sealed class AlertsClient : IDisposable
         _http.DefaultRequestHeaders.Accept.ParseAdd("application/geo+json");
     }
 
-    /// <summary>Fetch active alerts; calls within 60 s of the last fetch return the cached set.</summary>
+    /// <summary>
+    /// The API asks for no more than one poll a minute. The guard sits deliberately below
+    /// the caller's 60 s tick — at exactly 60 s a tick arriving a millisecond early is
+    /// silently a no-op, and the layer goes two minutes without refreshing.
+    /// </summary>
+    private static readonly TimeSpan CacheWindow = TimeSpan.FromSeconds(50);
+
+    /// <summary>Fetch active alerts; calls inside the cache window return the cached set.</summary>
     public async Task<IReadOnlyList<ActiveAlert>> GetActiveAsync(CancellationToken ct = default)
     {
-        if (DateTime.UtcNow - _lastFetchUtc < TimeSpan.FromSeconds(60))
+        if (DateTime.UtcNow - _lastFetchUtc < CacheWindow)
             return Prune(_lastResult);
 
         var started = System.Diagnostics.Stopwatch.StartNew();

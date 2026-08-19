@@ -171,6 +171,116 @@
         </Setter>
     </Style>
 
+    <!-- ============ Segmented control ============
+         Product selection and the data-mode switcher. Buttons sit shoulder to shoulder
+         inside one bordered track so the group reads as one control with one answer,
+         not as a row of independent toggles. -->
+    <Style x:Key="SegmentTrack" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource Rail}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Line}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="5" />
+        <Setter Property="Padding" Value="2" />
+    </Style>
+
+    <Style x:Key="Segment" TargetType="ToggleButton">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{StaticResource TextDim}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="MinWidth" Value="48" />
+        <Setter Property="Height" Value="26" />
+        <Setter Property="Padding" Value="10,0" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                            CornerRadius="3" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource Hover}" />
+                            <Setter Property="Foreground" Value="{StaticResource Text}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource Accent}" />
+                            <Setter Property="Foreground" Value="White" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="{StaticResource TextDisabled}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Product segment: the code over its keyboard shortcut, so the shortcut is learned
+         by using the button rather than by finding the About box. -->
+    <Style x:Key="MomentSegment" TargetType="ToggleButton" BasedOn="{StaticResource Segment}">
+        <Setter Property="MinWidth" Value="52" />
+        <Setter Property="Height" Value="32" />
+    </Style>
+
+    <!-- ============ Small square icon button (steppers) ============ -->
+    <Style x:Key="Stepper" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Width" Value="24" />
+        <Setter Property="Height" Value="26" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="FontSize" Value="11" />
+    </Style>
+
+    <!-- ============ Collapsible panel section ============ -->
+    <Style x:Key="PanelSection" TargetType="Expander">
+        <Setter Property="Foreground" Value="{StaticResource Text}" />
+        <Setter Property="IsExpanded" Value="True" />
+        <Setter Property="Margin" Value="0,0,0,6" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Expander">
+                    <StackPanel>
+                        <ToggleButton x:Name="Head"
+                                      IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                      Focusable="True" Cursor="Hand">
+                            <ToggleButton.Template>
+                                <ControlTemplate TargetType="ToggleButton">
+                                    <Border x:Name="Bd" Background="Transparent" Padding="2,5" CornerRadius="4">
+                                        <DockPanel>
+                                            <TextBlock x:Name="Chevron" DockPanel.Dock="Left" Text="▾"
+                                                       FontSize="10" Width="14"
+                                                       Foreground="{StaticResource TextDim}"
+                                                       VerticalAlignment="Center" />
+                                            <ContentPresenter VerticalAlignment="Center" />
+                                        </DockPanel>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsChecked" Value="False">
+                                            <Setter TargetName="Chevron" Property="Text" Value="▸" />
+                                        </Trigger>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource Hover}" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </ToggleButton.Template>
+                            <TextBlock Text="{TemplateBinding Header}" FontWeight="Bold" FontSize="11"
+                                       Foreground="{StaticResource TextDim}" />
+                        </ToggleButton>
+                        <ContentPresenter x:Name="Body" Margin="14,2,0,10" />
+                    </StackPanel>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsExpanded" Value="False">
+                            <Setter TargetName="Body" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- ============ TextBox ============ -->
     <Style TargetType="TextBox">
         <Setter Property="Background" Value="{StaticResource Surface}" />

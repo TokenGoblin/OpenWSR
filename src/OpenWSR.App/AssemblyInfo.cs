@@ -1,4 +1,9 @@
+using System.Runtime.CompilerServices;
 using System.Windows;
+
+// The threat geometry and compass helpers are internal because only the shell calls them;
+// they are also the part of this assembly most worth testing.
+[assembly: InternalsVisibleTo("OpenWSR.App.Tests")]
 
 [assembly:ThemeInfo(
     ResourceDictionaryLocation.None,            //where theme specific resource dictionaries are located

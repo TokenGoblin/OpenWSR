@@ -101,6 +101,47 @@ public static class GeoMath
     }
 
     /// <summary>
+    /// Distance from a point to a polygon ring, measured to its <em>edges</em>. NWS warning
+    /// polygons carry four to eight vertices, so the nearest edge is routinely far closer
+    /// than the nearest corner — measuring to vertices misses storms passing alongside a
+    /// long edge. Returns 0 when the point is inside the ring.
+    /// </summary>
+    public static double DistanceToRingM(
+        double latDeg, double lonDeg, IReadOnlyList<(double LatDeg, double LonDeg)> ring)
+    {
+        if (ring.Count == 0) return double.MaxValue;
+        if (ring.Count < 3) return DistanceM(latDeg, lonDeg, ring[0].LatDeg, ring[0].LonDeg);
+        if (PointInRing(latDeg, lonDeg, ring)) return 0;
+
+        double best = double.MaxValue;
+        for (int i = 0, j = ring.Count - 1; i < ring.Count; j = i++)
+            best = Math.Min(best, DistanceToSegmentM(latDeg, lonDeg, ring[j], ring[i]));
+        return best;
+    }
+
+    /// <summary>
+    /// Distance from a point to a great-circle segment. The closest point is solved on a
+    /// local equirectangular plane about the query point — exact enough over the tens of
+    /// kilometres a warning polygon spans — but the returned distance is the real
+    /// great-circle one, so it stays consistent with <see cref="DistanceM"/>.
+    /// </summary>
+    public static double DistanceToSegmentM(
+        double latDeg, double lonDeg,
+        (double LatDeg, double LonDeg) a, (double LatDeg, double LonDeg) b)
+    {
+        double cosLat = Math.Cos(latDeg * Math.PI / 180.0);
+        double ax = (a.LonDeg - lonDeg) * cosLat, ay = a.LatDeg - latDeg;
+        double bx = (b.LonDeg - lonDeg) * cosLat, by = b.LatDeg - latDeg;
+        double dx = bx - ax, dy = by - ay;
+
+        double lengthSq = dx * dx + dy * dy;
+        double t = lengthSq <= 0 ? 0 : Math.Clamp(-(ax * dx + ay * dy) / lengthSq, 0, 1);
+        return DistanceM(latDeg, lonDeg,
+            a.LatDeg + (b.LatDeg - a.LatDeg) * t,
+            a.LonDeg + (b.LonDeg - a.LonDeg) * t);
+    }
+
+    /// <summary>
     /// Closest approach of a timed path to a point. Path vertices are
     /// <paramref name="minutesPerSegment"/> apart (index 0 = now); segments are sampled
     /// per minute. Returns distance and the minutes until that closest sample.

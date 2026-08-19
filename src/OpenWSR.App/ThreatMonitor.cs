@@ -71,12 +71,13 @@ public sealed class ThreatMonitor
 
         foreach (var alert in alerts)
         {
-            bool inside = alert.Polygons.Any(ring => GeoMath.PointInRing(homeLat, homeLon, ring));
-            double nearestKm = inside ? 0 : alert.Polygons
-                .SelectMany(ring => ring)
-                .Select(p => GeoMath.DistanceM(homeLat, homeLon, p.LatDeg, p.LonDeg) / 1000.0)
+            // Distance to the polygon's edges, not its corners: a warning whose nearest
+            // side runs 5 km from home can have its nearest vertex 60 km away.
+            double nearestKm = alert.Polygons
+                .Select(ring => GeoMath.DistanceToRingM(homeLat, homeLon, ring) / 1000.0)
                 .DefaultIfEmpty(double.MaxValue)
                 .Min();
+            bool inside = nearestKm <= 0;
             if (!inside && nearestKm > RadiusKm) continue;
 
             string until = alert.Expires is { } expires

@@ -20,14 +20,11 @@ public sealed class TrayNotifier : IDisposable
             Text = "OpenWSR",
             Visible = true,
         };
+        _icon.BalloonTipClicked += (_, _) => Activated?.Invoke();
     }
 
     /// <summary>Raised when the user clicks the balloon, so the app can come forward.</summary>
-    public event Action? Activated
-    {
-        add => _icon.BalloonTipClicked += (_, _) => value?.Invoke();
-        remove { }
-    }
+    public event Action? Activated;
 
     public void Notify(string title, string message, bool urgent)
     {

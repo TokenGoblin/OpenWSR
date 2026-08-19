@@ -1,4 +1,4 @@
-using OpenWSR.Nexrad;
+﻿using OpenWSR.Nexrad;
 
 if (args.Length == 0)
 {
@@ -111,9 +111,9 @@ internal static class Soak
             }
         };
 
-        feed.Start(site);
+        await feed.StartAsync(site);
         await Task.Delay(TimeSpan.FromMinutes(minutes));
-        feed.Stop();
+        await feed.StopAsync();
 
         long endMemory = GC.GetTotalMemory(forceFullCollection: true);
         Console.WriteLine();

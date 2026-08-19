@@ -17,6 +17,11 @@ what has since been **done**, what is **partial**, and what is still **open**.
 **Status at time of writing: 20 of 31 gaps closed, 4 partial, 7 open.** Of the 11 UI
 findings, 8 are closed, 2 partial and 1 open.
 
+> **Update, 18 Aug 2026.** The three remaining UI findings (07, 08, 10) are now closed by
+> the audit remediation in `audit.md`, which also closed **GIF export** — listed below as
+> "implemented, not yet exercised end-to-end" and in fact impossible to complete as
+> written. All 11 UI findings are done.
+
 ---
 
 ## Where OpenWSR already led
@@ -80,7 +85,7 @@ the whole open-source field — no OSS viewer has it."* It is now done.
 | Notifications when minimized | Costs users | **Done** — tray notifications |
 | Saved locations | Expected | **Partial** — one home point, not a list |
 | Per-type alert toggles and audio | Expected | **Done** — warning-type filters |
-| GIF / video export | Expected | **Done** — implemented, not yet exercised end-to-end |
+| GIF / video export | Expected | **Done** — and now actually verified end-to-end; it could not write a file before (`audit.md` C-01) |
 | Independent site per pane | Expected | **Open** — panes share one volume; pan links or unlinks, site does not |
 | Units preference | Expected | **Done** |
 | Longer loops | Nice | **Open** — still capped at 30 frames, already parameterised |
@@ -102,10 +107,10 @@ Eleven findings from the running app. The first four were defects rather than pr
 | 04 | Keyboard shortcuts advertised inside status text | **Done** |
 | 05 | Time controlled from two places at once | **Done** — one unified timeline with hour ticks |
 | 06 | Status bar is eight fields of run-on text | **Done** |
-| 07 | Layers panel is a flat column of checkboxes | **Partial** — grouped and filtered, still no per-layer opacity or reordering |
-| 08 | Failure and empty states are status-bar strings | **Partial** |
+| 07 | Layers panel is a flat column of checkboxes | **Done** — collapsible sections, per-layer opacity, non-layer controls evicted to Settings |
+| 08 | Failure and empty states are status-bar strings | **Done** — persistent error bar, determinate progress strip, map empty state |
 | 09 | Nothing explains the storm symbols | **Done** — symbol key in the layers panel |
-| 10 | First launch has nothing to show | **Open** — still opens on the hard-coded KTLX 2013-05-20 demo (`MainWindow.xaml.cs:87`) regardless of whether home is set. A saved home arms the storm watch for its nearest radar, but does not change the view |
+| 10 | First launch has nothing to show | **Done** — opens on home's nearest radar in live mode, or the national view with an empty-state hint. The 2013 demo is no longer a default |
 | 11 | Window doesn't adapt | **Done** — collapsible rail and panel |
 
 ---

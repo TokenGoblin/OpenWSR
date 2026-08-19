@@ -21,9 +21,39 @@ public partial class SettingsWindow : Window
             UnitSystem.Nautical => 2,
             _ => 0,
         };
+        RadiusCombo.SelectedIndex = settings.AlertRadiusKm switch
+        {
+            <= 15 => 0, <= 40 => 1, <= 80 => 2, _ => 3,
+        };
+        UpdateHomeLabel();
+
         ContactBox.TextChanged += (_, _) => UpdatePreview();
         UpdateKeyEnabled();
         UpdatePreview();
+    }
+
+    /// <summary>Set when the user asked to place home by clicking the map.</summary>
+    public bool WantsHomePicker { get; private set; }
+
+    private void UpdateHomeLabel()
+    {
+        HomeLabel.Text = _settings.HomeLatDeg is { } lat && _settings.HomeLonDeg is { } lon
+            ? $"Home: {lat:F3}, {lon:F3}"
+            : "Home: not set";
+        ClearHomeButton.IsEnabled = _settings.HomeLatDeg is not null;
+    }
+
+    private void PickHome_Click(object sender, RoutedEventArgs e)
+    {
+        WantsHomePicker = true;
+        Save_Click(sender, e); // save the rest, then hand back to the map
+    }
+
+    private void ClearHome_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.HomeLatDeg = null;
+        _settings.HomeLonDeg = null;
+        UpdateHomeLabel();
     }
 
     private void UpdatePreview() =>
@@ -51,6 +81,10 @@ public partial class SettingsWindow : Window
             1 => UnitSystem.Metric,
             2 => UnitSystem.Nautical,
             _ => UnitSystem.Imperial,
+        };
+        _settings.AlertRadiusKm = RadiusCombo.SelectedIndex switch
+        {
+            0 => 15, 2 => 80, 3 => 160, _ => 40,
         };
         _settings.Save();
         Units.System = _settings.Units;

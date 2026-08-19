@@ -2,67 +2,92 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="OpenWSR" Width="1360" Height="860" Background="{StaticResource Chrome}">
+    <!-- The shell is arranged around the four questions this app answers, in the order it
+         answers them: WHERE (top bar) → WHAT product (bar above the map) → WHEN (time bar)
+         → WHAT'S ON TOP (right panel). Each question has exactly one place and no second. -->
     <DockPanel>
-        <!-- Left navigation rail: app and view actions, Windows 11 style with
-             settings anchored at the bottom. -->
+        <!-- ============ Left rail: app actions, then map tools ============ -->
         <Border DockPanel.Dock="Left" Width="50" Background="{StaticResource Rail}"
                 BorderBrush="#FF272C35" BorderThickness="0,0,1,0">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Top" Margin="0,6,0,0">
-                    <ToggleButton x:Name="LayersToggle" Style="{StaticResource RailToggle}" IsChecked="True"
+                    <ToggleButton x:Name="LayersToggle" AutomationProperties.Name="Show or hide the layers panel" Style="{StaticResource RailToggle}" IsChecked="True"
                                   Content="▤" Checked="LayersToggle_Changed" Unchecked="LayersToggle_Changed"
                                   ToolTip="Show or hide the layers panel" />
-                    <Button x:Name="HotspotButton" Style="{StaticResource RailButton}" Content="🎯"
+                    <Button x:Name="HotspotButton" AutomationProperties.Name="Go to the heaviest precipitation in the USA" Style="{StaticResource RailButton}" Content="🎯"
                             Click="HotspotButton_Click"
                             ToolTip="Go to the heaviest precipitation in the USA right now" />
-                    <Button x:Name="PaneButton" Style="{StaticResource RailButton}" Content="◱"
+                    <Button x:Name="PaneButton" AutomationProperties.Name="Map panes" Style="{StaticResource RailButton}" Content="◱"
                             Click="PaneButton_Click" ToolTip="Map panes: 1" />
-                    <ToggleButton x:Name="LinkToggle" Style="{StaticResource RailToggle}" Content="⛓"
+                    <ToggleButton x:Name="LinkToggle" AutomationProperties.Name="Link pan and zoom across panes" Style="{StaticResource RailToggle}" Content="⛓"
                                   IsChecked="True" Checked="LinkToggle_Changed" Unchecked="LinkToggle_Changed"
                                   ToolTip="Link pan and zoom across panes" />
-                    <ToggleButton x:Name="CrossSectionToggle" Style="{StaticResource RailToggle}" Content="⌇"
-                                  Checked="CrossSectionToggle_Changed" Unchecked="CrossSectionToggle_Changed"
-                                  ToolTip="Cross-section mode — right-drag a line on the map to slice the storm vertically" />
-                    <Button x:Name="CaptureButton" Style="{StaticResource RailButton}" Content="📷"
+
+                    <!-- Map tools are one armed mode at a time, so a right-drag always means
+                         exactly one thing and the status bar can say which. -->
+                    <Border Height="1" Background="#FF272C35" Margin="10,6" />
+                    <ToggleButton x:Name="InspectTool" AutomationProperties.Name="Inspect tool" Style="{StaticResource RailToggle}" Content="⌖"
+                                  IsChecked="True" Tag="Inspect" Checked="ToolButton_Checked" Unchecked="ToolButton_Unchecked"
+                                  ToolTip="Inspect — hover to read values, right-drag to measure" />
+                    <ToggleButton x:Name="MeasureTool" AutomationProperties.Name="Measure tool" Style="{StaticResource RailToggle}" Content="📐"
+                                  Tag="Measure" Checked="ToolButton_Checked" Unchecked="ToolButton_Unchecked"
+                                  ToolTip="Measure — right-drag for geodesic distance and bearing" />
+                    <ToggleButton x:Name="CrossSectionTool" AutomationProperties.Name="Cross-section tool" Style="{StaticResource RailToggle}" Content="⌇"
+                                  Tag="CrossSection" Checked="ToolButton_Checked" Unchecked="ToolButton_Unchecked"
+                                  ToolTip="Cross-section — right-drag a line to slice the storm vertically" />
+                    <ToggleButton x:Name="SetHomeTool" AutomationProperties.Name="Set home location" Style="{StaticResource RailToggle}" Content="📍"
+                                  Tag="SetHome" Checked="ToolButton_Checked" Unchecked="ToolButton_Unchecked"
+                                  ToolTip="Set home — click the map to place your alert location" />
+
+                    <Border Height="1" Background="#FF272C35" Margin="10,6" />
+                    <Button x:Name="CaptureButton" AutomationProperties.Name="Save image or animated GIF" Style="{StaticResource RailButton}" Content="📷"
                             Click="CaptureButton_Click"
-                            ToolTip="Save the map as a PNG, or the loaded loop as an animated GIF" />
-                    <Button x:Name="PaletteButton" Style="{StaticResource RailButton}" Content="🎨"
+                            ToolTip="Save the map as a PNG, or the loop as an animated GIF" />
+                    <Button x:Name="PaletteButton" AutomationProperties.Name="Import a colour table" Style="{StaticResource RailButton}" Content="🎨"
                             Click="PaletteButton_Click"
                             ToolTip="Import a GR2Analyst .pal colour table for the current product" />
                 </StackPanel>
                 <StackPanel DockPanel.Dock="Bottom" Margin="0,0,0,6">
                     <Border Height="1" Background="#FF272C35" Margin="10,4" />
-                    <Button x:Name="SettingsButton" Style="{StaticResource RailButton}" Content="⚙"
+                    <Button x:Name="SettingsButton" AutomationProperties.Name="Settings" Style="{StaticResource RailButton}" Content="⚙"
                             Click="SettingsButton_Click" ToolTip="Settings" />
-                    <Button x:Name="AboutButton" Style="{StaticResource RailButton}" Content="ⓘ"
+                    <Button x:Name="HelpButton" AutomationProperties.Name="Keyboard shortcuts and mouse gestures" Style="{StaticResource RailButton}" Content="?"
+                            Click="HelpButton_Click" ToolTip="Keyboard shortcuts and mouse gestures  (F1)" />
+                    <Button x:Name="AboutButton" AutomationProperties.Name="About OpenWSR" Style="{StaticResource RailButton}" Content="ⓘ"
                             Click="AboutButton_Click" ToolTip="About OpenWSR" />
                 </StackPanel>
                 <Grid />
             </DockPanel>
         </Border>
 
-        <!-- Top bar: what data am I looking at. -->
+        <!-- ============ WHERE ============ -->
         <Border DockPanel.Dock="Top" Background="{StaticResource Chrome}"
                 BorderBrush="#FF272C35" BorderThickness="0,0,0,1" Padding="8,7">
             <StackPanel Orientation="Horizontal">
-                <TextBox x:Name="SearchBox" Width="168" KeyDown="SearchBox_KeyDown"
+                <TextBox x:Name="SearchBox" AutomationProperties.Name="Search for a place" Width="200" KeyDown="SearchBox_KeyDown"
                          Tag="Search"
                          ToolTip="Find a place: city, ZIP code, or lat,lon — then jump to the nearest radar" />
-                <ComboBox x:Name="SiteCombo" Width="212" Margin="7,0,0,0" />
+                <ComboBox x:Name="SiteCombo" AutomationProperties.Name="Radar site" Width="240" Margin="7,0,0,0"
+                          SelectionChanged="SiteCombo_SelectionChanged"
+                          ToolTip="The WSR-88D whose data is being shown" />
                 <Button x:Name="NearestButton" Content="Nearest" Margin="7,0,0,0" Click="NearestButton_Click"
                         ToolTip="Select the WSR-88D closest to the map centre" />
-                <Separator />
-                <DatePicker x:Name="DayPicker" Width="128" VerticalContentAlignment="Center" />
-                <Button x:Name="LoadDayButton" Content="Load day" Margin="7,0,0,0" Click="LoadDayButton_Click" />
-                <Separator />
-                <ToggleButton x:Name="LiveToggle" Content="⦿  Live"
-                              Checked="LiveToggle_Checked" Unchecked="LiveToggle_Unchecked"
-                              ToolTip="Stream real-time data for the selected site" />
-                <ToggleButton x:Name="StormsToggle" Content="⛈  Storms" Margin="7,0,0,0"
-                              Checked="StormsToggle_Checked" Unchecked="StormsToggle_Unchecked"
-                              ToolTip="Overlay storm tracks, hail and mesocyclones" />
             </StackPanel>
         </Border>
+
+        <!-- Errors persist until dismissed. They used to share the status line with the
+             sweep readout, which overwrote them within a second. -->
+        <Border x:Name="ErrorBar" DockPanel.Dock="Top" Visibility="Collapsed"
+                Background="#FF3A2226" BorderBrush="#FF8E4048" BorderThickness="0,0,0,1" Padding="10,7">
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="Dismiss" Padding="9,3" FontSize="12"
+                        Click="DismissError_Click" />
+                <TextBlock x:Name="ErrorText" Foreground="#FFFFC8C8" TextWrapping="Wrap"
+                           VerticalAlignment="Center" Margin="0,0,10,0" FontSize="12.5" />
+            </DockPanel>
+        </Border>
+
+        <!-- ============ Status ============ -->
         <Border DockPanel.Dock="Bottom" Background="{StaticResource Rail}"
                 BorderBrush="#FF272C35" BorderThickness="0,1,0,0" Padding="10,4">
             <Grid>
@@ -75,7 +100,8 @@
                 <TextBlock x:Name="AgeText" Text="" FontWeight="SemiBold" FontSize="12"
                            VerticalAlignment="Center" />
                 <TextBlock x:Name="StatusText" Grid.Column="1" Text="OpenWSR" Margin="14,0,0,0"
-                           FontSize="12" Foreground="{StaticResource TextDim}" VerticalAlignment="Center" />
+                           FontSize="12" Foreground="{StaticResource TextDim}" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" MaxWidth="460" />
                 <TextBlock x:Name="InspectorText" Grid.Column="2" Text="" FontFamily="Consolas" FontSize="12"
                            Margin="16,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                 <StackPanel Grid.Column="3" Orientation="Horizontal">
@@ -87,36 +113,98 @@
                 </StackPanel>
             </Grid>
         </Border>
+
+        <!-- ============ WHEN — one bar, one transport, three modes ============ -->
         <Border DockPanel.Dock="Bottom" Background="{StaticResource Chrome}" BorderBrush="#FF272C35"
-                BorderThickness="0,1,0,0" Padding="10,6">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <Button x:Name="PlayButton" Content="▶" Width="34" Height="26" Padding="0"
-                        FontSize="13" Click="PlayButton_Click"
-                        ToolTip="Loop the most recent 30 volumes of the loaded day" />
-                <ComboBox x:Name="SpeedCombo" Grid.Column="1" Width="66" Height="26" Margin="6,0,10,0"
-                          SelectionChanged="SpeedCombo_SelectionChanged" ToolTip="Loop speed">
-                    <ComboBoxItem Content="2 fps" />
-                    <ComboBoxItem Content="4 fps" IsSelected="True" />
-                    <ComboBoxItem Content="8 fps" />
-                </ComboBox>
-                <Grid Grid.Column="2" x:Name="TimelineArea" SizeChanged="TimelineArea_SizeChanged">
-                    <Canvas x:Name="TickCanvas" Height="13" VerticalAlignment="Top" IsHitTestVisible="False" />
-                    <Slider x:Name="TimeSlider" Margin="0,13,0,0" VerticalAlignment="Top"
-                            Minimum="0" Maximum="0" IsEnabled="False"
-                            IsSnapToTickEnabled="True" TickFrequency="1"
-                            ValueChanged="TimeSlider_ValueChanged" />
-                </Grid>
-                <TextBlock x:Name="TimeSliderLabel" Grid.Column="3" Margin="12,0,2,0" MinWidth="152"
-                           Foreground="#C8CCD4" VerticalAlignment="Center" FontFamily="Consolas"
-                           Text="—" />
-            </Grid>
+                BorderThickness="0,1,0,0">
+            <DockPanel>
+                <ProgressBar x:Name="TaskProgress" DockPanel.Dock="Top" Height="2" Minimum="0" Maximum="1"
+                             Visibility="Collapsed" Background="Transparent" BorderThickness="0"
+                             Foreground="{StaticResource Accent}" />
+                <DockPanel Margin="10,6">
+                    <Border DockPanel.Dock="Left" Style="{StaticResource SegmentTrack}"
+                            Margin="0,0,12,0" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <ToggleButton x:Name="LiveModeButton" Content="LIVE" Tag="Live"
+                                          Style="{StaticResource Segment}"
+                                          Checked="ModeButton_Checked" Unchecked="ModeButton_Unchecked"
+                                          ToolTip="Stream real-time data for the selected site" />
+                            <ToggleButton x:Name="ArchiveModeButton" Content="ARCHIVE" Tag="Archive"
+                                          IsChecked="True" Style="{StaticResource Segment}"
+                                          Checked="ModeButton_Checked" Unchecked="ModeButton_Unchecked"
+                                          ToolTip="Browse any UTC day back to 1991" />
+                            <ToggleButton x:Name="ForecastModeButton" Content="FORECAST" Tag="Forecast"
+                                          Style="{StaticResource Segment}"
+                                          Checked="ModeButton_Checked" Unchecked="ModeButton_Unchecked"
+                                          ToolTip="HRRR simulated reflectivity for the next six hours" />
+                        </StackPanel>
+                    </Border>
+
+                    <Grid>
+                        <!-- LIVE -->
+                        <StackPanel x:Name="LiveTransport" Orientation="Horizontal" Visibility="Collapsed"
+                                    VerticalAlignment="Center">
+                            <TextBlock x:Name="LiveStateText" VerticalAlignment="Center" FontSize="12.5"
+                                       Foreground="{StaticResource TextDim}"
+                                       Text="Streaming — partial volumes appear as each tilt completes." />
+                        </StackPanel>
+
+                        <!-- ARCHIVE -->
+                        <Grid x:Name="ArchiveTransport">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <DatePicker x:Name="DayPicker" Width="126" VerticalContentAlignment="Center"
+                                        SelectedDateChanged="DayPicker_SelectedDateChanged" />
+                            <Button x:Name="PlayButton" AutomationProperties.Name="Play or pause the loop" Grid.Column="1" Content="▶" Width="34" Height="26"
+                                    Padding="0" FontSize="13" Margin="10,0,0,0" Click="PlayButton_Click"
+                                    ToolTip="Loop the most recent 30 volumes of the loaded day" />
+                            <ComboBox x:Name="SpeedCombo" Grid.Column="2" Width="66" Height="26"
+                                      Margin="6,0,10,0" SelectionChanged="SpeedCombo_SelectionChanged"
+                                      ToolTip="Loop speed">
+                                <ComboBoxItem Content="2 fps" />
+                                <ComboBoxItem Content="4 fps" IsSelected="True" />
+                                <ComboBoxItem Content="8 fps" />
+                            </ComboBox>
+                            <Grid Grid.Column="4" x:Name="TimelineArea" SizeChanged="TimelineArea_SizeChanged">
+                                <Canvas x:Name="TickCanvas" Height="13" VerticalAlignment="Top"
+                                        IsHitTestVisible="False" />
+                                <Slider x:Name="TimeSlider" AutomationProperties.Name="Scrub through the day" Margin="0,13,0,0" VerticalAlignment="Top"
+                                        Minimum="0" Maximum="0" IsEnabled="False"
+                                        IsSnapToTickEnabled="True" TickFrequency="1"
+                                        ValueChanged="TimeSlider_ValueChanged" />
+                            </Grid>
+                            <TextBlock x:Name="TimeSliderLabel" Grid.Column="5" Margin="12,0,2,0" MinWidth="152"
+                                       Foreground="#C8CCD4" VerticalAlignment="Center" FontFamily="Consolas"
+                                       Text="—" />
+                        </Grid>
+
+                        <!-- FORECAST -->
+                        <StackPanel x:Name="ForecastTransport" Orientation="Horizontal" Visibility="Collapsed"
+                                    VerticalAlignment="Center">
+                            <Button x:Name="FutureLoadButton" Content="Load HRRR forecast" Click="FutureLoad_Click"
+                                    ToolTip="Simulated reflectivity for the next 6 hours from the HRRR model" />
+                            <Button x:Name="FuturePrevButton" AutomationProperties.Name="Previous forecast hour" Content="◀" Width="30" Height="26" Padding="0"
+                                    Margin="10,0,0,0" IsEnabled="False" Click="FuturePrev_Click" />
+                            <Button x:Name="FuturePlayButton" AutomationProperties.Name="Play or pause the forecast" Content="▶" Width="30" Height="26" Padding="0"
+                                    Margin="4,0,0,0" IsEnabled="False" Click="FuturePlay_Click" />
+                            <Button x:Name="FutureNextButton" AutomationProperties.Name="Next forecast hour" Content="▶|" Width="34" Height="26" Padding="0"
+                                    Margin="4,0,0,0" IsEnabled="False" Click="FutureNext_Click" />
+                            <Button x:Name="FutureClearButton" Content="Clear" Margin="4,0,0,0"
+                                    IsEnabled="False" Click="FutureClear_Click" />
+                            <TextBlock x:Name="FutureLabel" Text="Not loaded" FontSize="12.5" Margin="14,0,0,0"
+                                       Foreground="{StaticResource TextDim}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Grid>
+                </DockPanel>
+            </DockPanel>
         </Border>
+
         <!-- Vertical cross-section. WPF, docked below the map, so airspace is not an issue. -->
         <Border x:Name="CrossSectionPanel" DockPanel.Dock="Bottom" Height="248" Visibility="Collapsed"
                 Background="{StaticResource Rail}" BorderBrush="#FF272C35" BorderThickness="0,1,0,0">
@@ -134,7 +222,6 @@
                 <TextBlock x:Name="CrossSectionTitle" Grid.ColumnSpan="2" FontWeight="SemiBold" FontSize="12"
                            Text="Cross-section — right-drag a line on the map" Margin="0,0,0,5" />
 
-                <!-- Height axis -->
                 <Grid Grid.Row="1" Grid.Column="0">
                     <TextBlock Text="15 km" FontSize="10" Foreground="{StaticResource TextDim}"
                                VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,-6,6,0" />
@@ -159,187 +246,211 @@
             </Grid>
         </Border>
 
-        <Border x:Name="LayersPanel" DockPanel.Dock="Right" Background="{StaticResource Chrome}" Width="238"
+        <!-- ============ WHAT'S ON TOP — layers, and only layers ============ -->
+        <Border x:Name="LayersPanel" DockPanel.Dock="Right" Background="{StaticResource Chrome}" Width="248"
                 BorderBrush="#FF272C35" BorderThickness="1,0,0,0">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <StackPanel Margin="12,10">
-                    <TextBlock Text="LAYERS" FontWeight="Bold" FontSize="11" Foreground="{StaticResource TextDim}"
-                               Margin="0,0,0,6" />
+                <StackPanel Margin="10,8">
 
-                    <TextBlock Text="Radar opacity" Margin="0,4,0,0" />
-                    <Slider x:Name="OpacitySlider" Minimum="0" Maximum="100" Value="85"
-                            ValueChanged="OpacitySlider_ValueChanged" />
-                    <TextBlock Text="Smoothing" Margin="0,6,0,0"
-                               ToolTip="Blend between radar cells: raw gates → soft consumer-style display" />
-                    <Slider x:Name="SmoothSlider" Minimum="0" Maximum="100" Value="0"
-                            ValueChanged="SmoothSlider_ValueChanged" />
-
-                    <TextBlock Text="National" FontWeight="Bold" Margin="0,12,0,2" />
-                    <CheckBox x:Name="FilterMosaic" Content="National mosaic"
-                              ToolTip="Seamless national reflectivity from the Iowa State NEXRAD mosaic"
-                              Checked="MosaicFilter_Changed" Unchecked="MosaicFilter_Changed" />
-                    <Slider x:Name="MosaicOpacitySlider" Minimum="0" Maximum="100" Value="75"
-                            ValueChanged="MosaicOpacity_Changed" />
-                    <CheckBox x:Name="FilterSatellite" Content="Satellite (GOES IR)"
-                              ToolTip="Infrared cloud tops from GOES-East, under the radar layers"
-                              Checked="SatelliteFilter_Changed" Unchecked="SatelliteFilter_Changed" />
-                    <CheckBox x:Name="FilterOutlooks" Content="SPC outlook"
-                              ToolTip="Day 1 categorical convective outlook"
-                              Checked="OutlookFilter_Changed" Unchecked="OutlookFilter_Changed" />
-                    <CheckBox x:Name="FilterWatches" Content="Watch boxes"
-                              ToolTip="Active SPC tornado and severe thunderstorm watches"
-                              Checked="OutlookFilter_Changed" Unchecked="OutlookFilter_Changed" />
-                    <CheckBox x:Name="FilterDiscussions" Content="Mesoscale discussions"
-                              Checked="OutlookFilter_Changed" Unchecked="OutlookFilter_Changed" />
-                    <CheckBox x:Name="FilterReports" Content="Storm reports (6 h)"
-                              ToolTip="Local storm reports: what actually happened on the ground"
-                              Checked="OutlookFilter_Changed" Unchecked="OutlookFilter_Changed" />
-
-                    <TextBlock Text="Warnings" FontWeight="Bold" Margin="0,12,0,2" />
-                    <CheckBox x:Name="FilterTornado" Content="Tornado" IsChecked="True" Foreground="#FF6B6B"
-                              Checked="WarningFilter_Changed" Unchecked="WarningFilter_Changed" />
-                    <CheckBox x:Name="FilterSevere" Content="Severe thunderstorm" IsChecked="True" Foreground="#FFE066"
-                              Checked="WarningFilter_Changed" Unchecked="WarningFilter_Changed" />
-                    <CheckBox x:Name="FilterFlood" Content="Flash flood" IsChecked="True" Foreground="#7BE07B"
-                              Checked="WarningFilter_Changed" Unchecked="WarningFilter_Changed" />
-                    <CheckBox x:Name="FilterOtherWarn" Content="Other warnings" IsChecked="True"
-                              Checked="WarningFilter_Changed" Unchecked="WarningFilter_Changed" />
-
-                    <TextBlock Text="Storm tracking" FontWeight="Bold" Margin="0,10,0,2" />
-                    <CheckBox x:Name="FilterPastTrack" Content="Past track" IsChecked="True"
-                              Checked="StormFilter_Changed" Unchecked="StormFilter_Changed" />
-                    <CheckBox x:Name="FilterForecastTrack" Content="Forecast track" IsChecked="True"
-                              Checked="StormFilter_Changed" Unchecked="StormFilter_Changed" />
-                    <CheckBox x:Name="FilterCones" Content="Projection cones" IsChecked="True"
-                              ToolTip="Direction + swept area over the next hour"
-                              Checked="StormFilter_Changed" Unchecked="StormFilter_Changed" />
-                    <CheckBox x:Name="FilterLabels" Content="Cell ID + max dBZ" IsChecked="True"
-                              Checked="StormFilter_Changed" Unchecked="StormFilter_Changed" />
-                    <CheckBox x:Name="FilterHail" Content="Hail markers" IsChecked="True"
-                              Checked="StormFilter_Changed" Unchecked="StormFilter_Changed" />
-                    <CheckBox x:Name="FilterMeso" Content="Mesocyclones" IsChecked="True" Foreground="#FFE066"
-                              Checked="StormFilter_Changed" Unchecked="StormFilter_Changed" />
-                    <CheckBox x:Name="FilterStormRelative" Content="Storm-relative velocity"
-                              ToolTip="Subtract the tracked storm motion from velocity so rotation stands out"
-                              Checked="StormRelative_Changed" Unchecked="StormRelative_Changed" />
-                    <TextBlock Text="Min severe-hail prob." Margin="0,6,0,0" />
-                    <Slider x:Name="PoshSlider" Minimum="0" Maximum="100" Value="0" TickFrequency="10"
-                            IsSnapToTickEnabled="True" ValueChanged="StormFilter_SliderChanged" />
-                    <Border Background="{StaticResource Rail}" BorderBrush="#FF313742" BorderThickness="1" CornerRadius="2"
-                            Padding="8,6" Margin="0,8,0,0">
+                    <Expander Header="RADAR" Style="{StaticResource PanelSection}">
                         <StackPanel>
-                            <TextBlock Text="WHAT THE SYMBOLS MEAN" FontSize="10" Foreground="{StaticResource TextDim}"
-                                       FontWeight="Bold" Margin="0,0,0,5" />
-                            <Grid>
+                            <TextBlock Text="Opacity" Margin="0,2,0,0" FontSize="12" />
+                            <Slider x:Name="OpacitySlider" AutomationProperties.Name="Radar opacity" Minimum="0" Maximum="100" Value="85"
+                                    ValueChanged="OpacitySlider_ValueChanged" />
+                            <TextBlock Text="Smoothing" Margin="0,6,0,0" FontSize="12"
+                                       ToolTip="Blend between radar cells: raw gates → soft consumer-style display" />
+                            <Slider x:Name="SmoothSlider" AutomationProperties.Name="Radar smoothing" Minimum="0" Maximum="100" Value="0"
+                                    ValueChanged="SmoothSlider_ValueChanged" />
+                        </StackPanel>
+                    </Expander>
+
+                    <Expander Header="LAYERS" Style="{StaticResource PanelSection}">
+                        <StackPanel>
+                            <CheckBox x:Name="FilterMosaic" Content="National mosaic"
+                                      ToolTip="Seamless national reflectivity from the Iowa State NEXRAD mosaic"
+                                      Checked="MosaicFilter_Changed" Unchecked="MosaicFilter_Changed" />
+                            <Slider x:Name="MosaicOpacitySlider" AutomationProperties.Name="National mosaic opacity" Minimum="0" Maximum="100" Value="75"
+                                    Margin="18,0,0,4" ValueChanged="MosaicOpacity_Changed" />
+
+                            <CheckBox x:Name="FilterSatellite" Content="Satellite (GOES IR)"
+                                      ToolTip="Infrared cloud tops from GOES-East, under the radar layers"
+                                      Checked="SatelliteFilter_Changed" Unchecked="SatelliteFilter_Changed" />
+                            <Slider x:Name="SatelliteOpacitySlider" AutomationProperties.Name="Satellite opacity" Minimum="0" Maximum="100" Value="60"
+                                    Margin="18,0,0,4" ValueChanged="SatelliteOpacity_Changed" />
+
+                            <CheckBox x:Name="FilterSites" Content="Radar sites" IsChecked="True"
+                                      ToolTip="All 210 WSR-88D locations — hidden at national zoom, labelled up close"
+                                      Checked="SiteMarkers_Changed" Unchecked="SiteMarkers_Changed" />
+
+                            <Expander Header="Warnings" Style="{StaticResource PanelSection}" Margin="0,6,0,0">
+                                <StackPanel>
+                                    <CheckBox x:Name="FilterTornado" Content="Tornado" IsChecked="True" Foreground="#FF6B6B"
+                                              Checked="WarningFilter_Changed" Unchecked="WarningFilter_Changed" />
+                                    <CheckBox x:Name="FilterSevere" Content="Severe thunderstorm" IsChecked="True" Foreground="#FFE066"
+                                              Checked="WarningFilter_Changed" Unchecked="WarningFilter_Changed" />
+                                    <CheckBox x:Name="FilterFlood" Content="Flash flood" IsChecked="True" Foreground="#7BE07B"
+                                              Checked="WarningFilter_Changed" Unchecked="WarningFilter_Changed" />
+                                    <CheckBox x:Name="FilterOtherWarn" Content="Other warnings" IsChecked="True"
+                                              Checked="WarningFilter_Changed" Unchecked="WarningFilter_Changed" />
+                                </StackPanel>
+                            </Expander>
+
+                            <Expander Header="STORMS" Style="{StaticResource PanelSection}">
+                                <StackPanel>
+                                    <CheckBox x:Name="StormsToggle" Content="Track storms" FontWeight="SemiBold"
+                                              Checked="StormsToggle_Checked" Unchecked="StormsToggle_Unchecked"
+                                              ToolTip="Fetch Level III storm tracks, hail and mesocyclones for this site" />
+                                    <CheckBox x:Name="FilterPastTrack" Content="Past track" IsChecked="True" Margin="12,4,0,0"
+                                              Checked="StormFilter_Changed" Unchecked="StormFilter_Changed" />
+                                    <CheckBox x:Name="FilterForecastTrack" Content="Forecast track" IsChecked="True" Margin="12,0,0,0"
+                                              Checked="StormFilter_Changed" Unchecked="StormFilter_Changed" />
+                                    <CheckBox x:Name="FilterCones" Content="Projection cones" IsChecked="True" Margin="12,0,0,0"
+                                              ToolTip="Direction + swept area over the next hour"
+                                              Checked="StormFilter_Changed" Unchecked="StormFilter_Changed" />
+                                    <CheckBox x:Name="FilterLabels" Content="Cell labels" IsChecked="True" Margin="12,0,0,0"
+                                              ToolTip="Cell ID, plus max dBZ when the storm-structure product is available"
+                                              Checked="StormFilter_Changed" Unchecked="StormFilter_Changed" />
+                                    <CheckBox x:Name="FilterHail" Content="Hail markers" IsChecked="True" Margin="12,0,0,0"
+                                              Checked="StormFilter_Changed" Unchecked="StormFilter_Changed" />
+                                    <CheckBox x:Name="FilterMeso" Content="Mesocyclones" IsChecked="True" Foreground="#FFE066" Margin="12,0,0,0"
+                                              Checked="StormFilter_Changed" Unchecked="StormFilter_Changed" />
+                                    <CheckBox x:Name="FilterStormRelative" Content="Storm-relative velocity" Margin="12,0,0,0"
+                                              ToolTip="Subtract the tracked storm motion from velocity so rotation stands out"
+                                              Checked="StormRelative_Changed" Unchecked="StormRelative_Changed" />
+                                    <TextBlock Text="Min severe-hail prob." Margin="12,6,0,0" FontSize="12" />
+                                    <Slider x:Name="PoshSlider" AutomationProperties.Name="Minimum severe hail probability" Minimum="0" Maximum="100" Value="0" TickFrequency="10"
+                                            Margin="12,0,0,0" IsSnapToTickEnabled="True"
+                                            ValueChanged="StormFilter_SliderChanged" />
+                                    <TextBlock x:Name="StormNoteText" FontSize="10.5" FontStyle="Italic" TextWrapping="Wrap"
+                                               Foreground="{StaticResource TextDim}" Margin="12,6,0,0" Text="" />
+                                    <Button Content="What do the symbols mean?" Margin="12,6,0,0" FontSize="11"
+                                            Padding="7,3" Click="SymbolKeyButton_Click" />
+                                </StackPanel>
+                            </Expander>
+
+                            <Expander Header="SPC &amp; REPORTS" Style="{StaticResource PanelSection}">
+                                <StackPanel>
+                                    <CheckBox x:Name="FilterOutlooks" Content="SPC outlook"
+                                              ToolTip="Day 1 categorical convective outlook"
+                                              Checked="OutlookFilter_Changed" Unchecked="OutlookFilter_Changed" />
+                                    <CheckBox x:Name="FilterWatches" Content="Watch boxes"
+                                              ToolTip="Active SPC tornado and severe thunderstorm watches"
+                                              Checked="OutlookFilter_Changed" Unchecked="OutlookFilter_Changed" />
+                                    <CheckBox x:Name="FilterDiscussions" Content="Mesoscale discussions"
+                                              Checked="OutlookFilter_Changed" Unchecked="OutlookFilter_Changed" />
+                                    <CheckBox x:Name="FilterReports" Content="Storm reports (6 h)"
+                                              ToolTip="Local storm reports: what actually happened on the ground"
+                                              Checked="OutlookFilter_Changed" Unchecked="OutlookFilter_Changed" />
+                                </StackPanel>
+                            </Expander>
+                        </StackPanel>
+                    </Expander>
+
+                    <Expander Header="PLACEFILES" Style="{StaticResource PanelSection}" IsExpanded="False">
+                        <StackPanel>
+                            <ItemsControl x:Name="PlacefileList">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,1">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <CheckBox Content="{Binding DisplayName}" IsChecked="{Binding Enabled}"
+                                                      ToolTip="{Binding Status}" Checked="PlacefileToggled"
+                                                      Unchecked="PlacefileToggled" Tag="{Binding}" />
+                                            <Button Grid.Column="1" Content="✕" Width="20" Padding="0" FontSize="10"
+                                                    Background="Transparent" BorderThickness="0"
+                                                    Click="PlacefileRemove_Click" Tag="{Binding}"
+                                                    ToolTip="Remove this placefile" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Grid Margin="0,5,0,0">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="26" />
+                                    <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition /><RowDefinition /><RowDefinition />
-                                    <RowDefinition /><RowDefinition />
-                                </Grid.RowDefinitions>
-                                <Path Grid.Row="0" Data="M 6,0 L 12,6 L 6,12 L 0,6 Z" Fill="#F0F0F0"
-                                      VerticalAlignment="Center" />
-                                <TextBlock Grid.Row="0" Grid.Column="1" Text="Cell now" FontSize="11"
-                                           VerticalAlignment="Center" />
-                                <Line Grid.Row="1" X1="0" Y1="6" X2="18" Y2="6" Stroke="#F0F0F0"
-                                      StrokeThickness="1.5" VerticalAlignment="Center" />
-                                <TextBlock Grid.Row="1" Grid.Column="1" Text="Past track" FontSize="11"
-                                           VerticalAlignment="Center" />
-                                <Line Grid.Row="2" X1="0" Y1="6" X2="18" Y2="6" Stroke="#F0F0F0"
-                                      StrokeThickness="1.5" StrokeDashArray="2 2" VerticalAlignment="Center" />
-                                <TextBlock Grid.Row="2" Grid.Column="1" Text="Forecast + cone" FontSize="11"
-                                           VerticalAlignment="Center" />
-                                <Path Grid.Row="3" Data="M 6,0 L 12,11 L 0,11 Z" Stroke="#FF7828"
-                                      StrokeThickness="1.5" VerticalAlignment="Center" />
-                                <TextBlock Grid.Row="3" Grid.Column="1" Text="Hail (size = risk)" FontSize="11"
-                                           VerticalAlignment="Center" />
-                                <Ellipse Grid.Row="4" Width="12" Height="12" Stroke="#FFDC28" StrokeThickness="1.5"
-                                         HorizontalAlignment="Left" VerticalAlignment="Center" />
-                                <TextBlock Grid.Row="4" Grid.Column="1" Text="Mesocyclone" FontSize="11"
-                                           VerticalAlignment="Center" />
+                                <Button Content="Add URL…" Click="PlacefileAddUrl_Click" Margin="0,0,3,0" />
+                                <Button Grid.Column="1" Content="Add file…" Click="PlacefileAddFile_Click" Margin="3,0,0,0" />
                             </Grid>
-                            <TextBlock FontStyle="Italic" Foreground="{StaticResource TextDim}" TextWrapping="Wrap" FontSize="11"
-                                       Margin="0,5,0,0" Text="Click any cell for details." />
+                            <TextBlock FontSize="10" FontStyle="Italic" TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextDim}" Margin="0,4,0,0"
+                                       Text="GRLevelX overlays. Each file refreshes on its own schedule and honours its own zoom thresholds." />
                         </StackPanel>
-                    </Border>
+                    </Expander>
 
-                    <TextBlock Text="PLACEFILES" FontWeight="Bold" FontSize="11"
-                               Foreground="{StaticResource TextDim}" Margin="0,16,0,4" />
-                    <ItemsControl x:Name="PlacefileList">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Grid Margin="0,1">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <CheckBox Content="{Binding DisplayName}" IsChecked="{Binding Enabled}"
-                                              ToolTip="{Binding Status}" Checked="PlacefileToggled"
-                                              Unchecked="PlacefileToggled" Tag="{Binding}" />
-                                    <Button Grid.Column="1" Content="✕" Width="20" Padding="0" FontSize="10"
-                                            Background="Transparent" BorderThickness="0"
-                                            Click="PlacefileRemove_Click" Tag="{Binding}"
-                                            ToolTip="Remove this placefile" />
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    <Grid Margin="0,5,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Button Content="Add URL…" Click="PlacefileAddUrl_Click" Margin="0,0,3,0" />
-                        <Button Grid.Column="1" Content="Add file…" Click="PlacefileAddFile_Click" Margin="3,0,0,0" />
-                    </Grid>
-                    <TextBlock x:Name="PlacefileHint" FontSize="10" FontStyle="Italic" TextWrapping="Wrap"
-                               Foreground="{StaticResource TextDim}" Margin="0,4,0,0"
-                               Text="GRLevelX overlays. Each file refreshes on its own schedule and honours its own zoom thresholds." />
-
-                    <TextBlock Text="FUTURE RADAR" FontWeight="Bold" FontSize="11"
-                               Foreground="{StaticResource TextDim}" Margin="0,16,0,4" />
-                    <Button x:Name="FutureLoadButton" Content="Load HRRR forecast"
-                            Click="FutureLoad_Click"
-                            ToolTip="Simulated reflectivity for the next 6 hours from the HRRR model" />
-                    <Grid Margin="0,6,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Button x:Name="FuturePrevButton" Content="◀" Width="30" Padding="0"
-                                IsEnabled="False" Click="FuturePrev_Click" />
-                        <Button x:Name="FuturePlayButton" Grid.Column="1" Content="▶" Width="30" Padding="0"
-                                Margin="4,0,0,0" IsEnabled="False" Click="FuturePlay_Click" />
-                        <Button x:Name="FutureNextButton" Grid.Column="2" Content="▶|" Width="34" Padding="0"
-                                Margin="4,0,0,0" IsEnabled="False" Click="FutureNext_Click" />
-                        <Button x:Name="FutureClearButton" Grid.Column="3" Content="Clear"
-                                Margin="4,0,0,0" IsEnabled="False" Click="FutureClear_Click" />
-                    </Grid>
-                    <TextBlock x:Name="FutureLabel" Text="Not loaded" FontSize="11"
-                               Foreground="{StaticResource TextDim}" Margin="0,5,0,0" TextWrapping="Wrap" />
-
-                    <TextBlock Text="MY AREA" FontWeight="Bold" Foreground="{StaticResource TextDim}" Margin="0,14,0,4" />
-                    <Button x:Name="SetHomeButton" Content="📍 Set home on map" Click="SetHomeButton_Click" />
-                    <TextBlock x:Name="HomeLabel" Text="Home: not set" Margin="0,6,0,0" TextWrapping="Wrap" />
-                    <TextBlock Text="Alert radius" Margin="0,6,0,0" />
-                    <ComboBox x:Name="RadiusCombo" SelectionChanged="RadiusCombo_SelectionChanged">
-                        <ComboBoxItem Content="15 km" />
-                        <ComboBoxItem Content="40 km" IsSelected="True" />
-                        <ComboBoxItem Content="80 km" />
-                        <ComboBoxItem Content="160 km" />
-                    </ComboBox>
-                    <TextBlock x:Name="AlertArmedLabel" FontStyle="Italic" Foreground="{StaticResource TextDim}"
-                               TextWrapping="Wrap" Margin="0,6,0,0"
-                               Text="Set a home location to arm proximity alerts." />
                 </StackPanel>
             </ScrollViewer>
         </Border>
-        <Grid x:Name="PaneGrid">
-            <Border x:Name="MapHost" />
-        </Grid>
+
+        <!-- ============ WHAT product, then the map ============ -->
+        <DockPanel>
+            <Border DockPanel.Dock="Top" Background="{StaticResource Chrome}"
+                    BorderBrush="#FF272C35" BorderThickness="0,0,0,1" Padding="8,6">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="Tilt" FontSize="12" Foreground="{StaticResource TextDim}"
+                                   VerticalAlignment="Center" Margin="0,0,7,0" />
+                        <ComboBox x:Name="TiltCombo" AutomationProperties.Name="Elevation cut" Width="92" Height="26" DisplayMemberPath="Label"
+                                  SelectionChanged="TiltCombo_SelectionChanged"
+                                  ToolTip="Elevation cut. ↑ and ↓ over the map step through them." />
+                        <Button x:Name="TiltDownButton" AutomationProperties.Name="Lower tilt" Content="▼" Style="{StaticResource Stepper}"
+                                Margin="6,0,0,0" Click="TiltDown_Click" ToolTip="Lower tilt  (↓)" />
+                        <Button x:Name="TiltUpButton" AutomationProperties.Name="Higher tilt" Content="▲" Style="{StaticResource Stepper}"
+                                Margin="3,0,0,0" Click="TiltUp_Click" ToolTip="Higher tilt  (↑)" />
+                        <TextBlock x:Name="TiltCountText" FontSize="11.5" Foreground="{StaticResource TextDim}"
+                                   VerticalAlignment="Center" Margin="9,0,2,0" MinWidth="76"
+                                   FontFamily="Consolas" Text="" />
+                    </StackPanel>
+
+                    <Border Style="{StaticResource SegmentTrack}" HorizontalAlignment="Left"
+                            VerticalAlignment="Center">
+                        <ItemsControl x:Name="MomentBar">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <!-- The visible content is a code over a shortcut letter, which
+                                         reads as nothing useful aloud; name it explicitly. -->
+                                    <ToggleButton Style="{StaticResource MomentSegment}"
+                                                  IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                  IsEnabled="{Binding IsAvailable}"
+                                                  ToolTip="{Binding Tooltip}"
+                                                  AutomationProperties.Name="{Binding Description}"
+                                                  Tag="{Binding}" Click="MomentSegment_Click">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Label}" HorizontalAlignment="Center"
+                                                       FontSize="12" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding Key}" HorizontalAlignment="Center"
+                                                       FontSize="8.5" Opacity="0.6" Margin="0,-1,0,0" />
+                                        </StackPanel>
+                                    </ToggleButton>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Border>
+                </DockPanel>
+            </Border>
+
+            <Grid x:Name="PaneGrid">
+                <Border x:Name="MapHost" />
+                <!-- Empty state. A Border in the same Grid as the D3D host would be covered by
+                     it (airspace), so it is only ever shown while no map surface exists yet. -->
+                <Border x:Name="EmptyState" Visibility="Collapsed" Background="{StaticResource Chrome}">
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="420">
+                        <TextBlock Text="No radar data loaded" FontSize="17" FontWeight="SemiBold"
+                                   HorizontalAlignment="Center" />
+                        <TextBlock TextWrapping="Wrap" TextAlignment="Center" Margin="0,8,0,0"
+                                   Foreground="{StaticResource TextDim}"
+                                   Text="Pick a radar site, search for a place, or press 🎯 to jump to the heaviest weather in the country." />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </DockPanel>
     </DockPanel>
 </Window>

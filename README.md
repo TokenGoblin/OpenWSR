@@ -63,7 +63,7 @@ No account, no API key, no subscription. Everything it reads is public data.
 - **Multi-pane** — 1/2/4 panes with linked or independent pan.
 - **Tools** — hover inspector (value, azimuth, ranges, beam height), geodesic
   distance/bearing measuring, colour scale on the map.
-- **Export** — PNG stills and animated GIFs of the loop.
+- **Export** — PNG stills and animated GIFs of the loop, carrying every layer on screen.
 - **Search** — city, ZIP code or lat/lon, resolving to the nearest radar.
 
 ---
@@ -93,13 +93,12 @@ National Weather Service API asks every client to identify itself and may block 
 that don't; the address is sent only to weather.gov. While you're there, pick units and
 a basemap.
 
-Then set a home location with **📍 Set home on map** in the layers panel to arm
-proximity alerts, or press **🎯** to jump straight to the heaviest weather in the
-country.
+Then set a home location — **Settings → My area → 📍 Pick on map** — to arm proximity
+alerts. With a home set, OpenWSR opens on its nearest radar streaming live and watches
+that site for storm tracks; without one it opens on the national view. Either way,
+**🎯** jumps straight to the heaviest weather in the country.
 
-The app currently opens on a fixed demo — KTLX on 2013-05-20, the Moore tornado day —
-rather than on your own location. A saved home arms the storm watch for its nearest
-radar, but does not change the opening view. Press **🎯** or pick a site to move on.
+The shortcuts card (**?** in the rail, or **F1**) shows once on first run.
 
 ### Console harness
 
@@ -113,18 +112,30 @@ dotnet run --project src/OpenWSR.Harness -- --export-sweep <f> out.js
 
 ## Controls
 
+The window is arranged around the four questions you ask it, each with one place:
+
+| Where | Top bar | Search a place, pick a site, jump to the nearest |
+|---|---|---|
+| **What** | Above the map | `REF VEL SW ZDR PHI CC` and the elevation tilt |
+| **When** | Below the map | `LIVE · ARCHIVE · FORECAST`, and that mode's transport |
+| **What's on top** | Right panel | Layers, each with its own opacity |
+
 | Input | Action |
 |---|---|
 | Drag / wheel | Pan (with inertia) / zoom at cursor |
 | `R` `V` `W` `D` `P` `C` | Reflectivity, velocity, spectrum width, ZDR, PhiDP, RhoHV |
 | `↑` / `↓` | Elevation tilt up and down |
+| `F1` | Keyboard and mouse reference |
 | Hover | Inspector readout in the status bar |
-| Right-drag | Measure distance and bearing — or cut a cross-section when ⌇ is on |
+| Right-drag | Whichever map tool is armed in the rail — measure, or cut a cross-section |
 | Click a storm cell | Details: motion, max dBZ, hail, mesocyclone, approach to home |
 | Click a warning | Full warning text |
 
-Left rail, top to bottom: layers panel, hotspot finder, pane layout, pane linking,
-cross-section mode, capture, palette import — then settings and about at the bottom.
+The product buttons carry their own shortcut letters, so the keyboard is the buttons.
+
+Left rail, top to bottom: layers panel, hotspot finder, pane layout, pane linking — then
+the map tools (inspect, measure, cross-section, set home) as one armed mode at a time —
+then capture and palette import, with settings, help and about at the bottom.
 
 ---
 

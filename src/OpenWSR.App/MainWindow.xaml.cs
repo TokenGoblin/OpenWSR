@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Threading;
 using OpenWSR.Geo;
 using OpenWSR.Ingest;
@@ -14,26 +15,28 @@ namespace OpenWSR.App;
 
 public partial class MainWindow : Window
 {
+    private readonly MainViewModel _vm = new();
     private readonly MapView _mapView;
     private readonly DispatcherTimer _statusTimer;
     private readonly RadarDisplayController _radar;
     private readonly ArchivePlaybackController _playback;
     private readonly LiveFeed _liveFeed = new();
-    private WarningsController? _warnings;
-    private InspectorTools? _inspector;
-    private readonly StormOverlayController _storms = new();
+    private readonly WarningsController _warnings;
+    private readonly InspectorTools _inspector;
+    private readonly StormOverlayController _storms;
     private readonly ThreatMonitor _threats = new();
-    private OutlookOverlayController? _outlooks;
-    private FutureRadarController? _future;
-    private PlacefileController? _placefiles;
-    private TrayNotifier? _tray;
-    private PaneManager? _panes;
-    private Geocoder? _geocoder;
-    private AppSettings? _settings;
+    private readonly OutlookOverlayController _outlooks;
+    private readonly FutureRadarController _future;
+    private readonly PlacefileController _placefiles;
+    private readonly TrayNotifier _tray;
+    private readonly PaneManager _panes;
+    private readonly Geocoder _geocoder;
+    private readonly AppSettings _settings;
     private OverlayGeometry? _measureGeometry;
     private OverlayGeometry? _homeGeometry;
     private bool _suppressSliderEvents;
-    private bool _settingHome;
+    private bool _suppressModeEvents;
+    private bool _suppressDayEvents;
     private int _paneCount = 1;
     private Popup? _stormPopup;
     private Popup? _toast;
@@ -42,6 +45,8 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DarkTitleBar.Apply(this);
+        MomentBar.ItemsSource = _vm.Moments;
+        TiltCombo.ItemsSource = _vm.Tilts;
         LinkToggle.IsEnabled = false; // only meaningful once a second pane exists
 
         var settings = _settings = AppSettings.Load();
@@ -56,25 +61,36 @@ public partial class MainWindow : Window
 
         _mapView = new MapView(provider);
         _mapView.Camera.MoveTo(39.0, -98.0, 6000); // continental US
-        _mapView.SetMarkers(RadarSites.All.Where(s => !s.IsTdwr).Select(s => (s.LatDeg, s.LonDeg)));
+        _mapView.SetMarkers(RadarSites.All.Where(s => !s.IsTdwr)
+            .Select(s => (s.LatDeg, s.LonDeg, s.Icao)));
+        _mapView.MarkersEnabled = settings.ShowSiteMarkers;
+        FilterSites.IsChecked = settings.ShowSiteMarkers;
         MapHost.Child = new D3DHostControl(_mapView);
 
         _radar = new RadarDisplayController(_mapView);
-        _radar.StatusChanged += text => Dispatcher.BeginInvoke(() => StatusText.Text = text);
+        _radar.StatusChanged += text => Dispatcher.BeginInvoke(() => Report(text));
+        _radar.SelectionChanged += () => Dispatcher.BeginInvoke(SyncProductBar);
+
+        // One place interprets map keys. Wiring both this and Window.KeyDown to the same
+        // handler double-stepped the tilt and let text typed into the search box change
+        // the product; PreviewKeyDown below covers the WPF-focus case with a guard.
         _mapView.KeyPressed += key => _radar.OnKey(key);
-        KeyDown += (_, e) => _radar.OnKey(System.Windows.Input.KeyInterop.VirtualKeyFromKey(e.Key));
+        PreviewKeyDown += Window_PreviewKeyDown;
 
         _panes = new PaneManager(PaneGrid, _mapView, _radar, MapHost, provider);
 
         _playback = new ArchivePlaybackController(_mapView, _radar);
         _playback.VolumeLoaded += volume => _panes.ShowVolume(volume);
-        _playback.StatusChanged += text => Dispatcher.BeginInvoke(() => StatusText.Text = text);
+        _playback.StatusChanged += text => Dispatcher.BeginInvoke(() => Report(text));
+        _playback.ErrorRaised += text => Dispatcher.BeginInvoke(() => ReportError(text));
+        _playback.ProgressChanged += value => Dispatcher.BeginInvoke(() => ShowProgress(value));
+        _playback.LoopFrameShown += index => Dispatcher.BeginInvoke(() => SyncSliderToLoop(index));
         _playback.DayLoaded += (count, index) => Dispatcher.BeginInvoke(() =>
         {
             _suppressSliderEvents = true;
-            TimeSlider.Maximum = count - 1;
+            TimeSlider.Maximum = Math.Max(0, count - 1);
             TimeSlider.Value = index;
-            TimeSlider.IsEnabled = true;
+            TimeSlider.IsEnabled = count > 0;
             _suppressSliderEvents = false;
             UpdateSliderLabel();
             RebuildTicks();
@@ -84,28 +100,27 @@ public partial class MainWindow : Window
 
         foreach (var site in RadarSites.All.Where(s => !s.IsTdwr).OrderBy(s => s.Icao))
             SiteCombo.Items.Add(site);
-        SiteCombo.SelectedItem = RadarSites.ByIcao("KTLX");
-        DayPicker.SelectedDate = new DateTime(2013, 5, 20); // the committed demo day
 
         _warnings = new WarningsController(_mapView, MapHost, settings.UserAgent);
         _warnings.GeometryChanged += () => Dispatcher.BeginInvoke(ComposeOverlay);
-        _warnings.StatusChanged += text => Dispatcher.BeginInvoke(() => StatusText.Text = text);
+        _warnings.StatusChanged += text => Dispatcher.BeginInvoke(() => Report(text));
+        _warnings.ErrorRaised += text => Dispatcher.BeginInvoke(() => ReportError(text));
 
         _outlooks = new OutlookOverlayController(settings.UserAgent);
         _outlooks.GeometryChanged += () => Dispatcher.BeginInvoke(ComposeOverlay);
-        _outlooks.StatusChanged += text => Dispatcher.BeginInvoke(() => StatusText.Text = text);
+        _outlooks.StatusChanged += text => Dispatcher.BeginInvoke(() => Report(text));
 
         _placefiles = new PlacefileController(_mapView, settings.UserAgent);
         _placefiles.Changed += () => Dispatcher.BeginInvoke(() =>
         {
             PlacefileList.ItemsSource = null;
-            PlacefileList.ItemsSource = _placefiles!.Files;
+            PlacefileList.ItemsSource = _placefiles.Files;
             ComposeOverlay();
         });
-        _placefiles.StatusChanged += text => Dispatcher.BeginInvoke(() => StatusText.Text = text);
+        _placefiles.StatusChanged += text => Dispatcher.BeginInvoke(() => Report(text));
 
         _future = new FutureRadarController(_mapView, settings.UserAgent);
-        _future.StatusChanged += text => Dispatcher.BeginInvoke(() => StatusText.Text = text);
+        _future.StatusChanged += text => Dispatcher.BeginInvoke(() => Report(text));
         _future.FrameChanged += (index, count, valid) => Dispatcher.BeginInvoke(() =>
         {
             // The newest complete HRRR run is an hour or so old, so its earliest frames
@@ -129,29 +144,26 @@ public partial class MainWindow : Window
             Activate();
         });
 
+        _storms = new StormOverlayController(_mapView);
         _storms.GeometryChanged += () => Dispatcher.BeginInvoke(ComposeOverlay);
-        _storms.StatusChanged += text => Dispatcher.BeginInvoke(() => StatusText.Text = text);
+        _storms.StatusChanged += text => Dispatcher.BeginInvoke(() => Report(text));
         _storms.StormsUpdated += storms => Dispatcher.BeginInvoke(() =>
         {
             _threats.EvaluateStorms(storms);
             UpdateStormMotion(storms);
+            UpdateStormNote(storms);
         });
-        _warnings!.AlertsUpdated += alerts => Dispatcher.BeginInvoke(() => _threats.EvaluateWarnings(alerts));
+        _warnings.AlertsUpdated += alerts => Dispatcher.BeginInvoke(() => _threats.EvaluateWarnings(alerts));
         _threats.ThreatDetected += threat => Dispatcher.BeginInvoke(() => OnThreat(threat));
         _mapView.Clicked += RouteMapClick;
 
         _threats.Configure(settings.HomeLatDeg, settings.HomeLonDeg, settings.AlertRadiusKm);
-        RadiusCombo.SelectedIndex = settings.AlertRadiusKm switch
-        {
-            <= 15 => 0, <= 40 => 1, <= 80 => 2, _ => 3,
-        };
         RebuildHomeGeometry();
-        UpdateHomeLabels();
         EnsureStormWatchForHome(); // startup with a saved home arms the storm watch immediately
 
         _mapView.MeasureDragged += (sx, sy, x, y, finished) =>
         {
-            if (!finished || CrossSectionToggle.IsChecked != true) return;
+            if (!finished || _vm.Tool != MapTool.CrossSection) return;
             var start = _mapView.ScreenToLatLon(sx, sy);
             var end = _mapView.ScreenToLatLon(x, y);
             Dispatcher.BeginInvoke(() =>
@@ -166,11 +178,14 @@ public partial class MainWindow : Window
             Dispatcher.BeginInvoke(ComposeOverlay);
         };
 
-        _liveFeed.StatusChanged += text => Dispatcher.BeginInvoke(() => StatusText.Text = text);
+        _liveFeed.StatusChanged += text => Dispatcher.BeginInvoke(() =>
+        {
+            Report(text);
+            if (_vm.IsLive) LiveStateText.Text = text;
+        });
         _liveFeed.VolumeUpdated += (volume, _) => Dispatcher.BeginInvoke(() =>
         {
-            if (LiveToggle.IsChecked == true)
-                _panes!.ShowVolume(volume);
+            if (_vm.IsLive) _panes.ShowVolume(volume);
         });
 
         _statusTimer = new DispatcherTimer(DispatcherPriority.Background)
@@ -181,29 +196,274 @@ public partial class MainWindow : Window
         {
             FpsText.Text = $"{_mapView.FramesPerSecond:F0} fps · sweep upload {_mapView.LastSweepUploadMs:F1} ms";
             UpdateAgeIndicator();
+            // Storm symbols are sized in screen pixels, so a zoom change means new geometry.
+            _storms.NotifyViewChanged();
         };
         _statusTimer.Start();
+
+        ApplyMode(DataMode.Archive, initial: true);
+        SyncProductBar();
+        SyncToolButtons();
 
         Loaded += async (_, _) =>
         {
             foreach (var source in settings.Placefiles.ToList())
-                await _placefiles!.AddAsync(source);
+                await _placefiles.AddAsync(source);
             await LoadStartupAsync();
+            if (!settings.WelcomeShown)
+            {
+                settings.WelcomeShown = true;
+                settings.Save();
+                InfoWindow.ShowShortcuts(this);
+            }
         };
         Closed += (_, _) =>
         {
             _statusTimer.Stop();
-            _tray?.Dispose();
-            _placefiles?.Dispose();
-            _future?.Dispose();
-            _outlooks?.Dispose();
-            _geocoder?.Dispose();
+            _tray.Dispose();
+            _placefiles.Dispose();
+            _future.Dispose();
+            _outlooks.Dispose();
+            _geocoder.Dispose();
             _storms.Dispose();
             _liveFeed.Dispose();
             _playback.Dispose();
-            _panes?.Dispose();
+            _panes.Dispose();
             _mapView.Dispose();
         };
+    }
+
+    // ---- messaging: transient status, persistent errors, determinate progress ----
+
+    /// <summary>Transient status. Overwritten freely — this is the running commentary.</summary>
+    private void Report(string text) => StatusText.Text = text;
+
+    /// <summary>
+    /// A failure the user needs to see. Errors used to share the status line with the
+    /// sweep readout, which overwrote them inside a second; these persist until dismissed.
+    /// </summary>
+    public void ReportError(string text)
+    {
+        ErrorText.Text = text;
+        ErrorBar.Visibility = Visibility.Visible;
+        Serilog.Log.Warning("UI error surfaced: {Text}", text);
+    }
+
+    private void DismissError_Click(object sender, RoutedEventArgs e) =>
+        ErrorBar.Visibility = Visibility.Collapsed;
+
+    /// <summary>0–1 shows the strip; anything negative hides it.</summary>
+    private void ShowProgress(double value)
+    {
+        if (value < 0)
+        {
+            TaskProgress.Visibility = Visibility.Collapsed;
+            return;
+        }
+        TaskProgress.Visibility = Visibility.Visible;
+        TaskProgress.IsIndeterminate = false;
+        TaskProgress.Value = Math.Clamp(value, 0, 1);
+    }
+
+    private void ShowBusy(bool busy)
+    {
+        TaskProgress.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+        TaskProgress.IsIndeterminate = busy;
+    }
+
+    // ---- keyboard ----
+
+    /// <summary>
+    /// Controls that own their keystrokes. Without this the search box was also a product
+    /// switcher — typing "Vail" selected velocity — and arrow keys in the site list moved
+    /// the tilt as well as the selection.
+    /// </summary>
+    private static bool OwnsKeys(IInputElement? focused) =>
+        focused is TextBox or ComboBox or DatePicker or Slider or
+                   System.Windows.Controls.Primitives.DatePickerTextBox;
+
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.F1)
+        {
+            InfoWindow.ShowShortcuts(this);
+            e.Handled = true;
+            return;
+        }
+        if (e.Key == Key.Escape && ErrorBar.Visibility == Visibility.Visible)
+        {
+            ErrorBar.Visibility = Visibility.Collapsed;
+            e.Handled = true;
+            return;
+        }
+
+        var focused = Keyboard.FocusedElement;
+        if (OwnsKeys(focused)) return;
+        // The map's child window already raised KeyPressed for this key.
+        if (focused is D3DHostControl) return;
+
+        if (_radar.OnKey(KeyInterop.VirtualKeyFromKey(e.Key)))
+            e.Handled = true;
+    }
+
+    // ---- product and tilt ----
+
+    /// <summary>Redraw the product bar from the controller, so keyboard and mouse agree.</summary>
+    private void SyncProductBar()
+    {
+        _vm.SyncMoments(_radar.AvailableMoments, _radar.CurrentMoment);
+
+        var elevations = _radar.ElevationsForCurrentMoment;
+        _vm.SyncTilts(elevations, _radar.CutPosition);
+        TiltCombo.SelectedItem = _vm.SelectedTilt;
+        TiltCombo.IsEnabled = elevations.Count > 0;
+        TiltUpButton.IsEnabled = _radar.CutPosition < elevations.Count - 1;
+        TiltDownButton.IsEnabled = _radar.CutPosition > 0;
+        TiltCountText.Text = elevations.Count > 0
+            ? $"{_radar.CutPosition + 1} of {elevations.Count}"
+            : "";
+        EmptyState.Visibility = _radar.DisplayedSweep is null && !_vm.IsForecast
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    private void MomentSegment_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: MomentOption option })
+            _radar.SelectMoment(option.Moment);
+        SyncProductBar(); // clicking the armed segment would otherwise un-check it
+    }
+
+    private void TiltCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_vm.SuppressTiltEcho) return;
+        if (TiltCombo.SelectedItem is TiltOption tilt)
+            _radar.SelectCut(tilt.Position);
+    }
+
+    private void TiltUp_Click(object sender, RoutedEventArgs e) => _radar.StepCut(+1);
+
+    private void TiltDown_Click(object sender, RoutedEventArgs e) => _radar.StepCut(-1);
+
+    // ---- data mode: one switcher owns the time bar ----
+
+    // Checked rather than Click, so the segments answer to assistive technology and to
+    // keyboard activation the same way they answer to the mouse.
+    private void ModeButton_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_suppressModeEvents) return;
+        if (sender is FrameworkElement { Tag: string tag } && Enum.TryParse<DataMode>(tag, out var mode))
+            ApplyMode(mode);
+    }
+
+    /// <summary>Un-checking the armed segment would leave no mode chosen; put it back.</summary>
+    private void ModeButton_Unchecked(object sender, RoutedEventArgs e)
+    {
+        if (_suppressModeEvents) return;
+        if (sender is ToggleButton { Tag: string tag } button &&
+            Enum.TryParse<DataMode>(tag, out var mode) && _vm.Mode == mode)
+            button.IsChecked = true;
+    }
+
+    /// <summary>
+    /// Switching modes used to be a toggle with silent side effects — turning Live on
+    /// quietly disabled the slider, and loading a day left a forecast raster on screen.
+    /// One entry point makes the exclusivity explicit and reversible.
+    /// </summary>
+    private void ApplyMode(DataMode mode, bool initial = false)
+    {
+        if (!initial && _vm.Mode == mode) return;
+        var previous = _vm.Mode;
+        _vm.Mode = mode;
+
+        _suppressModeEvents = true;
+        LiveModeButton.IsChecked = mode == DataMode.Live;
+        ArchiveModeButton.IsChecked = mode == DataMode.Archive;
+        ForecastModeButton.IsChecked = mode == DataMode.Forecast;
+        _suppressModeEvents = false;
+
+        LiveTransport.Visibility = mode == DataMode.Live ? Visibility.Visible : Visibility.Collapsed;
+        ArchiveTransport.Visibility = mode == DataMode.Archive ? Visibility.Visible : Visibility.Collapsed;
+        ForecastTransport.Visibility = mode == DataMode.Forecast ? Visibility.Visible : Visibility.Collapsed;
+
+        if (initial) return;
+
+        // Leaving a mode takes its data with it, so nothing stale is left under the new one.
+        if (previous == DataMode.Live)
+            _ = _liveFeed.StopAsync();
+        if (previous == DataMode.Forecast)
+            FutureClear_Click(this, new RoutedEventArgs());
+        if (previous == DataMode.Archive)
+            _playback.PauseLoop();
+
+        switch (mode)
+        {
+            case DataMode.Live:
+                StartLiveAsync();
+                break;
+            case DataMode.Archive:
+                // Default the day without letting the picker's own handler fire — this
+                // path loads it explicitly a line later.
+                _suppressDayEvents = true;
+                DayPicker.SelectedDate ??= DateTime.UtcNow.Date;
+                _suppressDayEvents = false;
+                _ = LoadSelectedDayAsync();
+                break;
+            case DataMode.Forecast:
+                Report("Forecast: load the HRRR run to see the next six hours.");
+                break;
+        }
+    }
+
+    private async void StartLiveAsync()
+    {
+        if (SiteCombo.SelectedItem is not RadarSite site)
+        {
+            ReportError("Pick a radar site before starting the live feed.");
+            ApplyMode(DataMode.Archive);
+            return;
+        }
+        LiveStateText.Text = $"Connecting to {site.Icao}…";
+        _mapView.Camera.MoveTo(site.LatDeg, site.LonDeg, 250);
+        await _liveFeed.StartAsync(site.Icao);
+    }
+
+    // ---- map tools ----
+
+    private bool _suppressToolEvents;
+
+    private void ToolButton_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_suppressToolEvents) return;
+        if (sender is not FrameworkElement { Tag: string tag } ||
+            !Enum.TryParse<MapTool>(tag, out var tool))
+            return;
+        _vm.Tool = tool;
+        SyncToolButtons();
+    }
+
+    /// <summary>Radio behaviour: the armed tool cannot be disarmed into no tool at all.</summary>
+    private void ToolButton_Unchecked(object sender, RoutedEventArgs e)
+    {
+        if (_suppressToolEvents) return;
+        if (sender is ToggleButton { Tag: string tag } button &&
+            Enum.TryParse<MapTool>(tag, out var tool) && _vm.Tool == tool)
+            button.IsChecked = true;
+    }
+
+    private void SyncToolButtons()
+    {
+        _suppressToolEvents = true;
+        InspectTool.IsChecked = _vm.Tool == MapTool.Inspect;
+        MeasureTool.IsChecked = _vm.Tool == MapTool.Measure;
+        CrossSectionTool.IsChecked = _vm.Tool == MapTool.CrossSection;
+        SetHomeTool.IsChecked = _vm.Tool == MapTool.SetHome;
+        _suppressToolEvents = false;
+
+        CrossSectionPanel.Visibility = _vm.Tool == MapTool.CrossSection
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        Report(MainViewModel.ToolHint(_vm.Tool));
     }
 
     /// <summary>
@@ -220,7 +480,7 @@ public partial class MainWindow : Window
 
         // Elapsed time only means something for a live feed. On archive data it produced
         // readings like "116106 h" — technically true, and useless.
-        if (LiveToggle.IsChecked != true)
+        if (!_vm.IsLive)
         {
             AgeText.Text = $"ARCHIVE  {time:yyyy-MM-dd HH:mm}Z";
             AgeText.Foreground = System.Windows.Media.Brushes.Gray;
@@ -236,53 +496,62 @@ public partial class MainWindow : Window
             : System.Windows.Media.Brushes.LightGreen;
     }
 
-    private void LiveToggle_Checked(object sender, RoutedEventArgs e)
-    {
-        if (SiteCombo.SelectedItem is not RadarSite site)
-        {
-            LiveToggle.IsChecked = false;
-            return;
-        }
-        _playback.StopLoop();
-        TimeSlider.IsEnabled = false;
-        _liveFeed.Start(site.Icao);
-        _mapView.Camera.MoveTo(site.LatDeg, site.LonDeg, 250);
-    }
-
-    private void LiveToggle_Unchecked(object sender, RoutedEventArgs e)
-    {
-        _liveFeed.Stop();
-        TimeSlider.IsEnabled = _playback.DayVolumes.Count > 0;
-        StatusText.Text = "Live feed stopped.";
-    }
-
     private async Task LoadStartupAsync()
     {
-        // A file passed on the command line bypasses the archive browser.
+        // A file passed on the command line bypasses everything else.
         string? path = Environment.GetCommandLineArgs().Skip(1).FirstOrDefault();
         if (path is not null && File.Exists(path))
         {
-            StatusText.Text = $"Decoding {Path.GetFileName(path)}…";
+            Report($"Decoding {Path.GetFileName(path)}…");
+            ShowBusy(true);
             try
             {
                 var volume = await Task.Run(() => ArchiveFile.DecodeFile(path));
+                SiteCombo.SelectedItem = RadarSites.ByIcao(volume.SiteId) ?? SiteCombo.SelectedItem;
                 _mapView.Camera.MoveTo(volume.LatDeg, volume.LonDeg, 250);
-                _panes!.ShowVolume(volume);
+                _panes.ShowVolume(volume);
             }
             catch (Exception ex)
             {
-                StatusText.Text = $"Decode failed: {ex.Message}";
+                ReportError($"Could not decode {Path.GetFileName(path)}: {ex.Message}");
+            }
+            finally
+            {
+                ShowBusy(false);
             }
             return;
         }
-        await LoadSelectedDayAsync();
+
+        // With a home set, open on its radar, live. Otherwise stay on the national view
+        // with the mosaic on — a first screen that is about the weather now, rather than
+        // a hard-coded storm from 2013.
+        if (_settings.HomeLatDeg is { } lat && _settings.HomeLonDeg is { } lon)
+        {
+            var site = RadarSites.Nearest(lat, lon);
+            SiteCombo.SelectedItem = RadarSites.ByIcao(site.Icao);
+            _mapView.Camera.MoveTo(lat, lon, 250);
+            ApplyMode(DataMode.Live);
+            return;
+        }
+
+        SiteCombo.SelectedItem ??= RadarSites.ByIcao("KTLX");
+        FilterMosaic.IsChecked = true;
+        Report("Pick a radar site, search for a place, or press 🎯 for the heaviest weather in the country.");
     }
 
     private async Task LoadSelectedDayAsync()
     {
         if (SiteCombo.SelectedItem is not RadarSite site || DayPicker.SelectedDate is not { } day)
             return;
-        await _playback.LoadDayAsync(site.Icao, DateOnly.FromDateTime(day));
+        ShowBusy(true);
+        try
+        {
+            await _playback.LoadDayAsync(site.Icao, DateOnly.FromDateTime(day));
+        }
+        finally
+        {
+            ShowBusy(false);
+        }
     }
 
     private void UpdateSliderLabel()
@@ -293,8 +562,40 @@ public partial class MainWindow : Window
             : "—";
     }
 
-    private async void LoadDayButton_Click(object sender, RoutedEventArgs e) =>
+    /// <summary>Keep the scrub handle under the playing loop, so the timeline stays honest.</summary>
+    private void SyncSliderToLoop(int frameIndex)
+    {
+        int index = _playback.LoopWindowStart + frameIndex;
+        if (index < 0 || index > TimeSlider.Maximum) return;
+        _suppressSliderEvents = true;
+        TimeSlider.Value = index;
+        _suppressSliderEvents = false;
+        UpdateSliderLabel();
+    }
+
+    private async void DayPicker_SelectedDateChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressDayEvents || !IsLoaded || !_vm.IsArchive) return;
         await LoadSelectedDayAsync();
+    }
+
+    private async void SiteCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (SiteCombo.SelectedItem is not RadarSite site) return;
+        _mapView.SetSelectedMarker(site.LatDeg, site.LonDeg);
+        if (!IsLoaded) return;
+
+        if (_vm.IsLive)
+        {
+            StartLiveAsync();
+        }
+        else if (_vm.IsArchive && DayPicker.SelectedDate is not null)
+        {
+            await LoadSelectedDayAsync();
+        }
+        if (StormsToggle.IsChecked == true && StormWatchSite() is { } watch)
+            _storms.Enable(watch.Icao);
+    }
 
     private void NearestButton_Click(object sender, RoutedEventArgs e)
     {
@@ -313,30 +614,27 @@ public partial class MainWindow : Window
     private async void PlayButton_Click(object sender, RoutedEventArgs e)
     {
         if (_playback.IsPlaying)
-            _playback.StopLoop();
+            _playback.PauseLoop();
         else
             await _playback.PlayAsync();
     }
 
-    private void SpeedCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_playback is null) return;
-        _playback.SetSpeed(SpeedCombo.SelectedIndex switch { 0 => 2, 2 => 8, _ => 4 });
-    }
+    private void SpeedCombo_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
+        _playback?.SetSpeed(SpeedCombo.SelectedIndex switch { 0 => 2, 2 => 8, _ => 4 });
 
     /// <summary>Merge warning polygons, storm features, and the measure line into one overlay.</summary>
     private void ComposeOverlay()
     {
         var labels = new List<MapView.MapLabel>(_storms.Labels);
-        if (_outlooks?.Labels is { Count: > 0 } outlookLabels)
+        if (_outlooks.Labels is { Count: > 0 } outlookLabels)
             labels.AddRange(outlookLabels);
-        if (_placefiles?.Labels is { Count: > 0 } placefileLabels)
+        if (_placefiles.Labels is { Count: > 0 } placefileLabels)
             labels.AddRange(placefileLabels);
         _mapView.SetLabels(labels);
 
         OverlayGeometry?[] sources =
         [
-            _outlooks?.Geometry, _warnings?.Geometry, _placefiles?.Geometry,
+            _outlooks.Geometry, _warnings.Geometry, _placefiles.Geometry,
             _storms.Geometry, _homeGeometry, _measureGeometry,
         ];
         var active = sources.Where(s => s is not null).Cast<OverlayGeometry>().ToArray();
@@ -362,7 +660,7 @@ public partial class MainWindow : Window
     /// otherwise whatever is selected for browsing.</summary>
     private RadarSite? StormWatchSite()
     {
-        if (_settings?.HomeLatDeg is { } lat && _settings.HomeLonDeg is { } lon)
+        if (_settings.HomeLatDeg is { } lat && _settings.HomeLonDeg is { } lon)
             return RadarSites.Nearest(lat, lon);
         return SiteCombo.SelectedItem as RadarSite;
     }
@@ -371,7 +669,7 @@ public partial class MainWindow : Window
     /// so track alerts work without a manual toggle.</summary>
     private void EnsureStormWatchForHome()
     {
-        if (_settings?.HomeLatDeg is null || StormWatchSite() is not { } site) return;
+        if (_settings.HomeLatDeg is null || StormWatchSite() is not { } site) return;
         if (StormsToggle.IsChecked == true)
             _storms.Enable(site.Icao); // re-point (home may have moved to a new nearest site)
         else
@@ -386,30 +684,46 @@ public partial class MainWindow : Window
             StormsToggle.IsChecked = false;
     }
 
-    private void StormsToggle_Unchecked(object sender, RoutedEventArgs e) => _storms.Disable();
+    private void StormsToggle_Unchecked(object sender, RoutedEventArgs e)
+    {
+        _storms.Disable();
+        StormNoteText.Text = "";
+    }
 
-    // ---- click routing: set-home > storm details > warning details ----
+    /// <summary>
+    /// The storm-structure product (NSS) stopped being distributed around 2021, so on live
+    /// data the cell labels can only ever show an ID. Say so rather than letting the user
+    /// conclude the decoder is broken.
+    /// </summary>
+    private void UpdateStormNote(IReadOnlyList<TrackedStorm> storms)
+    {
+        StormNoteText.Text = storms.Count > 0 && storms.All(s => s.MaxDbz is null)
+            ? "Labels show cell IDs only — the NWS stopped distributing the storm-structure "
+            + "product (max dBZ, VIL, echo top) around 2021."
+            : "";
+    }
+
+    // ---- click routing: whichever tool is armed decides ----
 
     private void RouteMapClick(int x, int y)
     {
-        _stormPopup?.IsOpen = false;
+        if (_stormPopup is not null) _stormPopup.IsOpen = false;
         _stormPopup = null;
 
         var (lat, lon) = _mapView.ScreenToLatLon(x, y);
-        if (_settingHome)
+        if (_vm.Tool == MapTool.SetHome)
         {
-            _settingHome = false;
-            SetHomeButton.Content = "📍 Set home on map";
-            _settings!.HomeLatDeg = lat;
+            _vm.Tool = MapTool.Inspect;
+            SyncToolButtons();
+            _settings.HomeLatDeg = lat;
             _settings.HomeLonDeg = lon;
             _settings.Save();
             _threats.Configure(lat, lon, _settings.AlertRadiusKm);
             EnsureStormWatchForHome();
             RebuildHomeGeometry();
-            UpdateHomeLabels();
             ComposeOverlay();
-            StatusText.Text = $"Home set to {lat:F3}, {lon:F3} — proximity alerts armed, " +
-                              $"storm watch on {StormWatchSite()?.Icao}.";
+            Report($"Home set to {lat:F3}, {lon:F3} — proximity alerts armed, " +
+                   $"storm watch on {StormWatchSite()?.Icao}.");
             return;
         }
 
@@ -419,7 +733,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        _warnings?.HandleClick(x, y);
+        _warnings.HandleClick(x, y);
     }
 
     private void ShowStormPopup(TrackedStorm storm, int x, int y)
@@ -463,7 +777,7 @@ public partial class MainWindow : Window
         _stormPopup = new Popup
         {
             PlacementTarget = MapHost,
-            Placement = System.Windows.Controls.Primitives.PlacementMode.Relative,
+            Placement = PlacementMode.Relative,
             HorizontalOffset = x + 12,
             VerticalOffset = y + 12,
             StaysOpen = false,
@@ -485,7 +799,7 @@ public partial class MainWindow : Window
 
     private void RebuildHomeGeometry()
     {
-        if (_settings?.HomeLatDeg is not { } lat || _settings.HomeLonDeg is not { } lon)
+        if (_settings.HomeLatDeg is not { } lat || _settings.HomeLonDeg is not { } lon)
         {
             _homeGeometry = null;
             return;
@@ -496,40 +810,24 @@ public partial class MainWindow : Window
         // Radius ring drawn in true kilometers; Mercator inflates by 1/cos(lat).
         double mercatorRadius = _settings.AlertRadiusKm * 1000.0 / Math.Cos(lat * Math.PI / 180.0);
         StormOverlayController.AddCircle(geometry, (centre.X, centre.Y), mercatorRadius, color, 2f);
-        double s = 700;
+        // The marker itself is a symbol, so it is sized in pixels, not metres.
+        double s = 6 * _mapView.Camera.Snapshot().MetersPerPixel;
         geometry.FillTriangles.Add((centre.X - s, centre.Y - s, color));
         geometry.FillTriangles.Add((centre.X, centre.Y + s, color));
         geometry.FillTriangles.Add((centre.X + s, centre.Y - s, color));
         _homeGeometry = geometry;
     }
 
-    private void UpdateHomeLabels()
-    {
-        if (_settings?.HomeLatDeg is { } lat && _settings.HomeLonDeg is { } lon)
-        {
-            HomeLabel.Text = $"Home: {lat:F3}, {lon:F3}";
-            AlertArmedLabel.Text =
-                $"Alerts armed ({Units.Distance(_settings.AlertRadiusKm)}). " +
-                $"Storm watch auto-enabled on {StormWatchSite()?.Icao ?? "?"} " +
-                "(nearest radar to home); warning alerts always on.";
-        }
-        else
-        {
-            HomeLabel.Text = "Home: not set";
-            AlertArmedLabel.Text = "Set a home location to arm proximity alerts.";
-        }
-    }
-
     private void OnThreat(Threat threat)
     {
         System.Media.SystemSounds.Exclamation.Play();
-        StatusText.Text = $"⚠ {threat.Title}";
+        Report($"⚠ {threat.Title}");
 
         // A toast inside the window is invisible when the window is not. Always send a
         // tray notification too — this is the case proximity alerts exist for.
-        _tray?.Notify(threat.Title, threat.Detail, threat.IsTornado);
+        _tray.Notify(threat.Title, threat.Detail, threat.IsTornado);
 
-        _toast?.IsOpen = false;
+        if (_toast is not null) _toast.IsOpen = false;
         var panel = new StackPanel { MaxWidth = 360, Margin = new Thickness(12) };
         panel.Children.Add(new TextBlock
         {
@@ -552,7 +850,7 @@ public partial class MainWindow : Window
         var toast = new Popup
         {
             PlacementTarget = MapHost,
-            Placement = System.Windows.Controls.Primitives.PlacementMode.Relative,
+            Placement = PlacementMode.Relative,
             HorizontalOffset = Math.Max(8, MapHost.ActualWidth - 392),
             VerticalOffset = Math.Max(8, MapHost.ActualHeight - 130),
             StaysOpen = true,
@@ -581,12 +879,50 @@ public partial class MainWindow : Window
         closeTimer.Start();
     }
 
-    // ---- layers panel handlers ----
+    // ---- layers panel ----
 
     private void OpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (_mapView is not null)
             _mapView.RadarOpacity = (float)(e.NewValue / 100.0);
+    }
+
+    private void SmoothSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_mapView is not null)
+            _mapView.RadarSmoothing = (float)(e.NewValue / 100.0);
+    }
+
+    private void MosaicFilter_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_mapView is not null)
+            _mapView.MosaicEnabled = FilterMosaic.IsChecked == true;
+    }
+
+    private void MosaicOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_mapView is not null)
+            _mapView.MosaicOpacity = (float)(e.NewValue / 100.0);
+    }
+
+    private void SatelliteFilter_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_mapView is not null)
+            _mapView.SatelliteEnabled = FilterSatellite.IsChecked == true;
+    }
+
+    private void SatelliteOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_mapView is not null)
+            _mapView.SatelliteOpacity = (float)(e.NewValue / 100.0);
+    }
+
+    private void SiteMarkers_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_mapView is null || _settings is null) return;
+        _settings.ShowSiteMarkers = FilterSites.IsChecked == true;
+        _mapView.MarkersEnabled = _settings.ShowSiteMarkers;
+        _settings.Save();
     }
 
     private void WarningFilter_Changed(object sender, RoutedEventArgs e)
@@ -622,7 +958,7 @@ public partial class MainWindow : Window
         if (_radar is null) return;
         _radar.StormRelative = FilterStormRelative.IsChecked == true;
         if (_radar.StormRelative && _radar.StormMotion.SpeedKmh <= 0)
-            StatusText.Text = "Storm-relative needs a motion vector — turn on ⛈ Storms so cells are tracked.";
+            Report("Storm-relative needs a motion vector — turn on Track storms so cells are tracked.");
         _radar.Refresh();
     }
 
@@ -647,27 +983,21 @@ public partial class MainWindow : Window
         _storms.Rebuild();
     }
 
-    private void MosaicFilter_Changed(object sender, RoutedEventArgs e)
+    private async void OutlookFilter_Changed(object sender, RoutedEventArgs e)
     {
-        if (_mapView is null) return;
-        _mapView.MosaicEnabled = FilterMosaic.IsChecked == true;
+        if (_outlooks is null || FilterOutlooks is null || FilterWatches is null ||
+            FilterDiscussions is null || FilterReports is null) return;
+        _outlooks.ShowOutlooks = FilterOutlooks.IsChecked == true;
+        _outlooks.ShowWatches = FilterWatches.IsChecked == true;
+        _outlooks.ShowDiscussions = FilterDiscussions.IsChecked == true;
+        _outlooks.ShowReports = FilterReports.IsChecked == true;
+        await _outlooks.ApplyAsync();
     }
 
-    private void MosaicOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        if (_mapView is not null)
-            _mapView.MosaicOpacity = (float)(e.NewValue / 100.0);
-    }
+    private void SymbolKeyButton_Click(object sender, RoutedEventArgs e) =>
+        InfoWindow.ShowSymbolKey(this);
 
     // ---- vertical cross-section ----
-
-    private void CrossSectionToggle_Changed(object sender, RoutedEventArgs e)
-    {
-        bool on = CrossSectionToggle.IsChecked == true;
-        CrossSectionPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
-        if (on)
-            StatusText.Text = "Cross-section mode: right-drag a line across the storm.";
-    }
 
     /// <summary>
     /// Turn the measuring line into a slice. Sampling the whole volume takes a moment,
@@ -708,12 +1038,15 @@ public partial class MainWindow : Window
 
     private void CaptureButton_Click(object sender, RoutedEventArgs e)
     {
-        bool haveLoop = _playback?.LoopGeometryCount > 0;
+        // The GIF option used to appear only while a loop was playing — and taking it
+        // stopped the loop, discarding the very frames it was about to record. Any loaded
+        // day can be recorded now; the frames are built on demand.
+        bool canRecord = _playback.LoopGeometryCount > 0 || _playback.CanBuildLoop;
         var dialog = new Microsoft.Win32.SaveFileDialog
         {
             Title = "Save map",
             FileName = $"openwsr-{DateTime.Now:yyyyMMdd-HHmmss}",
-            Filter = haveLoop
+            Filter = canRecord
                 ? "PNG image (*.png)|*.png|Animated GIF of the loop (*.gif)|*.gif"
                 : "PNG image (*.png)|*.png",
         };
@@ -723,7 +1056,6 @@ public partial class MainWindow : Window
         {
             if (dialog.FileName.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
             {
-                StatusText.Text = "Recording the loop…";
                 _ = SaveLoopGifAsync(dialog.FileName);
             }
             else
@@ -731,16 +1063,16 @@ public partial class MainWindow : Window
                 var frame = _mapView.CaptureFrame();
                 if (frame is null)
                 {
-                    StatusText.Text = "Could not read the map surface.";
+                    ReportError("Could not read the map surface. Try again once the map has drawn a frame.");
                     return;
                 }
                 GifWriter.SavePng(dialog.FileName, frame.Value.Bgra, frame.Value.Width, frame.Value.Height);
-                StatusText.Text = $"Saved {System.IO.Path.GetFileName(dialog.FileName)}";
+                Report($"Saved {Path.GetFileName(dialog.FileName)}");
             }
         }
         catch (Exception ex)
         {
-            StatusText.Text = $"Save failed: {ex.Message}";
+            ReportError($"Could not save {Path.GetFileName(dialog.FileName)}: {ex.Message}");
         }
     }
 
@@ -750,9 +1082,15 @@ public partial class MainWindow : Window
     /// </summary>
     private async Task SaveLoopGifAsync(string path)
     {
-        if (_playback is null) return;
         bool wasPlaying = _playback.IsPlaying;
-        _playback.StopLoop();
+        _playback.PauseLoop(); // pause, not stop — stopping would discard the frames
+
+        Report("Preparing the loop…");
+        if (!await _playback.EnsureLoopAsync())
+        {
+            ReportError("There are no loop frames to record. Load an archive day first.");
+            return;
+        }
 
         var frames = new List<(byte[] Bgra, int Width, int Height)>();
         int count = _playback.LoopGeometryCount;
@@ -762,16 +1100,26 @@ public partial class MainWindow : Window
             await Task.Delay(140); // let the render thread present the new frame
             if (_mapView.CaptureFrame() is { } frame)
                 frames.Add(frame);
-            StatusText.Text = $"Recording the loop… {i + 1}/{count}";
+            Report($"Recording the loop… {i + 1}/{count}");
+            ShowProgress((i + 1) / (double)count);
         }
+        ShowProgress(-1);
 
         if (frames.Count == 0)
         {
-            StatusText.Text = "Nothing captured.";
+            ReportError("Nothing was captured — the map surface did not return a frame.");
             return;
         }
-        await Task.Run(() => GifWriter.Save(path, frames, delayCentiseconds: 25));
-        StatusText.Text = $"Saved {System.IO.Path.GetFileName(path)} ({frames.Count} frames)";
+        try
+        {
+            await Task.Run(() => GifWriter.Save(path, frames, delayCentiseconds: 25));
+            Report($"Saved {Path.GetFileName(path)} ({frames.Count} frames)");
+        }
+        catch (Exception ex)
+        {
+            ReportError($"Could not write {Path.GetFileName(path)}: {ex.Message}");
+            return;
+        }
         if (wasPlaying) await _playback.PlayAsync();
     }
 
@@ -797,7 +1145,6 @@ public partial class MainWindow : Window
 
     private async Task AddPlacefileAsync(string source)
     {
-        if (_placefiles is null || _settings is null) return;
         await _placefiles.AddAsync(source);
         if (_placefiles.Files.Any(f => f.Source == source) && !_settings.Placefiles.Contains(source))
         {
@@ -808,31 +1155,24 @@ public partial class MainWindow : Window
 
     private void PlacefileToggled(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement { Tag: LoadedPlacefile file } element &&
-            element is System.Windows.Controls.Primitives.ToggleButton toggle)
-            _placefiles?.SetEnabled(file, toggle.IsChecked == true);
+        if (sender is ToggleButton { Tag: LoadedPlacefile file } toggle)
+            _placefiles.SetEnabled(file, toggle.IsChecked == true);
     }
 
     private void PlacefileRemove_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { Tag: LoadedPlacefile file }) return;
-        _placefiles?.Remove(file);
-        if (_settings is not null && _settings.Placefiles.Remove(file.Source))
+        _placefiles.Remove(file);
+        if (_settings.Placefiles.Remove(file.Source))
             _settings.Save();
-    }
-
-    private void SatelliteFilter_Changed(object sender, RoutedEventArgs e)
-    {
-        if (_mapView is not null)
-            _mapView.SatelliteEnabled = FilterSatellite.IsChecked == true;
     }
 
     // ---- future radar ----
 
     private async void FutureLoad_Click(object sender, RoutedEventArgs e)
     {
-        if (_future is null) return;
         FutureLoadButton.IsEnabled = false;
+        ShowBusy(true);
         try
         {
             await _future.LoadAsync();
@@ -840,16 +1180,16 @@ public partial class MainWindow : Window
         finally
         {
             FutureLoadButton.IsEnabled = true;
+            ShowBusy(false);
         }
     }
 
-    private void FuturePrev_Click(object sender, RoutedEventArgs e) => _future?.Step(-1);
+    private void FuturePrev_Click(object sender, RoutedEventArgs e) => _future.Step(-1);
 
-    private void FutureNext_Click(object sender, RoutedEventArgs e) => _future?.Step(1);
+    private void FutureNext_Click(object sender, RoutedEventArgs e) => _future.Step(1);
 
     private void FuturePlay_Click(object sender, RoutedEventArgs e)
     {
-        if (_future is null) return;
         if (_future.IsPlaying)
         {
             _future.Pause();
@@ -864,57 +1204,35 @@ public partial class MainWindow : Window
 
     private void FutureClear_Click(object sender, RoutedEventArgs e)
     {
-        _future?.Clear();
+        _future.Clear();
         FuturePlayButton.Content = "▶";
         FutureLabel.Text = "Not loaded";
         foreach (var b in new[] { FuturePrevButton, FuturePlayButton, FutureNextButton, FutureClearButton })
             b.IsEnabled = false;
     }
 
-    private async void OutlookFilter_Changed(object sender, RoutedEventArgs e)
-    {
-        if (_outlooks is null || FilterOutlooks is null || FilterWatches is null ||
-            FilterDiscussions is null || FilterReports is null) return;
-        _outlooks.ShowOutlooks = FilterOutlooks.IsChecked == true;
-        _outlooks.ShowWatches = FilterWatches.IsChecked == true;
-        _outlooks.ShowDiscussions = FilterDiscussions.IsChecked == true;
-        _outlooks.ShowReports = FilterReports.IsChecked == true;
-        await _outlooks.ApplyAsync();
-    }
+    // ---- rail ----
 
-    private void SmoothSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    private void LayersToggle_Changed(object sender, RoutedEventArgs e)
     {
-        if (_mapView is not null)
-            _mapView.RadarSmoothing = (float)(e.NewValue / 100.0);
+        if (LayersPanel is not null)
+            LayersPanel.Visibility = LayersToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
     }
-
-    private void SetHomeButton_Click(object sender, RoutedEventArgs e)
-    {
-        _settingHome = !_settingHome;
-        SetHomeButton.Content = _settingHome ? "Click the map…" : "📍 Set home on map";
-        if (_settingHome)
-            StatusText.Text = "Click the map to set your home location.";
-    }
-
-    private void RadiusCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_settings is null) return;
-        _settings.AlertRadiusKm = RadiusCombo.SelectedIndex switch
-        {
-            0 => 15, 2 => 80, 3 => 160, _ => 40,
-        };
-        _settings.Save();
-        _threats.Configure(_settings.HomeLatDeg, _settings.HomeLonDeg, _settings.AlertRadiusKm);
-        RebuildHomeGeometry();
-        UpdateHomeLabels();
-        ComposeOverlay();
-    }
-
 
     private void LinkToggle_Changed(object sender, RoutedEventArgs e)
     {
         if (_panes is not null)
             _panes.LinkedPan = LinkToggle.IsChecked == true;
+    }
+
+    /// <summary>Rail button cycles 1 → 2 → 4 panes, so the rail needs no dropdown.</summary>
+    private void PaneButton_Click(object sender, RoutedEventArgs e)
+    {
+        _paneCount = _paneCount switch { 1 => 2, 2 => 4, _ => 1 };
+        _panes.SetPaneCount(_paneCount);
+        PaneButton.Content = _paneCount switch { 1 => "◱", 2 => "◫", _ => "⊞" };
+        PaneButton.ToolTip = $"Map panes: {_paneCount}";
+        LinkToggle.IsEnabled = _paneCount > 1;
     }
 
     private void PaletteButton_Click(object sender, RoutedEventArgs e)
@@ -928,11 +1246,11 @@ public partial class MainWindow : Window
         try
         {
             _radar.SetCustomTable(OpenWSR.Palettes.Gr2Palette.ParseFile(dialog.FileName));
-            StatusText.Text = $"Palette applied to {_radar.CurrentMoment}: {Path.GetFileName(dialog.FileName)}";
+            Report($"Palette applied to {_radar.CurrentMoment}: {Path.GetFileName(dialog.FileName)}");
         }
         catch (Exception ex)
         {
-            StatusText.Text = $"Palette import failed: {ex.Message}";
+            ReportError($"Could not read {Path.GetFileName(dialog.FileName)}: {ex.Message}");
         }
     }
 
@@ -944,116 +1262,97 @@ public partial class MainWindow : Window
     private async void HotspotButton_Click(object sender, RoutedEventArgs e)
     {
         HotspotButton.IsEnabled = false;
+        ShowProgress(0);
         try
         {
-            StatusText.Text = "Scanning every radar site for the heaviest precipitation…";
+            Report("Scanning every radar site for the heaviest precipitation…");
             var hotspot = await NationalStormScan.FindHeaviestAsync((done, total) =>
                 Dispatcher.BeginInvoke(() =>
-                    StatusText.Text = $"Scanning storm structure… {done}/{total} sites"));
+                {
+                    Report($"Scanning storm structure… {done}/{total} sites");
+                    ShowProgress(done / (double)Math.Max(total, 1));
+                }));
             if (hotspot is null)
             {
-                StatusText.Text = "No fresh storm cells anywhere in the USA — remarkably quiet.";
+                Report("No fresh storm cells anywhere in the USA — remarkably quiet.");
                 return;
             }
 
             SiteCombo.SelectedItem = RadarSites.ByIcao(hotspot.Site.Icao);
-            if (LiveToggle.IsChecked == true)
-                LiveToggle.IsChecked = false; // restart the feed on the new site
-            LiveToggle.IsChecked = true;
+            ApplyMode(DataMode.Live);
             StormsToggle.IsChecked = true;
             _storms.Enable(hotspot.Site.Icao); // follow the hotspot (overrides home watch for now)
             _mapView.Camera.MoveTo(hotspot.LatDeg, hotspot.LonDeg, 150);
 
-            StatusText.Text =
-                $"🎯 Hotspot: VIL {hotspot.MaxVilKgM2:F0} kg/m² near {hotspot.Site.Icao} " +
-                $"({hotspot.Site.Name}, {hotspot.Site.State}), {Units.Distance(hotspot.RangeKm)} out — " +
-                $"as of {hotspot.ProductTimeUtc:HH:mm}Z";
+            Report($"🎯 Hotspot: VIL {hotspot.MaxVilKgM2:F0} kg/m² near {hotspot.Site.Icao} " +
+                   $"({hotspot.Site.Name}, {hotspot.Site.State}), {Units.Distance(hotspot.RangeKm)} out — " +
+                   $"as of {hotspot.ProductTimeUtc:HH:mm}Z");
         }
         catch (Exception ex)
         {
-            StatusText.Text = $"Hotspot scan failed: {ex.Message}";
+            ReportError($"The hotspot scan failed: {ex.Message}");
         }
         finally
         {
             HotspotButton.IsEnabled = true;
+            ShowProgress(-1);
         }
-    }
-
-    private void AboutButton_Click(object sender, RoutedEventArgs e)
-    {
-        var version = GetType().Assembly.GetName().Version?.ToString(3) ?? "dev";
-        MessageBox.Show(this,
-            $"""
-            OpenWSR {version}
-            An open-source native NEXRAD Level II radar viewer.
-
-            NOT FOR LIFE-SAFETY DECISIONS.
-            This software is provided for informational and educational use only.
-            Never rely on it for warnings or protective action — use official
-            National Weather Service products and local warning systems.
-
-            Data: NOAA NEXRAD via AWS Open Data (NSF Unidata), NWS api.weather.gov.
-            Basemap © OpenStreetMap contributors.
-            See THIRD-PARTY-NOTICES.md for component licenses.
-
-            Keys over the map: R/V/W/D/P/C moment · ↑/↓ tilt
-            Right-drag: measure distance/bearing · Hover: inspector
-            """,
-            "About OpenWSR", MessageBoxButton.OK, MessageBoxImage.Information);
-    }
-
-    private void LayersToggle_Changed(object sender, RoutedEventArgs e)
-    {
-        if (LayersPanel is not null)
-            LayersPanel.Visibility = LayersToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    /// <summary>Rail button cycles 1 → 2 → 4 panes, so the rail needs no dropdown.</summary>
-    private void PaneButton_Click(object sender, RoutedEventArgs e)
-    {
-        _paneCount = _paneCount switch { 1 => 2, 2 => 4, _ => 1 };
-        _panes?.SetPaneCount(_paneCount);
-        PaneButton.Content = _paneCount switch { 1 => "◱", 2 => "◫", _ => "⊞" };
-        PaneButton.ToolTip = $"Map panes: {_paneCount}";
-        LinkToggle.IsEnabled = _paneCount > 1;
     }
 
     private void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_settings is null) return;
         var dialog = new SettingsWindow(_settings) { Owner = this };
         if (dialog.ShowDialog() != true) return;
 
         Units.System = _settings.Units;
-        StatusText.Text = "Settings saved. Basemap changes take effect next launch.";
-        UpdateHomeLabels();
+        _threats.Configure(_settings.HomeLatDeg, _settings.HomeLonDeg, _settings.AlertRadiusKm);
+        RebuildHomeGeometry();
+        ComposeOverlay();
         _radar.Refresh();
+
+        if (dialog.WantsHomePicker)
+        {
+            _vm.Tool = MapTool.SetHome;
+            SyncToolButtons();
+            return;
+        }
+        Report("Settings saved. Basemap changes take effect next launch.");
     }
+
+    private void HelpButton_Click(object sender, RoutedEventArgs e) => InfoWindow.ShowShortcuts(this);
+
+    private void AboutButton_Click(object sender, RoutedEventArgs e) =>
+        InfoWindow.ShowAbout(this, GetType().Assembly.GetName().Version?.ToString(3) ?? "dev");
 
     // ---- location search ----
 
-    private async void SearchBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    private async void SearchBox_KeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key != System.Windows.Input.Key.Enter) return;
+        if (e.Key != Key.Enter) return;
         var query = SearchBox.Text.Trim();
         if (query.Length == 0) return;
 
         SearchBox.IsEnabled = false;
-        StatusText.Text = $"Looking up “{query}”…";
+        Report($"Looking up “{query}”…");
         try
         {
-            var place = await _geocoder!.SearchAsync(query);
+            var place = await _geocoder.SearchAsync(query);
             if (place is null)
             {
-                StatusText.Text = $"No match for “{query}”. Try a city, a ZIP code, or lat,lon.";
+                Report($"No match for “{query}”. Try a city, a ZIP code, or lat,lon.");
                 return;
             }
             var site = RadarSites.Nearest(place.LatDeg, place.LonDeg);
             double km = GeoMath.DistanceM(place.LatDeg, place.LonDeg, site.LatDeg, site.LonDeg) / 1000.0;
             SiteCombo.SelectedItem = RadarSites.ByIcao(site.Icao);
             _mapView.Camera.MoveTo(place.LatDeg, place.LonDeg, 220);
-            StatusText.Text = $"{place.Name} — nearest radar {site.Icao} ({site.Name}), {Units.Distance(km)} away.";
+            Report($"{place.Name} — nearest radar {site.Icao} ({site.Name}), {Units.Distance(km)} away.");
             SearchBox.Clear();
+        }
+        catch (Exception ex)
+        {
+            // A geocoder failure used to reach the dispatcher and end the session.
+            ReportError($"Could not look up “{query}”: {ex.Message}");
         }
         finally
         {

@@ -33,10 +33,12 @@ public sealed class StormOverlayController : IDisposable
     private static readonly uint SevereHailColor = OverlayGeometry.Pack(255, 120, 40, 240);
     private static readonly uint MesoColor = OverlayGeometry.Pack(255, 220, 40, 240);
 
+    private readonly MapView _mapView;
     private readonly Level3Client _client = new();
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMinutes(2) };
     private string? _site;
     private int _fetchGeneration;
+    private double _builtAtMetresPerPixel;
     private Level3Product? _nst, _nhi, _nmd, _nss;
 
     // ---- layer filters (WunderMap-style); Rebuild() applies without refetching ----
@@ -58,9 +60,23 @@ public sealed class StormOverlayController : IDisposable
     public event Action<IReadOnlyList<TrackedStorm>>? StormsUpdated;
     public event Action<string>? StatusChanged;
 
-    public StormOverlayController()
+    public StormOverlayController(MapView mapView)
     {
+        _mapView = mapView;
         _timer.Tick += async (_, _) => await RefreshAsync();
+    }
+
+    /// <summary>
+    /// Symbols are sized in screen pixels, so the geometry has to be rebuilt when the zoom
+    /// moves materially. Called from the app's status tick; a no-op the rest of the time.
+    /// </summary>
+    public void NotifyViewChanged()
+    {
+        if (_site is null || Geometry is null) return;
+        double now = _mapView.Camera.Snapshot().MetersPerPixel;
+        if (Math.Abs(now - _builtAtMetresPerPixel) / Math.Max(now, 1e-6) <= 0.05) return;
+        BuildGeometry();
+        GeometryChanged?.Invoke();
     }
 
     public void Enable(string icao)
@@ -219,8 +235,16 @@ public sealed class StormOverlayController : IDisposable
         return null;
     }
 
+    /// <summary>
+    /// Storm markers are symbols, not extents, so their size is in screen pixels — a cell
+    /// drawn 900 m across is invisible at national zoom and absurd at street zoom. Only the
+    /// mesocyclone ring is a real radius, and it keeps its metres.
+    /// </summary>
     private void BuildGeometry()
     {
+        double mpp = _mapView.Camera.Snapshot().MetersPerPixel;
+        _builtAtMetresPerPixel = mpp;
+
         var geometry = new OverlayGeometry();
         var labels = new List<MapView.MapLabel>();
         if (_nst is { } nst)
@@ -228,7 +252,7 @@ public sealed class StormOverlayController : IDisposable
             foreach (var cell in nst.StormCells)
             {
                 var current = ToMercator(nst, cell.Position);
-                AddDiamond(geometry, current, 900, TrackColor);
+                AddDiamond(geometry, current, 5 * mpp, TrackColor);
 
                 var tracked = Storms.FirstOrDefault(s => s.Id == cell.Id);
                 if (ShowCones && tracked is { SpeedKmh: > 3 })
@@ -246,7 +270,7 @@ public sealed class StormOverlayController : IDisposable
                     {
                         var point = ToMercator(nst, past);
                         geometry.Lines.Add((previous.X, previous.Y, point.X, point.Y, TrackColor, 1.5f));
-                        AddDiamond(geometry, point, 450, TrackColor);
+                        AddDiamond(geometry, point, 2.5 * mpp, TrackColor);
                         previous = point;
                     }
                 }
@@ -258,11 +282,11 @@ public sealed class StormOverlayController : IDisposable
                         var point = ToMercator(nst, cell.ForecastPositions[i]);
                         AddDottedLine(geometry, previous, point, ForecastColor, 1.5f);
                         // Time markers shrink with lead time: +15/+30/+45/+60 min.
-                        AddDiamond(geometry, point, 700 - i * 120, ForecastColor);
+                        AddDiamond(geometry, point, Math.Max(1.5, 4.0 - i * 0.7) * mpp, ForecastColor);
                         previous = point;
                     }
                     if (cell.ForecastPositions.Count > 0)
-                        AddArrowHead(geometry, cell, nst);
+                        AddArrowHead(geometry, cell, nst, mpp);
                 }
             }
         }
@@ -273,7 +297,8 @@ public sealed class StormOverlayController : IDisposable
                 if (h.ProbabilityOfHail <= 0) continue;
                 if (h.ProbabilityOfSevereHail < MinSevereHailProbability) continue;
                 bool severe = h.ProbabilityOfSevereHail >= 30;
-                double size = 1200 + 40.0 * Math.Max(0, h.ProbabilityOfSevereHail);
+                // 6 px at zero severe-hail probability, 12 px at 100 %.
+                double size = (6.0 + 0.06 * Math.Max(0, h.ProbabilityOfSevereHail)) * mpp;
                 AddTriangle(geometry, ToMercator(nhi, h.Position), size,
                     severe ? SevereHailColor : HailColor);
             }
@@ -283,7 +308,9 @@ public sealed class StormOverlayController : IDisposable
             foreach (var m in nmd.Mesocyclones)
             {
                 var centre = ToMercator(nmd, m.Position);
-                AddCircle(geometry, centre, Math.Max(m.RadiusKm, 1.0) * 1000.0, MesoColor, 2f);
+                // A real radius, so metres — but never smaller than a legible ring.
+                double radius = Math.Max(Math.Max(m.RadiusKm, 1.0) * 1000.0, 6 * mpp);
+                AddCircle(geometry, centre, radius, MesoColor, 2f);
                 var previous = centre;
                 foreach (var past in m.PastPositions)
                 {
@@ -346,7 +373,7 @@ public sealed class StormOverlayController : IDisposable
             OverlayGeometry.Pack(255, 255, 255, 200), 2f));
     }
 
-    private static void AddArrowHead(OverlayGeometry g, StormCell cell, Level3Product p)
+    private static void AddArrowHead(OverlayGeometry g, StormCell cell, Level3Product p, double mpp)
     {
         var last = cell.ForecastPositions[^1];
         var from = cell.ForecastPositions.Count > 1
@@ -359,7 +386,7 @@ public sealed class StormOverlayController : IDisposable
         if (length < 1) return;
         dx /= length;
         dy /= length;
-        const double arm = 1800;
+        double arm = 10 * mpp;
         g.Lines.Add((tip.X, tip.Y, tip.X - arm * (dx * 0.87 - dy * 0.5), tip.Y - arm * (dy * 0.87 + dx * 0.5), ForecastColor, 2f));
         g.Lines.Add((tip.X, tip.Y, tip.X - arm * (dx * 0.87 + dy * 0.5), tip.Y - arm * (dy * 0.87 - dx * 0.5), ForecastColor, 2f));
     }

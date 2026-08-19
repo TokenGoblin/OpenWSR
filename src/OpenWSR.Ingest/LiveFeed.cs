@@ -26,9 +26,10 @@ public sealed class LiveFeed : IDisposable
     public DateTime? LastDataUtc { get; private set; }
     public bool IsRunning => _cts is { IsCancellationRequested: false };
 
-    public void Start(string siteId)
+    /// <summary>Point the feed at a site, draining any feed already running.</summary>
+    public async Task StartAsync(string siteId)
     {
-        Stop();
+        await StopAsync();
         var cts = _cts = new CancellationTokenSource();
         var channel = Channel.CreateBounded<(ChunkRef Ref, byte[] Bytes)>(
             new BoundedChannelOptions(64) { SingleReader = true, SingleWriter = true });
@@ -36,19 +37,29 @@ public sealed class LiveFeed : IDisposable
         _decoder = Task.Run(() => DecodeLoopAsync(channel.Reader, cts.Token));
     }
 
-    public void Stop()
+    /// <summary>
+    /// Cancel the pipeline and wait for it to drain. Awaitable rather than blocking: an
+    /// in-flight S3 request can hold the poller for seconds, and every caller is on the
+    /// UI thread.
+    /// </summary>
+    public async Task StopAsync()
     {
-        _cts?.Cancel();
-        try
-        {
-            Task.WhenAll(_poller ?? Task.CompletedTask, _decoder ?? Task.CompletedTask)
-                .Wait(TimeSpan.FromSeconds(5));
-        }
-        catch (AggregateException)
-        {
-        }
+        var cts = _cts;
+        if (cts is null) return;
+        var pending = Task.WhenAll(_poller ?? Task.CompletedTask, _decoder ?? Task.CompletedTask);
         _cts = null;
         _poller = _decoder = null;
+
+        await cts.CancelAsync();
+        try
+        {
+            await pending.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        catch (Exception)
+        {
+            // Cancellation and the timeout are both expected; the tasks are abandoned.
+        }
+        cts.Dispose();
     }
 
     private async Task PollLoopAsync(
@@ -238,7 +249,18 @@ public sealed class LiveFeed : IDisposable
 
     public void Dispose()
     {
-        Stop();
-        _client.Dispose();
+        var cts = _cts;
+        var pending = Task.WhenAll(_poller ?? Task.CompletedTask, _decoder ?? Task.CompletedTask);
+        _cts = null;
+        _poller = _decoder = null;
+        cts?.Cancel();
+
+        // Close the S3 client only once the poller has let go of it — disposing it out
+        // from under an in-flight request throws inside the loop for no benefit.
+        pending.ContinueWith(_ =>
+        {
+            _client.Dispose();
+            cts?.Dispose();
+        }, TaskScheduler.Default);
     }
 }

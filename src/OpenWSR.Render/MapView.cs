@@ -24,7 +24,25 @@ public sealed class MapView : IDisposable
     private volatile int _pendingHeight = 1;
 
     private readonly Lock _markerLock = new();
-    private readonly List<(double MercX, double MercY)> _markers = [];
+    private readonly List<(double MercX, double MercY, string Label)> _markers = [];
+    private (double MercX, double MercY)? _selectedMarker;
+    private volatile bool _markersEnabled = true;
+
+    /// <summary>
+    /// Above this scale the site layer hides. 210 markers at national zoom is a red rash
+    /// over the mosaic that the national view exists to show.
+    /// </summary>
+    private const double MarkerHideAboveMpp = 2200;
+
+    /// <summary>Below this scale each site gets its ICAO drawn beside it.</summary>
+    private const double MarkerLabelBelowMpp = 400;
+
+    /// <summary>Show the WSR-88D site layer.</summary>
+    public bool MarkersEnabled
+    {
+        get => _markersEnabled;
+        set => _markersEnabled = value;
+    }
 
     // Drag/inertia state, touched only on the UI thread.
     private bool _dragging;
@@ -310,13 +328,27 @@ public sealed class MapView : IDisposable
         Camera.SetViewport(_pendingWidth, _pendingHeight);
     }
 
-    public void SetMarkers(IEnumerable<(double LatDeg, double LonDeg)> positions)
+    public void SetMarkers(IEnumerable<(double LatDeg, double LonDeg, string Label)> sites)
     {
         lock (_markerLock)
         {
             _markers.Clear();
-            foreach (var (lat, lon) in positions)
-                _markers.Add(GeoMath.ToMercator(lat, lon));
+            foreach (var (lat, lon, label) in sites)
+            {
+                var (x, y) = GeoMath.ToMercator(lat, lon);
+                _markers.Add((x, y, label));
+            }
+        }
+    }
+
+    /// <summary>Mark one site as the selected one, so it reads differently from its neighbours.</summary>
+    public void SetSelectedMarker(double? latDeg, double? lonDeg)
+    {
+        lock (_markerLock)
+        {
+            _selectedMarker = latDeg is { } lat && lonDeg is { } lon
+                ? GeoMath.ToMercator(lat, lon)
+                : null;
         }
     }
 
@@ -457,7 +489,7 @@ public sealed class MapView : IDisposable
                 overlay.Draw(overlayGeometry, cam); // warnings sit above radar by z-order
 
             quads.Begin();
-            DrawMarkers(cam, quads);
+            DrawMarkers(cam, quads, device);
             DrawLabels(cam, quads, device);
             DrawLegend(cam, quads, device);
 
@@ -740,19 +772,54 @@ public sealed class MapView : IDisposable
         return nice * magnitude;
     }
 
-    private void DrawMarkers(CameraSnapshot cam, QuadRenderer quads)
+    /// <summary>
+    /// The WSR-88D site layer. It began as a Phase 3 alignment check and behaved like one:
+    /// every site, every zoom, no labels. Now it hides at national scale, labels itself up
+    /// close, and marks the selected site so you can see which one you are looking at.
+    /// </summary>
+    private void DrawMarkers(CameraSnapshot cam, QuadRenderer quads, DeviceResources device)
     {
-        (double X, double Y)[] markers;
+        if (!_markersEnabled || cam.MetersPerPixel > MarkerHideAboveMpp) return;
+
+        (double X, double Y, string Label)[] markers;
+        (double X, double Y)? selected;
         lock (_markerLock)
         {
             markers = [.. _markers];
+            selected = _selectedMarker;
         }
+        if (markers.Length == 0) return;
+
+        bool labelled = cam.MetersPerPixel < MarkerLabelBelowMpp;
+        if (labelled) EnsureGlyphTexture(device);
+
         double half = 4 * cam.MetersPerPixel; // 8 px squares
-        foreach (var (mx, my) in markers)
+        float pxToClipX = 2f / cam.ViewportWidth;
+        float pxToClipY = 2f / cam.ViewportHeight;
+
+        foreach (var (mx, my, label) in markers)
         {
             var clip = cam.ToClip(mx - half, my - half, mx + half, my + half);
             if (clip.X1 < -1 || clip.X0 > 1 || clip.Y1 < -1 || clip.Y0 > 1) continue;
-            quads.DrawSolid(clip, 0.95f, 0.15f, 0.15f, 0.9f);
+
+            bool isSelected = selected is { } s &&
+                              Math.Abs(s.X - mx) < 1 && Math.Abs(s.Y - my) < 1;
+            if (isSelected)
+            {
+                // A larger amber square with a halo — the one site whose data is on screen.
+                double outer = 7 * cam.MetersPerPixel;
+                quads.DrawSolid(cam.ToClip(mx - outer, my - outer, mx + outer, my + outer),
+                    1f, 1f, 1f, 0.55f);
+                quads.DrawSolid(clip, 1f, 0.78f, 0.16f, 1f);
+            }
+            else
+            {
+                quads.DrawSolid(clip, 0.95f, 0.15f, 0.15f, 0.9f);
+            }
+
+            if (labelled && label.Length > 0)
+                DrawTextClip(quads, cam,
+                    clip.X1 + 4 * pxToClipX, clip.Y1 - 3 * pxToClipY, label, 12f);
         }
     }
 

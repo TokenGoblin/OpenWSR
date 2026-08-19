@@ -14,6 +14,7 @@ disagree. The other reference docs:
 | `docs/verification.md` | The golden-test methodology and how to run a cross-check |
 | `docs/data-sources.md` | Endpoints, specs, and which ones have already moved |
 | `docs/parity.md` | Competitive gaps, annotated with what's closed |
+| `docs/audit.md` | The 2026-08-18 code/feature/UI audit — 21 findings, all closed |
 | `resources/crosscheck/` | MetPy and ecCodes dump scripts — run these before trusting a decode |
 
 Anything worth keeping goes in `docs/` or `resources/`, not in a scratch directory.
@@ -23,7 +24,7 @@ Scratch directories are session-scoped and get lost.
 
 ```
 dotnet build OpenWSR.slnx                    # NOTE: .slnx, not .sln
-dotnet test OpenWSR.slnx                     # 76 tests
+dotnet test OpenWSR.slnx                     # 125 tests
 dotnet run --project src/OpenWSR.App
 dotnet publish src/OpenWSR.App -c Release    # single-file self-contained exe
 ```
@@ -46,6 +47,18 @@ reference WPF, Direct3D or the network. `PurityTests` asserts this against assem
 references — if you need imaging or HTTP in one of them, that is a signal the code
 belongs somewhere else. `MiniPng` exists inside `Grib2` precisely because of this rule.
 
+**The shell is arranged around four questions**, each with exactly one place on screen
+and never a second: **where** (top bar: search, site) → **what product** (the segmented
+bar above the map) → **when** (the time bar: one `LIVE · ARCHIVE · FORECAST` switcher that
+owns the transport) → **what's on top** (the right panel, which holds layers and nothing
+else). Before adding a control, decide which question it answers and put it there. Set-once
+configuration goes in Settings, not the layers panel; reference material (shortcuts, the
+symbol key, About) goes in `InfoWindow`, not a panel or a MessageBox.
+
+`MainViewModel` holds the state the layout is built from — mode, product, tilt, armed map
+tool. Keep it there rather than in control properties, or moving a control between
+containers means rewriting the logic that reads it.
+
 **Threading.** The UI thread does UI. The render thread owns the D3D device context and
 every D3D object. Ingest and decode run on the thread pool. Cross boundaries with
 channels, immutable records, or a lock — never by touching a D3D object off the render
@@ -60,6 +73,16 @@ drawn in the D3D scene (the colour scale, storm labels — see `GlyphAtlas` and
 `DrawLegend`) or is a `Popup`/`ToolTip`, which get their own HWNDs. Docked panels beside
 or below the map are fine.
 
+**Automating the UI: use `Checked`, not `Click`, on ToggleButtons.** `TogglePattern.Toggle()`
+does not raise `Click` in WPF, so `Click`-handled toggles are unreachable to assistive
+technology and to UI-automation tests. Handle `Checked` (with a suppress flag) and re-check
+in `Unchecked` to keep radio behaviour. Glyph-only controls need
+`AutomationProperties.Name` — a screen reader announces "▤" otherwise.
+
+**Coordinate-based clicking fights the foreground.** Other windows steal it mid-run and the
+clicks land somewhere else entirely; prefer UI Automation patterns, and check
+`BoundingRectangle` is on-screen before falling back to a synthetic click.
+
 **Screenshots lie unless the capturing process is DPI-aware.** PowerShell is not, so
 `GetWindowRect` and `CopyFromScreen` return virtualised coordinates and you capture about
 two-thirds of the window — which looks exactly like a broken layout. Always
@@ -68,6 +91,27 @@ two-thirds of the window — which looks exactly like a broken layout. Always
 **WPF's default control templates are unreadable on a dark ground.** `Theme.xaml`
 provides explicit templates for Button, ToggleButton, ComboBox, TextBox, CheckBox,
 Slider, DatePicker and ScrollBar. Style through it; don't hardcode colours.
+
+**Map keyboard has exactly one route.** `MapView.KeyPressed` (raised from the D3D child
+window's `WM_KEYDOWN`) is it. Do not also handle `Window.KeyDown` for the same keys: it is
+a bubbling routed event and a `TextBox` does not mark character keys handled, so typing
+"Vail" into the search box selected velocity, and arrow keys double-stepped the tilt.
+`Window_PreviewKeyDown` handles only the app-level keys and bails when focus is in a
+text-entry control or the map host.
+
+**Overlay symbols are sized in screen pixels, not Mercator metres.** A marker drawn 900 m
+across is sub-pixel at national zoom and screen-filling at street zoom. Multiply by
+`cam.MetersPerPixel` and rebuild when the zoom moves materially (`NotifyViewChanged`).
+Only things that *are* a physical extent — a mesocyclone radius, an alert ring — stay in
+metres. Line widths are already pixel-constant in `OverlayRenderer`.
+
+**Nothing on the UI thread may block on I/O.** `LiveFeed` exposes `StartAsync`/`StopAsync`;
+a blocking `Wait(5s)` in `Stop()` froze the window on every live toggle. Dispose paths
+cancel and let the drain finish on a continuation.
+
+**Errors need somewhere to live that isn't the status line.** `Report()` is the running
+commentary and is overwritten constantly; `ReportError()` puts a failure in a bar that
+persists until dismissed. A failed warning fetch must never look like "no warnings".
 
 **XAML event handlers fire during `InitializeComponent`.** A filter handler that touches
 a control declared later in the file will hit a null. Guard every control it reads.
@@ -141,5 +185,9 @@ screen. `--soak` runs the live pipeline headless.
 
 Lightning (GOES GLM, needs NetCDF), MRMS native rendering (reader is done and
 golden-tested; only the draw path is missing), velocity dealiasing, azimuthal shear, VWP
-panel, placefile icon sheets, drawing tools, 3D volume rendering. Animated GIF export is
-written but has never been run end-to-end.
+panel, placefile icon sheets, drawing tools, 3D volume rendering, independent site per
+pane, loops longer than 30 frames.
+
+Note for storm labels: **NSS (storm structure) has not been distributed since ~2021**, so
+`MaxDbz` / `CellBasedVil` / `EchoTopKft` are always null on live data. The layers panel says
+so when it detects it — don't "fix" the decoder for this.

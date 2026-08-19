@@ -21,15 +21,20 @@ public sealed class ArchivePlaybackController(
     private readonly DispatcherTimer _loopTimer = new() { Interval = TimeSpan.FromMilliseconds(250) };
     private IReadOnlyList<ArchiveVolumeRef> _dayVolumes = [];
     private CancellationTokenSource? _scrubCts;
+    private CancellationTokenSource? _buildCts;
     private List<(DateTime Time, SweepGeometry Geometry)>? _loop;
     private byte[]? _loopPalette;
     private float _loopPaletteMin, _loopPaletteRange;
+    private string? _loopSignature;
     private int _loopPosition;
     private bool _initialized;
 
     public event Action<string>? StatusChanged;
-    public event Action<int, int>? DayLoaded;      // volume count, initial index
+    public event Action<string>? ErrorRaised;
+    public event Action<double>? ProgressChanged;   // 0..1, negative clears the indicator
+    public event Action<int, int>? DayLoaded;       // volume count, initial index
     public event Action<bool>? PlayingChanged;
+    public event Action<int>? LoopFrameShown;       // index of the frame now on screen
     public event Action<RadarVolume>? VolumeLoaded; // scrub target decoded (routed to all panes)
 
     public bool IsPlaying { get; private set; }
@@ -37,6 +42,12 @@ public sealed class ArchivePlaybackController(
 
     /// <summary>Frames currently prepared for looping; zero when no loop has been built.</summary>
     public int LoopGeometryCount => _loop?.Count ?? 0;
+
+    /// <summary>True when a loop could be built — i.e. a day is loaded.</summary>
+    public bool CanBuildLoop => _dayVolumes.Count > 0;
+
+    /// <summary>Index into <see cref="DayVolumes"/> of the first frame in the loop window.</summary>
+    public int LoopWindowStart => Math.Max(0, _dayVolumes.Count - LoopFrames);
 
     /// <summary>Show one loop frame without playing — used when recording a GIF.</summary>
     public void ShowLoopFrame(int index)
@@ -46,6 +57,7 @@ public sealed class ArchivePlaybackController(
         var (time, geometry) = frames[index];
         mapView.ShowGeometry(geometry, _loopPalette!, _loopPaletteMin, _loopPaletteRange);
         _loopPosition = index;
+        LoopFrameShown?.Invoke(index);
         StatusChanged?.Invoke($"Frame {index + 1}/{frames.Count}  {time:HH:mm:ss}Z");
     }
 
@@ -62,12 +74,13 @@ public sealed class ArchivePlaybackController(
         }
         catch (Exception ex)
         {
-            StatusChanged?.Invoke($"List failed: {ex.Message}");
+            ErrorRaised?.Invoke($"Could not list {siteId} for {dateUtc:yyyy-MM-dd}: {ex.Message}");
             return;
         }
         if (_dayVolumes.Count == 0)
         {
             StatusChanged?.Invoke($"No volumes for {siteId} on {dateUtc:yyyy-MM-dd}.");
+            DayLoaded?.Invoke(0, 0);
             return;
         }
         DayLoaded?.Invoke(_dayVolumes.Count, _dayVolumes.Count - 1);
@@ -80,6 +93,7 @@ public sealed class ArchivePlaybackController(
         if (index < 0 || index >= _dayVolumes.Count) return;
         StopLoop();
         _scrubCts?.Cancel();
+        _scrubCts?.Dispose();
         var cts = _scrubCts = new CancellationTokenSource();
         var volumeRef = _dayVolumes[index];
         StatusChanged?.Invoke($"Loading {Path.GetFileName(volumeRef.Key)}…");
@@ -105,23 +119,34 @@ public sealed class ArchivePlaybackController(
         }
         catch (Exception ex)
         {
-            StatusChanged?.Invoke($"Load failed: {ex.Message}");
+            ErrorRaised?.Invoke($"Could not load {Path.GetFileName(volumeRef.Key)}: {ex.Message}");
         }
     }
 
-    /// <summary>Build the loop (last N volumes, current product selection) and start playing.</summary>
-    public async Task PlayAsync()
+    /// <summary>
+    /// What the current loop would have to match to be reusable: the day's volume set and
+    /// the product it was built for. Rebuilding 30 volumes is minutes of work, so a
+    /// pause-and-resume (or a GIF recording) must not trigger one.
+    /// </summary>
+    private string LoopSignature() =>
+        $"{radar.CurrentMoment}|{_dayVolumes.Count}|{(_dayVolumes.Count > 0 ? _dayVolumes[^1].Key : "")}";
+
+    /// <summary>
+    /// Build the loop frames for the current day and product unless usable frames already
+    /// exist. Returns false when there is nothing to build or the build failed.
+    /// </summary>
+    public async Task<bool> EnsureLoopAsync()
     {
-        if (IsPlaying || _dayVolumes.Count == 0) return;
-        StopLoop();
-        IsPlaying = true;
-        PlayingChanged?.Invoke(true);
+        if (_dayVolumes.Count == 0) return false;
+        if (_loop is { Count: > 0 } && _loopSignature == LoopSignature()) return true;
+
+        _buildCts?.Cancel();
+        _buildCts?.Dispose();
+        var cts = _buildCts = new CancellationTokenSource();
 
         var window = _dayVolumes.TakeLast(LoopFrames).ToList();
         var table = radar.CurrentTable;
-        _loopPalette = table.BuildRgba256();
-        _loopPaletteMin = table.MinValue;
-        _loopPaletteRange = table.Range;
+        var palette = table.BuildRgba256();
 
         var frames = new List<(DateTime, SweepGeometry)>(window.Count);
         try
@@ -131,11 +156,13 @@ public sealed class ArchivePlaybackController(
             int fetched = 0;
             var paths = await Task.WhenAll(window.Select(async v =>
             {
-                await fetches.WaitAsync();
+                await fetches.WaitAsync(cts.Token);
                 try
                 {
-                    var path = await _archive.FetchVolumeAsync(v);
-                    StatusChanged?.Invoke($"Downloading loop volumes… {Interlocked.Increment(ref fetched)}/{window.Count}");
+                    var path = await _archive.FetchVolumeAsync(v, cts.Token);
+                    int done = Interlocked.Increment(ref fetched);
+                    StatusChanged?.Invoke($"Downloading loop volumes… {done}/{window.Count}");
+                    ProgressChanged?.Invoke(0.5 * done / window.Count);
                     return path;
                 }
                 finally { fetches.Release(); }
@@ -143,33 +170,57 @@ public sealed class ArchivePlaybackController(
 
             for (int i = 0; i < window.Count; i++)
             {
-                if (!IsPlaying) return; // user pressed stop during the build
+                cts.Token.ThrowIfCancellationRequested();
                 StatusChanged?.Invoke($"Building loop {i + 1}/{window.Count}…");
+                ProgressChanged?.Invoke(0.5 + 0.5 * (i + 1) / window.Count);
                 int idx = i;
                 var geometry = await Task.Run(() =>
                 {
                     var volume = ArchiveFile.DecodeFile(paths[idx]);
                     var sweep = radar.SelectSweep(volume);
                     return sweep is null ? null : SweepGeometry.Build(sweep);
-                });
+                }, cts.Token);
                 if (geometry is not null)
                     frames.Add((window[i].TimeUtc, geometry));
             }
         }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
         catch (Exception ex)
         {
-            StatusChanged?.Invoke($"Loop build failed: {ex.Message}");
-            StopLoop();
-            return;
+            ErrorRaised?.Invoke($"Could not build the loop: {ex.Message}");
+            return false;
+        }
+        finally
+        {
+            ProgressChanged?.Invoke(-1);
         }
 
-        if (frames.Count == 0 || !IsPlaying)
+        if (frames.Count == 0)
         {
-            StopLoop();
-            return;
+            StatusChanged?.Invoke($"No {radar.CurrentMoment} data in this day's volumes.");
+            return false;
         }
+
         _loop = frames;
+        _loopPalette = palette;
+        _loopPaletteMin = table.MinValue;
+        _loopPaletteRange = table.Range;
+        _loopSignature = LoopSignature();
         _loopPosition = 0;
+        return true;
+    }
+
+    /// <summary>Build the loop if needed, then start cycling it.</summary>
+    public async Task PlayAsync()
+    {
+        if (IsPlaying || _dayVolumes.Count == 0) return;
+        if (!await EnsureLoopAsync()) return;
+
+        IsPlaying = true;
+        PlayingChanged?.Invoke(true);
         _loopTimer.Tick -= OnLoopTick;
         _loopTimer.Tick += OnLoopTick;
         _loopTimer.Start();
@@ -180,16 +231,20 @@ public sealed class ArchivePlaybackController(
         if (_loop is not { Count: > 0 } frames) return;
         var (time, geometry) = frames[_loopPosition];
         mapView.ShowGeometry(geometry, _loopPalette!, _loopPaletteMin, _loopPaletteRange);
+        LoopFrameShown?.Invoke(_loopPosition);
         StatusChanged?.Invoke(
             $"Loop {_loopPosition + 1}/{frames.Count}  {time:yyyy-MM-dd HH:mm:ss}Z  {radar.CurrentMoment}");
         _loopPosition = (_loopPosition + 1) % frames.Count;
     }
 
-    public void StopLoop()
+    /// <summary>
+    /// Stop cycling but keep the built frames. The GIF recorder steps them by hand and
+    /// resuming must not re-download the whole window.
+    /// </summary>
+    public void PauseLoop()
     {
         _loopTimer.Stop();
         _loopTimer.Tick -= OnLoopTick;
-        _loop = null;
         if (IsPlaying)
         {
             IsPlaying = false;
@@ -197,10 +252,21 @@ public sealed class ArchivePlaybackController(
         }
     }
 
+    /// <summary>Stop cycling and discard the frames — the selection they were built for is gone.</summary>
+    public void StopLoop()
+    {
+        PauseLoop();
+        _buildCts?.Cancel();
+        _loop = null;
+        _loopSignature = null;
+    }
+
     public void Dispose()
     {
         StopLoop();
+        _buildCts?.Dispose();
         _scrubCts?.Cancel();
+        _scrubCts?.Dispose();
         _archive.Dispose();
     }
 }

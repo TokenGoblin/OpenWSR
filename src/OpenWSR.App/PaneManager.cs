@@ -85,6 +85,10 @@ public sealed class PaneManager : IDisposable
                 radar.ShowVolume(_currentVolume);
         }
 
+        // Snapshots are indexed by pane position, so adding or removing panes invalidates
+        // them. A stale entry makes the next sync pick the wrong pane as the one that
+        // moved, and every other pane snaps to it.
+        Array.Clear(_lastSnapshots);
         Relayout(count);
     }
 

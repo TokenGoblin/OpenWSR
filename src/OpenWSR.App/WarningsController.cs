@@ -39,6 +39,14 @@ public sealed class WarningsController : IDisposable
     public event Action<IReadOnlyList<ActiveAlert>>? AlertsUpdated;
     public event Action<string>? StatusChanged;
 
+    /// <summary>
+    /// A failure the user must see. This is the warnings layer — silently showing nothing
+    /// because the poll failed is the one outcome that must never look like "no warnings".
+    /// </summary>
+    public event Action<string>? ErrorRaised;
+
+    private int _consecutiveFailures;
+
     public WarningsController(MapView mapView, FrameworkElement popupAnchor, string userAgent)
     {
         _mapView = mapView;
@@ -80,10 +88,18 @@ public sealed class WarningsController : IDisposable
         try
         {
             _alerts = await _client.GetActiveAsync();
+            _consecutiveFailures = 0;
         }
         catch (Exception ex)
         {
+            // One blip is noise; a run of them means the layer is stale and the user is
+            // looking at a map that claims there are no warnings.
+            _consecutiveFailures++;
             StatusChanged?.Invoke($"Alerts fetch failed: {ex.Message}");
+            if (_consecutiveFailures == 3)
+                ErrorRaised?.Invoke(
+                    "Warnings have not refreshed for several minutes — what is on the map may be "
+                  + $"out of date. Last error: {ex.Message}");
             return;
         }
 

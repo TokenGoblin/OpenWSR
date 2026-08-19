@@ -25,6 +25,12 @@ public sealed class AppSettings
     /// <summary>Placefile sources (URLs or local paths) to reload at startup.</summary>
     public List<string> Placefiles { get; set; } = [];
 
+    /// <summary>The shortcuts card is shown once, on the first run, and never nags again.</summary>
+    public bool WelcomeShown { get; set; }
+
+    /// <summary>Draw the WSR-88D site layer (hidden at national zoom regardless).</summary>
+    public bool ShowSiteMarkers { get; set; } = true;
+
     public string UserAgent =>
         string.IsNullOrWhiteSpace(Contact) ? "OpenWSR/0.1" : $"OpenWSR/0.1 ({Contact})";
 
