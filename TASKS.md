@@ -500,8 +500,7 @@ one minute old — `MRMS composite 14:50Z (1 min old), 7000×3500 at 0.01°`.
 
 ### Verification note
 
-Rendering was confirmed on screen at local zoom, under a live radar sweep. The intended
-national-scale screenshot was not captured: the workstation locked partway through, and a
-locked session blocks synthetic input and window capture. The draw path's correctness is
-covered by the headless tests instead, which is the more durable check — but a national
-screenshot for `docs/screenshots/` is still owed.
+Captured at national scale once the workstation was unlocked —
+`docs/screenshots/mrms-native.jpg`, a seamless CONUS composite three minutes old with no
+radar-by-radar seams. (The first attempt failed because the session locked partway
+through, and a locked session blocks synthetic input and window capture.)
