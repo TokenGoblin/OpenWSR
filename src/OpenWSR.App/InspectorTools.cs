@@ -31,6 +31,7 @@ public sealed class InspectorTools
         Moment.Velocity or Moment.SpectrumWidth => "m/s",
         Moment.DifferentialReflectivity or Moment.ClutterFilterPower => "dB",
         Moment.DifferentialPhase => "°",
+        Moment.AzimuthalShear => "1/s",
         _ => "",
     };
 

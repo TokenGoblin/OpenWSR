@@ -759,8 +759,16 @@ public sealed class MapView : IDisposable
         }
     }
 
+    /// <summary>
+    /// Enough decimals to tell one tick from the next. A fixed single decimal labelled
+    /// every tick of the azimuthal-shear scale "0.0", because its whole range is 0.04.
+    /// </summary>
     private static string FormatTick(float value, float step) =>
-        step < 1f ? value.ToString("0.0") : value.ToString("0");
+        step >= 1f ? value.ToString("0")
+        : step >= 0.1f ? value.ToString("0.0")
+        : step >= 0.01f ? value.ToString("0.00")
+        : step >= 0.001f ? value.ToString("0.000")
+        : value.ToString("0.0000");
 
     /// <summary>Round a raw interval up to 1, 2, 2.5 or 5 times a power of ten.</summary>
     internal static float NiceStep(float raw)

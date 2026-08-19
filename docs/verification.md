@@ -135,6 +135,27 @@ built from. Since dealiasing can only ever recover a field up to one global inte
 assertion is that `recovered − truth` is the *same* whole interval at every gate: that is
 the shape being exactly right.
 
+### Azimuthal shear — physics, because there is no reference
+
+No open-source package implements LLSD azimuthal shear, so this follows the project's rule
+for that case and asserts physics. The strong tests are analytic, where the answer is known
+in closed form:
+
+- A field built with a known constant gradient against azimuthal arc distance returns that
+  constant, to four decimal places, at several ranges.
+- A solid-body vortex of angular velocity omega returns omega at its core — the standard
+  result that azimuthal shear recovers half the vertical vorticity for a symmetric vortex.
+- Cyclonic reads positive and anticyclonic negative, fixing the sign convention.
+- A uniform wind stays under the 0.006 1/s where the palette starts calling something
+  rotation, and gates inside the minimum range report nothing at all.
+- Folding the input manufactures shear several times the vortex it should reveal, and
+  unfolding removes most of it — which is why the product always dealiases first.
+
+Two of these initially failed and both were the *fixture* being wrong rather than the code:
+a synthetic vortex has an angular seam at the antipode, and "a uniform wind has no
+azimuthal shear" is simply false near the radar. The second failure is why `MinRangeM`
+exists at all — the test found a real property, not a bug.
+
 ## A note on test expectations
 
 Six tests failed on first write during the build, and **all six were wrong

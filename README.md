@@ -36,6 +36,9 @@ No account, no API key, no subscription. Everything it reads is public data.
 - **Velocity unfolding** — recovers velocities past the Nyquist limit, where a strong
   couplet otherwise reads with its sign reversed. Region-based, needing no sounding or
   previous volume, and cross-checked against Py-ART.
+- **Azimuthal shear** — rotation as a number rather than a judgement call, computed from
+  the unfolded velocity field. A uniform wind has no azimuthal gradient, so differentiating
+  across the beam removes both the background flow and the storm's own translation.
 
 **National context**
 
@@ -119,14 +122,14 @@ The window is arranged around the four questions you ask it, each with one place
 
 | Where | Top bar | Search a place, pick a site, jump to the nearest |
 |---|---|---|
-| **What** | Above the map | `REF VEL SW ZDR PHI CC` and the elevation tilt |
+| **What** | Above the map | `REF VEL SW ZDR PHI CC AZS` and the elevation tilt |
 | **When** | Below the map | `LIVE · ARCHIVE · FORECAST`, and that mode's transport |
 | **What's on top** | Right panel | Layers, each with its own opacity |
 
 | Input | Action |
 |---|---|
 | Drag / wheel | Pan (with inertia) / zoom at cursor |
-| `R` `V` `W` `D` `P` `C` | Reflectivity, velocity, spectrum width, ZDR, PhiDP, RhoHV |
+| `R` `V` `W` `D` `P` `C` `A` | Reflectivity, velocity, spectrum width, ZDR, PhiDP, RhoHV, azimuthal shear |
 | `↑` / `↓` | Elevation tilt up and down |
 | `F1` | Keyboard and mouse reference |
 | Hover | Inspector readout in the status bar |

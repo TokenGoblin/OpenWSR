@@ -73,6 +73,25 @@ Supplemental scans repeat a low elevation mid-volume. Sweep assembly must key on
 (elevation number, azimuth) and tolerate the same nominal elevation appearing more than
 once in a volume, otherwise supplemental cuts overwrite the base cut.
 
+### Azimuthal shear is derived, not decoded
+
+Nothing in Message 31 carries it. `Moment.AzimuthalShear` exists so the product bar and the
+palette machinery can treat it like any other product, but the decoder never emits it —
+`AzimuthalShear.Compute` derives it from velocity on demand, and `RadarDisplayController`
+offers it whenever velocity is present.
+
+Two properties worth knowing before reading one:
+
+- **It always unfolds first**, whatever the velocity toggle says. A fold is a
+  2 x V_nyquist step between adjacent radials, and differentiating across it yields shear
+  several times larger than any real vortex — the display would be showing its own
+  aliasing artefacts rather than the rotation it exists to reveal.
+- **Close range is suppressed** below 5 km. A real vortex's shear is its angular velocity
+  and does not vary with range, but a *uniform* wind of V reads as V/R, because the same
+  velocity difference is spread over a shorter arc. A 30 m/s wind reads 0.015 1/s at 2 km,
+  which is mesocyclone territory — so without a floor, ordinary wind over the radar site
+  paints the same colour as a tornado.
+
 ### Velocity aliasing and the RRAD block
 
 Radial velocity is measured from Doppler phase shift, which wraps. Anything outside

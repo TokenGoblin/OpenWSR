@@ -17,4 +17,11 @@ public enum Moment
     CorrelationCoefficient,
     /// <summary>CFP — clutter filter power removed, dB (build 19+).</summary>
     ClutterFilterPower,
+
+    /// <summary>
+    /// AZS — azimuthal shear, s⁻¹. Unlike the rest, this is <b>derived</b> rather than
+    /// decoded: nothing in Message 31 carries it, and the decoder never produces it.
+    /// <see cref="Analysis.AzimuthalShear"/> computes it from velocity on demand.
+    /// </summary>
+    AzimuthalShear,
 }

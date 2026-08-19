@@ -40,9 +40,21 @@ public sealed class RadarDisplayController(MapView mapView)
         DealiasVelocity && _moment == Moment.Velocity &&
         CutsForMoment(_moment).ElementAtOrDefault(_cutPosition)?.AliasingIntervalMs is not null;
 
-    /// <summary>Which products the loaded volume actually carries — the rest grey out.</summary>
-    public IReadOnlyCollection<Moment> AvailableMoments =>
-        _volume is null ? [] : _volume.Sweeps.Select(s => s.Moment).Distinct().ToHashSet();
+    /// <summary>
+    /// Which products can be shown. Azimuthal shear is not in the volume — nothing in
+    /// Message 31 carries it — so it is offered whenever velocity is, because that is what
+    /// it is computed from.
+    /// </summary>
+    public IReadOnlyCollection<Moment> AvailableMoments
+    {
+        get
+        {
+            if (_volume is null) return [];
+            var moments = _volume.Sweeps.Select(s => s.Moment).Distinct().ToHashSet();
+            if (moments.Contains(Moment.Velocity)) moments.Add(Moment.AzimuthalShear);
+            return moments;
+        }
+    }
 
     /// <summary>Elevation angles of the current moment's cuts, in scan order.</summary>
     public IReadOnlyList<float> ElevationsForCurrentMoment =>
@@ -77,6 +89,9 @@ public sealed class RadarDisplayController(MapView mapView)
         : IsDealiasing ? BuiltinTables.DealiasedVelocity
         : BuiltinTables.For(_moment);
 
+    /// <summary>Azimuthal shear is computed here rather than decoded; the status line says so.</summary>
+    public bool IsDerived => _moment == Moment.AzimuthalShear;
+
     /// <summary>Scan time of the sweep currently on screen — feeds the data-age indicator.</summary>
     public DateTime? DisplayedSweepTimeUtc { get; private set; }
 
@@ -84,7 +99,7 @@ public sealed class RadarDisplayController(MapView mapView)
     public Sweep? DisplayedSweep { get; private set; }
 
     /// <summary>Every sweep of the current moment, for analysis across the whole volume.</summary>
-    public IReadOnlyList<Sweep> SweepsForCurrentMoment() => [.. CutsForMoment(_moment).Select(Prepare)];
+    public IReadOnlyList<Sweep> SweepsForCurrentMoment() => [.. CutsForMoment(_moment).Select(Materialise)];
 
     /// <summary>
     /// The corrections that turn a decoded sweep into the displayed one, in the order they
@@ -147,17 +162,19 @@ public sealed class RadarDisplayController(MapView mapView)
     public void ShowVolume(RadarVolume volume)
     {
         _volume = volume;
+        _shearCache.Clear();
         Apply(); // moment and cut position survive volume changes (scrubbing/looping)
     }
 
     /// <summary>The sweep the current moment/tilt selection picks from an arbitrary volume.</summary>
     public Sweep? SelectSweep(RadarVolume volume)
     {
-        var cuts = volume.Sweeps.Where(s => s.Moment == _moment)
+        var basis = _moment == Moment.AzimuthalShear ? Moment.Velocity : _moment;
+        var cuts = volume.Sweeps.Where(s => s.Moment == basis)
             .OrderBy(s => s.ElevationIndex)
             .ToList();
         if (cuts.Count == 0) return null;
-        return Prepare(cuts[Math.Clamp(_cutPosition, 0, cuts.Count - 1)]);
+        return Materialise(cuts[Math.Clamp(_cutPosition, 0, cuts.Count - 1)]);
     }
 
     /// <summary>
@@ -176,6 +193,7 @@ public sealed class RadarDisplayController(MapView mapView)
             case 0x44: SetMoment(Moment.DifferentialReflectivity); return true; // D
             case 0x50: SetMoment(Moment.DifferentialPhase); return true;        // P
             case 0x43: SetMoment(Moment.CorrelationCoefficient); return true;   // C
+            case 0x41: SetMoment(Moment.AzimuthalShear); return true;           // A
             case 0x26: MoveCut(+1); return true;                                // Up
             case 0x28: MoveCut(-1); return true;                                // Down
             default: return false;
@@ -203,10 +221,43 @@ public sealed class RadarDisplayController(MapView mapView)
         Apply();
     }
 
+    /// <summary>
+    /// The cuts backing a product. For azimuthal shear these are the velocity cuts it is
+    /// derived from — same count, same elevations, same order — so the tilt list is right
+    /// without computing a single sweep of shear.
+    /// </summary>
     private List<Sweep> CutsForMoment(Moment moment) =>
-        _volume?.Sweeps.Where(s => s.Moment == moment)
+        _volume?.Sweeps
+            .Where(s => s.Moment == (moment == Moment.AzimuthalShear ? Moment.Velocity : moment))
             .OrderBy(s => s.ElevationIndex)
             .ToList() ?? [];
+
+    /// <summary>
+    /// Derived products are computed here, once per cut, because computing one costs real
+    /// time and scrubbing a loop would otherwise pay it on every frame.
+    /// </summary>
+    private readonly Dictionary<(int Elevation, DateTime Time), Sweep> _shearCache = [];
+
+    /// <summary>
+    /// Turn a backing cut into the sweep actually displayed.
+    ///
+    /// Shear always unfolds first, whatever the velocity toggle says. A fold is a
+    /// 2·V<sub>nyquist</sub> step between adjacent radials, and differentiating across it
+    /// produces shear several times larger than any real vortex — so on a folded field the
+    /// product shows its own artefacts rather than the rotation it exists to reveal.
+    /// </summary>
+    private Sweep Materialise(Sweep basis)
+    {
+        if (_moment != Moment.AzimuthalShear) return Prepare(basis);
+
+        var key = (basis.ElevationIndex, basis.ScanTimeUtc);
+        if (_shearCache.TryGetValue(key, out var cached)) return cached;
+
+        var shear = AzimuthalShear.Compute(VelocityDealiasing.Dealias(basis));
+        if (_shearCache.Count > 32) _shearCache.Clear(); // one volume's worth is plenty
+        _shearCache[key] = shear;
+        return shear;
+    }
 
     private void Apply()
     {
@@ -225,14 +276,19 @@ public sealed class RadarDisplayController(MapView mapView)
         bool relative = StormRelative && _moment == Moment.Velocity && StormMotion.SpeedKmh > 0;
         bool unfolded = DealiasVelocity && raw.AliasingIntervalMs is not null &&
                         _moment == Moment.Velocity;
-        var sweep = Prepare(raw);
+        var sweep = Materialise(raw);
 
         DisplayedSweepTimeUtc = sweep.ScanTimeUtc;
         DisplayedSweep = sweep;
         mapView.ShowSweep(sweep, CurrentTable);
         SelectionChanged?.Invoke();
 
-        string product = relative ? "Storm-relative velocity" : _moment.ToString();
+        string product = _moment switch
+        {
+            Moment.AzimuthalShear => "Azimuthal shear (from unfolded velocity)",
+            _ when relative => "Storm-relative velocity",
+            _ => _moment.ToString(),
+        };
         if (unfolded) product += " (unfolded)";
         // The Nyquist is deliberately not repeated here — the layers panel states it, and
         // this line shares its row with the inspector readout, which gets trimmed away.

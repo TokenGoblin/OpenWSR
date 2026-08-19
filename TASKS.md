@@ -332,3 +332,51 @@ both are dead ends:
 
 Closing the gap properly means adopting Py-ART's multi-pass structure — several passes at
 different `IntervalSplits`, reconciled — rather than tuning a single pass.
+
+
+## Azimuthal shear (2026-08-18)
+
+Rotation is what a velocity couplet means, but reading it off a velocity display is a
+judgement call: the eye has to separate the couplet from the storm's own translation and
+from the background flow. A uniform wind has no azimuthal gradient, so differentiating
+across the beam removes both and leaves rotation as a number.
+
+- [x] `AzimuthalShear`: linear least-squares derivative (Smith and Elmore 2004), the
+      estimator the operational rotation products use. Each fit is at constant range so the
+      derivative is purely azimuthal; several range gates are averaged to damp the noise a
+      three-radial fit would carry. Parallel over radials, since a sweep is ~860k gates
+      with a fifteen-sample fit behind each one
+- [x] `Moment.AzimuthalShear` as a **derived** product: the decoder never emits it, the
+      controller materialises it from velocity on demand and caches per cut, and it is
+      offered wherever velocity is present
+- [x] Always dealiases first, whatever the velocity toggle says. Differentiating across a
+      fold produces shear several times any real vortex, so on a folded field the product
+      would show its own artefacts rather than the rotation it exists to reveal
+- [x] Minimum range of 5 km. A real vortex's shear is its angular velocity and does not
+      vary with range; a *uniform* wind reads as V/R, so 30 m/s at 2 km reads 0.015 1/s,
+      which is mesocyclone territory. Without a floor, ordinary wind over the radar site
+      paints the colour of a tornado
+- [x] `BuiltinTables.AzimuthalShear` — muted blue for anticyclonic, yellow through red for
+      cyclonic, topping out at 0.02 1/s where a mesocyclone becomes a warning
+- [x] `A` shortcut and an AZS button in the product bar
+- [x] 10 physics tests: exact recovery of a known constant gradient, a solid-body vortex
+      returning its angular velocity, the sign convention, falloff away from the core,
+      close-range suppression, and the folded-versus-unfolded artefact magnitude
+
+Fixed along the way: every tick on the colour scale read "0.0" for any product whose whole
+range is under 1, because the tick formatter used a single fixed decimal. It now takes its
+precision from the step size, which the 0.04-wide shear scale needs.
+
+Two of the physics tests failed first time and both were the fixture, not the code — a
+synthetic vortex has an angular seam at the antipode, and "a uniform wind has no azimuthal
+shear" is false near the radar. The second is why `MinRangeM` exists.
+
+**Gate:** [PASSED] 160/160 tests; build clean in Debug and Release. Verified live on the
+committed KTLX 2013-05-20 20:16Z volume: a concentrated band of strong cyclonic shear runs
+west-southwest from the radar through the Newcastle-Moore corridor, which is where the EF5
+was at 20:17Z. The product locates it without being told where to look.
+
+### Still open
+
+Rotation *tracks* - accumulating shear across a volume's scans into a swath - are the
+natural follow-on and are not done.

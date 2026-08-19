@@ -88,6 +88,7 @@ public sealed partial class MainViewModel : ObservableObject
             new MomentOption(Moment.DifferentialReflectivity, "ZDR", "D", "Differential reflectivity — drop shape"),
             new MomentOption(Moment.DifferentialPhase, "PHI", "P", "Differential phase — path-integrated"),
             new MomentOption(Moment.CorrelationCoefficient, "CC", "C", "Correlation coefficient — is it all one thing"),
+            new MomentOption(Moment.AzimuthalShear, "AZS", "A", "Azimuthal shear — rotation, computed from velocity"),
         ];
     }
 

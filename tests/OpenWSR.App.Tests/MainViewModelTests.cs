@@ -14,10 +14,23 @@ public class MainViewModelTests
     {
         var vm = new MainViewModel();
 
-        Assert.Equal(6, vm.Moments.Count);
-        Assert.Equal(["REF", "VEL", "SW", "ZDR", "PHI", "CC"], vm.Moments.Select(m => m.Label));
-        Assert.Equal(["R", "V", "W", "D", "P", "C"], vm.Moments.Select(m => m.Key));
+        Assert.Equal(7, vm.Moments.Count);
+        Assert.Equal(["REF", "VEL", "SW", "ZDR", "PHI", "CC", "AZS"], vm.Moments.Select(m => m.Label));
+        Assert.Equal(["R", "V", "W", "D", "P", "C", "A"], vm.Moments.Select(m => m.Key));
+        Assert.Equal(7, vm.Moments.Select(m => m.Key).Distinct().Count()); // no shortcut collides
         Assert.All(vm.Moments, m => Assert.False(string.IsNullOrWhiteSpace(m.Description)));
+    }
+
+    [Fact]
+    public void ShearIsOfferedWhereverVelocityIs()
+    {
+        // It is derived rather than decoded, so its availability tracks its input.
+        var vm = new MainViewModel();
+        vm.SyncMoments([Moment.Reflectivity, Moment.Velocity, Moment.AzimuthalShear], Moment.Velocity);
+        Assert.True(vm.Moments.Single(m => m.Moment == Moment.AzimuthalShear).IsAvailable);
+
+        vm.SyncMoments([Moment.Reflectivity], Moment.Reflectivity);
+        Assert.False(vm.Moments.Single(m => m.Moment == Moment.AzimuthalShear).IsAvailable);
     }
 
     [Fact]
