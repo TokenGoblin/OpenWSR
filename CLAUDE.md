@@ -258,10 +258,23 @@ than a list of saved ones.
 The two notes below are the real quality gaps, and both have had a wrong answer ruled out
 already.
 
-Rotation tracks work but carry visible background speckle: accumulating a maximum over a
-dozen scans is unforgiving, and the low Doppler cuts have no correlation coefficient to
-filter marginal gates on. A 3x3 smoothing pass before accumulation cut the peak from 0.18
-to 0.12 1/s; a real quality mask would do better.
+**Rotation-track speckle is mostly fixed, and the old note here was wrong about why.** It
+said the low Doppler cuts have no correlation coefficient to filter on. True of that sweep
+— but on a split-cut VCP the Doppler cut carries **reflectivity** alongside velocity, index
+for index, and that is the field that matters: 88.8 % of strong-shear gates on the Moore
+volume sat under less than 20 dBZ. Shear computed where nothing reflected is the phase of
+receiver noise. `GateQuality.MaskByReflectivity` blanks those; it removes 89 % of the
+strong-shear gates and leaves the peak bit-identical at 0.1297 1/s over the tornado.
+
+**Do not add a CC mask without reading this.** The paired surveillance cut does carry CC,
+and it is tempting. But a tornado debris signature *is* a low-CC, high-Z target: 34.6 % of
+strong shear under 40+ dBZ on the Moore volume has CC below 0.85, so a CC threshold would
+delete a third of the signature the product exists to find.
+
+What is left is **clutter**, which is a different problem wearing the same clothes. Sea and
+ground clutter return strongly, so a reflectivity mask keeps them — visible as radial
+spikes at coastal sites. CC is the right discriminator for it and carries the debris risk
+above, so it needs a design that separates the two cases rather than one threshold.
 
 Velocity dealiasing now reaches 85–92 % of Py-ART's correction rate, up from about two
 thirds. The fix was structural, and both obvious diagnoses were wrong: a signal-quality

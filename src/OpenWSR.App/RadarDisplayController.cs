@@ -263,6 +263,14 @@ public sealed class RadarDisplayController(MapView mapView)
         if (_shearCache.TryGetValue(key, out var cached)) return cached;
 
         var shear = AzimuthalShear.Compute(VelocityDealiasing.Dealias(basis));
+
+        // Shear computed where there is no echo is the phase of receiver noise, not
+        // rotation. Blanking it here rather than in the renderer keeps the live product and
+        // the rotation-track swath showing the same field.
+        if (_volume is not null &&
+            GateQuality.ReflectivityFor(_volume.Sweeps, basis) is { } reflectivity)
+            shear = GateQuality.MaskByReflectivity(shear, reflectivity);
+
         if (_shearCache.Count > 32) _shearCache.Clear(); // one volume's worth is plenty
         _shearCache[key] = shear;
         return shear;

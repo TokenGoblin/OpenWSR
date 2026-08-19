@@ -162,6 +162,48 @@ built from. Since dealiasing can only ever recover a field up to one global inte
 assertion is that `recovered − truth` is the *same* whole interval at every gate: that is
 the shape being exactly right.
 
+### The rotation-track quality mask — measured on a tornado
+
+A mask is only worth having if it removes noise *and* leaves the signal alone, so both
+halves are measured, and the second on the Moore EF5 where the signal is not in doubt.
+
+The case for it, on the KTLX 2013-05-20 20:16Z volume: of the gates with strong cyclonic
+shear (> 0.005 1/s), **88.8 % sit under reflectivity below 20 dBZ**. Azimuthal shear is a
+difference of velocities, and a velocity estimate needs something to have reflected off;
+where there is no scatterer the radar still reports the phase of receiver noise. A product
+that takes a maximum over a dozen scans makes every one of those permanent.
+
+Sweeping the threshold, the peak does not move at all:
+
+| threshold | strong-shear gates | peak |
+|---|---|---|
+| none | 7 397 | 0.1297 1/s |
+| 5 dBZ | 3 174 | 0.1297 |
+| 10 dBZ | 2 074 | 0.1297 |
+| 15 dBZ | 1 343 | 0.1297 |
+| **20 dBZ** | **826** | **0.1297** |
+| 25 dBZ | 561 | 0.1297 |
+
+So 20 dBZ was chosen for how much noise it removes, not by trading away signal — there is
+no trade to make anywhere in that range. `TheMaskDoesNotTouchThePeakRotation` asserts the
+peak is unchanged *and* in the same array position, because the same number somewhere else
+would not be the same thing.
+
+![Rotation-track swath, raw and masked](screenshots/rotation-track-quality-mask.png)
+
+Left is the raw swath, right the masked one, both one scan of the Moore volume. The
+diffuse halo is noise; what survives is the track.
+
+**Why there is no correlation-coefficient mask.** The paired surveillance cut does carry CC
+and it would catch a further 49 % of the strong-shear gates, so it looks like an easy win.
+It is not: a tornado debris signature *is* a low-CC, high-Z target. On this volume 34.6 %
+of the strong shear under 40+ dBZ has CC below 0.85 — a CC threshold would delete a third
+of the debris signature, which is the single thing a rotation track exists to find.
+
+**What is still open.** Ground and sea clutter return strongly, so reflectivity keeps them;
+they show as radial spikes at coastal sites. That is a different problem from noise and
+needs a discriminator that separates clutter from debris rather than one threshold.
+
 ### Azimuthal shear — physics, because there is no reference
 
 No open-source package implements LLSD azimuthal shear, so this follows the project's rule

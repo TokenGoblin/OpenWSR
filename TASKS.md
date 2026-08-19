@@ -702,3 +702,36 @@ old solver to confirm they fail on it — a regression guard that cannot fail is
 
 Both wrong diagnoses are recorded in `docs/verification.md`, because both are the obvious
 ones. The answer came from reading `region_dealias.py`, not from reasoning about it.
+
+## Rotation-track speckle — a reflectivity quality mask
+
+- [x] The old note said the low Doppler cuts have no correlation coefficient to filter on.
+      True of that sweep, and beside the point: on a split-cut VCP the Doppler cut carries
+      **reflectivity** alongside velocity, index for index. That is the field that matters
+- [x] Measured the case before building anything: **88.8 %** of strong cyclonic shear gates
+      on the Moore volume sit under reflectivity below 20 dBZ. Shear where nothing reflected
+      is the phase of receiver noise, and a maximum over a dozen scans makes it permanent
+- [x] `GateQuality.MaskByReflectivity` blanks them. Removes **89 %** of the strong-shear
+      gates; the peak stays bit-identical at 0.1297 1/s, in the same array position. The
+      peak survives every threshold from 5 to 25 dBZ, so 20 was chosen for noise removed
+      rather than by trading away signal
+- [x] Gates are matched by **azimuth and slant range**, not by index — the surveillance cut
+      at the same elevation has a different gate count, and indexing one with the other's
+      numbers is wrong by kilometres without ever looking wrong
+- [x] Applied to the live AZS product too, so it and the swath show the same field
+- [x] Smoothing changed from a 3x3 **mean** to a **median**. With the mask doing the heavy
+      lifting its job changed from holding down a noise floor to removing isolated spikes,
+      which is what a median is for: 27 % of the speckle for 8 % of the peak, where the mean
+      took 38 % for 16 %
+- [x] **No CC mask, deliberately.** A tornado debris signature is a low-CC, high-Z target —
+      34.6 % of strong shear under 40+ dBZ has CC below 0.85, so a CC threshold deletes a
+      third of the signature the product exists to find
+- [x] 15 tests, including the rule itself, slant-range matching, and both halves of the
+      claim on the Moore volume
+
+**Gate:** [PASSED] 328/328 tests. Verified visually on the Moore volume — the diffuse halo
+goes, the track stays (`docs/screenshots/rotation-track-quality-mask.png`), and a 12-scan
+swath built live from an archive day.
+
+Still open: ground and sea clutter return strongly, so reflectivity keeps them. That is a
+different problem from noise and needs a discriminator that separates clutter from debris.

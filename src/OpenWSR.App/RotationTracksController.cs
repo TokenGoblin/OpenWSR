@@ -97,9 +97,16 @@ public sealed class RotationTracksController(MapView mapView) : IDisposable
                     var velocity = volume.Sweeps
                         .Where(s => s.Moment == Moment.Velocity)
                         .MinBy(s => s.ElevationIndex);
-                    return velocity is null
-                        ? null
-                        : AzimuthalShear.Compute(VelocityDealiasing.Dealias(velocity));
+                    if (velocity is null) return null;
+
+                    var computed = AzimuthalShear.Compute(VelocityDealiasing.Dealias(velocity));
+
+                    // Without this the swath fills with speckle: a maximum taken over a
+                    // dozen scans keeps every spurious gate any of them produced, and 89 %
+                    // of strong-shear gates sit where there is no echo to have reflected.
+                    return GateQuality.ReflectivityFor(volume.Sweeps, velocity) is { } reflectivity
+                        ? GateQuality.MaskByReflectivity(computed, reflectivity)
+                        : computed;
                 }, cts.Token);
 
                 if (sweep is not null) shear.Add(sweep);

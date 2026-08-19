@@ -78,7 +78,9 @@ public static class RotationTracks
             // Taking a maximum over a dozen scans is unforgiving of noise: one spurious
             // gate in one scan survives into the swath forever. Smoothing first is what
             // makes the accumulation about coherent rotation — a couplet spans many gates
-            // and survives it, a lone hot gate does not.
+            // and survives it, a lone hot gate does not. The larger share of the work is
+            // done before this, by the caller masking gates with no echo under them; see
+            // GateQuality.
             var sweep = Smooth(raw);
             var radialFor = AzimuthIndex.Build(sweep);
             double elevation = sweep.ElevationAngleDeg * Math.PI / 180.0;
@@ -127,9 +129,24 @@ public static class RotationTracks
     }
 
     /// <summary>
-    /// Mean of each gate with its immediate neighbours, ignoring no-data. Wraps in azimuth
+    /// Median of each gate with its immediate neighbours, ignoring no-data. Wraps in azimuth
     /// for the same reason the region labelling does: without it the north seam becomes a
     /// permanent stripe in every swath.
+    ///
+    /// A median rather than a mean, now that the quality mask removes most of the noise
+    /// before this runs. The smoothing's job changed with it: it used to be holding down a
+    /// noise floor, which a mean does well, and is now removing the isolated spikes the mask
+    /// let through, which is exactly what a median is for. Measured on one masked scan of
+    /// the Moore volume:
+    ///
+    ///   filter    strong cells   peak
+    ///   none                37   0.0616 1/s
+    ///   mean                23   0.0519
+    ///   median              27   0.0565
+    ///
+    /// It is a trade rather than a free win — the mean removes more — but the median gives
+    /// up far less of the amplitude that the product exists to report, removing 27 % of the
+    /// speckle for 8 % of the peak where the mean removes 38 % for 16 %.
     /// </summary>
     private static Sweep Smooth(Sweep sweep)
     {
@@ -143,7 +160,7 @@ public static class RotationTracks
             {
                 if (float.IsNaN(sweep.Data[r * gates + g])) continue;
 
-                double sum = 0;
+                Span<float> window = stackalloc float[9];
                 int n = 0;
                 for (int dr = -1; dr <= 1; dr++)
                 {
@@ -154,11 +171,15 @@ public static class RotationTracks
                         if (gate < 0 || gate >= gates) continue;
                         float v = sweep.Data[radial * gates + gate];
                         if (float.IsNaN(v)) continue;
-                        sum += v;
-                        n++;
+                        window[n++] = v;
                     }
                 }
-                if (n > 0) result[r * gates + g] = (float)(sum / n);
+                if (n > 0)
+                {
+                    var used = window[..n];
+                    used.Sort();
+                    result[r * gates + g] = used[n / 2];
+                }
             }
         });
 
