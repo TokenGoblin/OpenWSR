@@ -103,13 +103,17 @@ same sweep. What is asserted in `VelocityDealiasingGoldenTests` is structural ag
 | Valid gates (0.5° cut) | 155 912 | identical |
 | Raw min/max | −26.00 / +26.00 | identical |
 | Shift values used | −1, 0, +1 | identical |
-| Corrected, 1.3° cut | 4 116 (2.71 %) | 2 788 (1.84 %) |
+| Corrected, 1.3° cut | 4 116 (2.71 %) | 3 478 (2.29 %) |
+| Corrected, 0.5° cut | 1 393 (0.89 %) | 1 288 (0.83 %) |
 | Corrected mean range | 176 km | 171 km |
 | Top azimuth sectors | 30-45, 210-225, 195-210, 15-30 | same, same order |
 
-OpenWSR is deliberately the more conservative of the two, correcting roughly two thirds as
-many gates. It demands a boundary of at least five gate pairs before letting a correction
-cross. That number is measured rather than chosen — sweeping it on the Moore volume:
+OpenWSR reaches **85-92 %** of the reference's correction rate. It used to reach about two
+thirds, and closing that gap is the one place where the first diagnosis was wrong twice
+over, which is worth recording because both wrong answers are the obvious ones.
+
+**Wrong answer one: relax a threshold.** The old solver refused to carry a correction across
+a boundary narrower than five gate pairs. Sweeping that number on the Moore volume:
 
 | `MinBoundaryGates` | corrected (0.5° cut) | largest shift | peak |
 |---|---|---|---|
@@ -117,17 +121,40 @@ cross. That number is measured rather than chosen — sweeping it on the Moore v
 | 3 | 0.96 % | ±2 | 130.5 m/s |
 | 2 | 1.01 % | ±2 | 130.5 m/s |
 
-There is a cliff between 3 and 5. Below it the rate matches Py-ART's 0.89 % almost exactly
-— and the algorithm starts chaining corrections through already-shifted regions to reach
-±2 intervals, which no single boundary can justify since the raw field spans exactly one.
-A 130 m/s wind is two stacked guesses, not a measurement. Refusing to unfold leaves a
-measured value in place; unfolding wrongly invents one, so the conservative side is the
-right one to err on.
+There is a cliff between 3 and 5. Below it the rate matches Py-ART almost exactly — and the
+algorithm starts chaining corrections through already-shifted regions to reach ±2 intervals,
+which no single boundary can justify since the raw field spans exactly one. A 130 m/s wind
+is two stacked guesses, not a measurement.
 
-It is worth stating what this is *not*, because it looks like a signal-quality problem and
-is not one: the corrected gates average 29.3 dBZ against 15.8 dBZ for the untouched ones,
-and at 250 km the tenth percentile is still 14.5 dBZ. A gatefilter on weak returns would
-discard the wrong gates entirely.
+**Wrong answer two: filter weak signal.** It looks like a signal-quality problem and is not
+one: the corrected gates average 29.3 dBZ against 15.8 dBZ for the untouched ones, and at
+250 km the tenth percentile is still 14.5 dBZ. A gatefilter would discard the wrong gates.
+
+**The actual answer was structural**, and reading Py-ART's source rather than reasoning
+about it is what found it. Py-ART does not *walk* a spanning tree over regions; it *merges*
+them. Each merge combines the two sides' remaining boundaries, so a region touching a large
+merged area through three separate thin boundaries is judged on all three at once. A walk
+looks at each alone, finds none convincing, and leaves the region folded. Replacing the walk
+with the merge:
+
+| cut | walk | merge | Py-ART |
+|---|---|---|---|
+| 0.5° | 738 (0.47 %) | 1 288 (0.83 %) | 1 393 (0.89 %) |
+| 1.3° | 2 788 (1.84 %) | 3 478 (2.29 %) | 4 116 (2.71 %) |
+
+Largest shift stays ±1 either way and the peak unfolded speed *fell*, from 78.2 to
+75.2 m/s: the extra corrections are more coherent, not wilder. No threshold was loosened —
+the three constants the walk needed (`MinBoundaryGates`, `MinRegionGates`, `FoldTolerance`)
+were deleted, because merging makes the evidence question answer itself.
+
+`APatchReachableOnlyThroughNarrowBridgesIsStillCorrected` pins this: a folded core walled
+off except for three single-gate bridges. The walk leaves it at −18.2 m/s; the merge
+recovers 34 m/s. Its converse, `AnIsolatedPatchWithNoBridgeAtAllIsLeftAlone`, pins the
+conservatism — with no bridge at all there is no evidence, so the radar's reading stands.
+
+The remaining 8-15 % is genuine judgement-call difference on marginal folds, and OpenWSR
+still errs conservative: refusing to unfold leaves a measured value in place, while
+unfolding wrongly invents one.
 
 The strongest tests are not the reference comparison at all — they are synthetic. A uniform
 wind field faster than Nyquist is folded, dealiased, and compared against the truth it was

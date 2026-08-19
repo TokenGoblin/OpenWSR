@@ -249,22 +249,33 @@ screen. `--soak` runs the live pipeline headless.
 
 ## Open work
 
-Nothing on the parity list. What is left is polish, and the two notes below.
+Every **Blocker** and **Expected** gap in `docs/parity.md` is closed. What is left there is
+the Nice/Cosmetic tier — GeoJSON/shapefile import, terrain basemap, soundings, Spotter
+Network — plus three Partials: boundaries come from the basemap rather than a controllable
+layer, hail is per-cell markers rather than contours, and there is one home location rather
+than a list of saved ones.
 
-Every gap in `docs/parity.md` is now closed. What is left is the "Nice" and "Cosmetic"
-tier plus the two Partials.
+The two notes below are the real quality gaps, and both have had a wrong answer ruled out
+already.
 
 Rotation tracks work but carry visible background speckle: accumulating a maximum over a
 dozen scans is unforgiving, and the low Doppler cuts have no correlation coefficient to
 filter marginal gates on. A 3x3 smoothing pass before accumulation cut the peak from 0.18
 to 0.12 1/s; a real quality mask would do better.
 
-Velocity dealiasing corrects about two thirds as many gates as Py-ART. A signal-quality
-gatefilter will **not** close that gap — measured on the Moore volume, the corrected gates
-average 29 dBZ against 16 dBZ for untouched ones, so filtering weak returns discards the
-wrong gates. Nor will loosening `MinBoundaryGates`: at 3 the rate matches Py-ART but
-corrections start chaining to ±2 intervals and fabricate 130 m/s winds. Closing it properly
-means Py-ART's multi-pass structure, not a threshold tweak.
+Velocity dealiasing now reaches 85–92 % of Py-ART's correction rate, up from about two
+thirds. The fix was structural, and both obvious diagnoses were wrong: a signal-quality
+gatefilter discards the wrong gates (corrected gates average 29 dBZ against 16 for
+untouched ones), and loosening the boundary threshold buys the rate with ±2 chains that
+fabricate 130 m/s winds. What worked was replacing the spanning-tree **walk** over regions
+with Py-ART's **merge**: each merge combines the two sides' remaining boundaries, so a
+region reached only through several thin boundaries is judged on all of them at once. Three
+threshold constants were deleted in the process. Peak unfolded speed *fell*. The remaining
+gap is genuine judgement-call difference on marginal folds — see `docs/verification.md`.
+
+The lesson worth keeping: **read the reference implementation before theorising about it.**
+Two measured dead ends came from reasoning about what Py-ART must be doing; the answer took
+twenty minutes of reading `region_dealias.py`.
 
 Note for storm labels: **NSS (storm structure) has not been distributed since ~2021**, so
 `MaxDbz` / `CellBasedVil` / `EchoTopKft` are always null on live data. The layers panel says

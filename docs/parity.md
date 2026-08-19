@@ -88,7 +88,7 @@ the whole open-source field — no OSS viewer has it."* It is now done.
 | GIF / video export | Expected | **Done** — and now actually verified end-to-end; it could not write a file before (`audit.md` C-01) |
 | Independent site per pane | Expected | **Done** — any pane can be pinned to its own radar, in live or archive; pinned panes leave the camera link |
 | Units preference | Expected | **Done** |
-| Longer loops | Nice | **Open** — still capped at 30 frames, already parameterised |
+| Longer loops | Nice | **Done** — 12/30/60/144 volumes, chosen in Settings as a duration |
 | Drawing and annotation | Nice | **Done** — lines, areas, circles, labels; saved as placefiles |
 | Spotter Network | Nice | **Open** — requires an account, niche outside active chasers |
 | Mobile client | Cosmetic | **Out of scope** — a different product |

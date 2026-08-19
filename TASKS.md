@@ -670,3 +670,35 @@ styled for a dark ground. `Theme.xaml` now templates ToolTip too.
 60 fps with visible vertical structure, cores, range rings and the ground disc; the guard
 for a still-scanning volume was seen firing on a real 1-cut live volume and was the reason
 the debounce and keep-previous behaviour were added.
+
+## Velocity dealiasing — closing the gap to Py-ART
+
+- [x] Replaced the spanning-tree **walk** over regions with Py-ART's **merge**. The walk
+      grew outward from the largest region and judged each boundary alone; the merge folds
+      the smaller side onto the larger and then combines the merged side's remaining
+      boundaries with the base node's. A region touching a large merged area through three
+      thin boundaries is therefore judged on all three at once
+- [x] Correction rate went from ~2/3 of the reference to **85–92 %**, measured on the
+      committed Moore volume against Py-ART 2.2.5:
+
+      cut     walk            merge           Py-ART
+      0.5°     738 (0.47 %)   1288 (0.83 %)   1393 (0.89 %)
+      1.3°    2788 (1.84 %)   3478 (2.29 %)   4116 (2.71 %)
+
+      Largest shift stays ±1 and the peak unfolded speed *fell*, 78.2 → 75.2 m/s
+- [x] `MinBoundaryGates`, `MinRegionGates` and `FoldTolerance` deleted — the walk needed
+      them, the merge does not. Leaving three constants whose long measured comments
+      described an algorithm that no longer existed would have been worse than no comment
+- [x] Anchoring stays on the largest region rather than Py-ART's zero-mean centring: a
+      forecaster reading a number off the screen should get the measured value unless there
+      was a reason to change it
+- [x] Two tests that discriminate: a folded core reachable only through three single-gate
+      bridges (the walk leaves it at −18.2 m/s, the merge recovers 34), and its converse
+      with no bridge at all (both leave it alone). The Py-ART rate guard's floor moved from
+      0.4× to 0.8× so a regression to the walk fails loudly
+
+**Gate:** [PASSED] 313/313 tests. The two new tests and both rate cases were run against the
+old solver to confirm they fail on it — a regression guard that cannot fail is not one.
+
+Both wrong diagnoses are recorded in `docs/verification.md`, because both are the obvious
+ones. The answer came from reading `region_dealias.py`, not from reasoning about it.

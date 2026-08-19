@@ -223,6 +223,81 @@ public class VelocityDealiasingTests
             new System.Collections.BitArray(Radials * Gates),
             nyquist);
     }
+
+    [Fact]
+    public void APatchReachableOnlyThroughNarrowBridgesIsStillCorrected()
+    {
+        // The case the old spanning-tree walk gave up on, and most of why it corrected only
+        // two thirds of what Py-ART did. A folded core is walled off by no-data except for
+        // three single-gate openings. Judged one at a time none of them looks like enough to
+        // move a whole region; merged, they are one boundary three gate pairs wide, which is
+        // how the reference implementation sees it.
+        const float nyquist = 26.1f, interval = 2 * nyquist;
+        const int radials = 40, gates = 60;
+
+        // A real fold shows up as a jump of very nearly one interval, because the true
+        // field is continuous across it — the surroundings sit just under the Nyquist
+        // velocity and the core just over it.
+        const float outside = 24f, coreTruth = 34f;
+        float coreReported = Fold(coreTruth, nyquist);
+
+        var field = new float[radials * gates];
+        Array.Fill(field, outside);
+
+        // Wall the core off completely...
+        for (int r = 14; r < 27; r++)
+            for (int g = 24; g < 47; g++)
+                if (r is 14 or 26 || g is 24 or 46)
+                    field[r * gates + g] = float.NaN;
+
+        // ...then reopen exactly three single-gate bridges through the wall.
+        foreach (int r in new[] { 17, 20, 23 }) field[r * gates + 24] = outside;
+
+        for (int r = 15; r < 26; r++)
+            for (int g = 25; g < 46; g++)
+                field[r * gates + g] = coreReported;
+
+        // The fixture has to pose the problem: the core must read as folded.
+        Assert.True(coreReported < 0, "the core should be reported inbound after folding");
+        Assert.True(Math.Abs(coreReported - coreTruth) > interval / 2);
+
+        var dealiased = VelocityDealiasing.DealiasGrid(field, radials, gates, interval);
+
+        // The core comes back as the outbound flow it is, and the surroundings are untouched.
+        Assert.Equal(coreTruth, dealiased[20 * gates + 35], 2);
+        Assert.Equal(coreTruth, dealiased[16 * gates + 30], 2);
+        Assert.Equal(outside, dealiased[2 * gates + 5], 2);
+    }
+
+    [Fact]
+    public void AnIsolatedPatchWithNoBridgeAtAllIsLeftAlone()
+    {
+        // The converse, and why the anchoring is on the largest region rather than on a zero
+        // mean: with nothing joining it to the rest of the sweep there is no evidence about
+        // which interval it belongs in, so the radar's own reading has to stand.
+        const float nyquist = 26.1f, interval = 2 * nyquist;
+        const int radials = 40, gates = 60;
+        const float outside = 24f;
+        float coreReported = Fold(34f, nyquist);
+
+        var field = new float[radials * gates];
+        Array.Fill(field, outside);
+
+        for (int r = 14; r < 27; r++)
+            for (int g = 24; g < 47; g++)
+                if (r is 14 or 26 || g is 24 or 46)
+                    field[r * gates + g] = float.NaN;
+
+        for (int r = 15; r < 26; r++)
+            for (int g = 25; g < 46; g++)
+                field[r * gates + g] = coreReported;
+
+        var dealiased = VelocityDealiasing.DealiasGrid(field, radials, gates, interval);
+
+        Assert.Equal(coreReported, dealiased[20 * gates + 35], 2);
+        Assert.Equal(outside, dealiased[2 * gates + 5], 2);
+    }
+
 }
 
 /// <summary>
@@ -326,10 +401,13 @@ public class VelocityDealiasingGoldenTests(DecodedVolumes volumes) : IClassFixtu
         }
         double fraction = (double)corrected / valid;
 
-        // OpenWSR demands more evidence than Py-ART before committing to a fold, so it
-        // corrects fewer gates — around two thirds as many on this volume. It must not
-        // drift into correcting nothing, nor into out-correcting the reference.
-        Assert.InRange(fraction, pyArtFraction * 0.4, pyArtFraction * 1.2);
+        // Since the solver merges regions the way Py-ART does — combining the boundaries
+        // of everything already merged, rather than judging each one alone — it reaches
+        // 85-92 % of the reference's rate. The floor is set just under that so a
+        // regression back to the old spanning-tree walk (53-68 %) fails here rather than
+        // being noticed months later; the ceiling catches over-correction, which would
+        // mean folds are being invented.
+        Assert.InRange(fraction, pyArtFraction * 0.80, pyArtFraction * 1.1);
     }
 
     [Fact]

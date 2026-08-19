@@ -24,42 +24,6 @@ public static class VelocityDealiasing
     /// </summary>
     public const int IntervalSplits = 3;
 
-    /// <summary>Regions smaller than this are folded into their strongest neighbour rather
-    /// than being trusted to vote on their own shift.</summary>
-    private const int MinRegionGates = 10;
-
-    /// <summary>
-    /// A correction only travels across a boundary at least this many gate pairs wide. A
-    /// thinner one is one or two gate pairs, not an average, and cannot support a claim
-    /// that its two sides are a whole interval apart.
-    ///
-    /// The value is measured, not guessed, against the KTLX 2013-05-20 20:16Z volume:
-    ///
-    ///   width 5 -> 0.47 % of gates corrected, largest shift 1, peak 78.2 m/s
-    ///   width 3 -> 0.96 %,                    largest shift 2, peak 130.5 m/s
-    ///   width 2 -> 1.01 %,                    largest shift 2, peak 130.5 m/s
-    ///
-    /// There is a cliff between 3 and 5. Below it, corrections chain — one region reached
-    /// through another already-shifted one — and reach ±2 intervals, which no single
-    /// boundary can justify, because the raw field spans exactly one. 130 m/s is not a
-    /// wind; it is two stacked guesses. Py-ART uses only ±1 on this volume too, so the
-    /// conservative setting agrees with the reference on the conclusion even though it
-    /// corrects fewer gates on the way there.
-    ///
-    /// Note this is not a signal-quality problem, though it looks like one: the corrected
-    /// gates average 29 dBZ against 16 dBZ for untouched ones, and even at 250 km the
-    /// tenth percentile is 14.5 dBZ. Filtering weak returns would discard the wrong gates.
-    /// </summary>
-    private const int MinBoundaryGates = 5;
-
-    /// <summary>
-    /// How close the mean step has to sit to a whole interval before it is read as a fold.
-    /// A genuine fold boundary steps by very nearly one interval; regions merely separated
-    /// by a bin edge step by almost nothing. Ambiguous boundaries in between are noise, and
-    /// rounding them silently turns a coin-flip into a 52 m/s error.
-    /// </summary>
-    private const double FoldTolerance = 0.35;
-
     /// <summary>
     /// Unfold one velocity sweep. Returns the sweep unchanged when it carries no Nyquist
     /// velocity (pre-2000 archives often do not) or is not a velocity moment.
@@ -208,83 +172,182 @@ public static class VelocityDealiasing
     // ---- 3. choose a whole-interval shift per region ----
 
     /// <summary>
-    /// Grow the solution outward from the largest region, always crossing the strongest
-    /// remaining boundary first. Each newly reached region takes the shift that best
-    /// cancels the mean step across the boundary it was reached through — so the decision
-    /// is made where the evidence is strongest, and weak boundaries never get to overrule
-    /// a well-established region.
+    /// Work out how many whole intervals each region is folded by, following Py-ART's
+    /// <c>dealias_region_based</c> structure.
+    ///
+    /// The important part is that regions are <em>merged</em> rather than walked. Repeatedly
+    /// take the strongest remaining boundary, fold the smaller side onto the larger, and
+    /// then <b>combine the merged side's remaining boundaries with the base node's</b>. That
+    /// last step is what an ordinary spanning-tree walk cannot do: a region touching a large
+    /// merged area through three separate thin boundaries is judged on all three at once,
+    /// where a walk looks at each in isolation, finds none of them convincing on its own,
+    /// and leaves the region unfolded.
+    ///
+    /// That is where the missing correction rate went. It was never a threshold that needed
+    /// loosening — loosening one only lets a single thin boundary make a decision it cannot
+    /// support, which is how two stacked guesses once turned -22 m/s into +82 m/s.
+    ///
+    /// Measured on the KTLX 2013-05-20 20:16Z volume, against Py-ART 2.2.5:
+    ///
+    ///   cut          walk            merge           Py-ART
+    ///   elev 2       738 (0.47 %)    1288 (0.83 %)   1393 (0.89 %)
+    ///   elev 6      2788 (1.84 %)    3478 (2.29 %)   4116 (2.71 %)
+    ///
+    /// Largest shift stays +/-1 either way, and the peak unfolded speed *fell* from 78.2 to
+    /// 75.2 m/s — the extra corrections are more coherent, not wilder. Do not try to close
+    /// the remaining 8-15 % by relaxing anything here; that was tried on the walk and it
+    /// bought the rate with +/-2 chains that fabricate 130 m/s winds. Nor is it a
+    /// signal-quality problem: corrected gates average 29 dBZ against 16 dBZ for untouched
+    /// ones, so a gatefilter discards precisely the wrong gates.
     /// </summary>
     private static int[] SolveShifts(
         int[] labels, Dictionary<(int Low, int High), Boundary> edges, int regionCount, float interval)
     {
-        var sizes = new int[regionCount];
+        var regionSize = new int[regionCount];
         foreach (int label in labels)
-            if (label >= 0) sizes[label]++;
+            if (label >= 0) regionSize[label]++;
 
-        var adjacency = new List<(int Other, double MeanDiff, int Count)>[regionCount];
-        for (int i = 0; i < regionCount; i++) adjacency[i] = [];
-        foreach (var (key, boundary) in edges)
+        // Regions merge into nodes; a node's unwrap applies to every region inside it.
+        var parent = new int[regionCount];
+        var nodeSize = new long[regionCount];
+        var regionsInNode = new List<int>[regionCount];
+        var unwrap = new int[regionCount];
+        for (int i = 0; i < regionCount; i++)
         {
-            adjacency[key.Low].Add((key.High, boundary.MeanDiff, boundary.Count));
-            adjacency[key.High].Add((key.Low, -boundary.MeanDiff, boundary.Count));
+            parent[i] = i;
+            nodeSize[i] = regionSize[i];
+            regionsInNode[i] = [i];
         }
 
-        var shifts = new int[regionCount];
-        var settled = new bool[regionCount];
-
-        // Largest region first; every disconnected group gets its own seed, anchored at
-        // zero so an isolated island keeps the values the radar actually reported.
-        foreach (int seed in Enumerable.Range(0, regionCount).OrderByDescending(r => sizes[r]))
+        int Find(int x)
         {
-            if (settled[seed] || sizes[seed] == 0) continue;
-            settled[seed] = true;
-            shifts[seed] = 0;
-
-            var frontier = new PriorityQueue<(int From, int To), long>();
-            void Push(int from)
+            while (parent[x] != x)
             {
-                foreach (var (other, meanDiff, count) in adjacency[from])
+                parent[x] = parent[parent[x]];
+                x = parent[x];
+            }
+            return x;
+        }
+
+        // adjacency[a][b] holds the sum of (v_a - v_b) across the shared boundary, counted
+        // in whole intervals, with the number of gate pairs behind it. Both directions are
+        // stored so a merge can rewrite either side without searching for it.
+        var adjacency = new Dictionary<int, (int Count, double SumDiff)>[regionCount];
+        for (int i = 0; i < regionCount; i++) adjacency[i] = [];
+
+        var queue = new PriorityQueue<(int A, int B), long>();
+        foreach (var ((low, high), boundary) in edges)
+        {
+            // Boundary.DiffSum reads low -> high as the sum of (v_high - v_low).
+            double sum = boundary.DiffSum / interval;
+            adjacency[low][high] = (boundary.Count, -sum);
+            adjacency[high][low] = (boundary.Count, sum);
+            queue.Enqueue((low, high), -boundary.Count);
+        }
+
+        while (queue.TryDequeue(out var pair, out long priority))
+        {
+            int a = Find(pair.A), b = Find(pair.B);
+            if (a == b) continue;
+            if (!adjacency[a].TryGetValue(b, out var link)) continue;
+
+            // Merging changes boundary strengths, so a queued entry can be out of date.
+            // Re-queue at the current strength rather than acting on a stale one, or a
+            // boundary that has since become the strongest would be skipped.
+            if (-priority != link.Count)
+            {
+                queue.Enqueue((a, b), -link.Count);
+                continue;
+            }
+
+            double meanDiff = link.SumDiff / link.Count;   // intervals, oriented a -> b
+            int folds = (int)Math.Round(meanDiff, MidpointRounding.AwayFromZero);
+
+            // Fold the smaller side onto the larger: the bigger area is the better
+            // reference, and moving it instead would drag more gates than it fixes.
+            int baseNode, mergeNode;
+            if (nodeSize[a] > nodeSize[b])
+            {
+                baseNode = a;
+                mergeNode = b;
+            }
+            else
+            {
+                baseNode = b;
+                mergeNode = a;
+                folds = -folds;
+            }
+
+            if (folds != 0)
+            {
+                foreach (int region in regionsInNode[mergeNode]) unwrap[region] += folds;
+
+                // The merged side has moved, so every boundary it still has now reads
+                // differently by exactly that many intervals per gate pair.
+                foreach (int other in adjacency[mergeNode].Keys.ToList())
                 {
-                    // A correction only travels across a boundary solid enough to carry it.
-                    // Crossing hairline boundaries and merely inheriting the shift let one
-                    // bad decision walk out through low-SNR speckle and compound: a chain
-                    // of two spurious folds turned −22 m/s into +82 m/s at 250 km.
-                    if (!settled[other] && count >= MinBoundaryGates)
-                        frontier.Enqueue((from, other), -count); // strongest boundary first
+                    var edge = adjacency[mergeNode][other];
+                    adjacency[mergeNode][other] = (edge.Count, edge.SumDiff + edge.Count * folds);
+                    var back = adjacency[other][mergeNode];
+                    adjacency[other][mergeNode] = (back.Count, back.SumDiff - back.Count * folds);
                 }
             }
-            Push(seed);
 
-            while (frontier.TryDequeue(out var step, out _))
+            // Drop the edge just used, then hand the merged node's remaining boundaries to
+            // the base node, combining any that lead to the same neighbour. This combining
+            // is the whole point of the structure.
+            adjacency[baseNode].Remove(mergeNode);
+            adjacency[mergeNode].Remove(baseNode);
+
+            foreach (var (other, edge) in adjacency[mergeNode])
             {
-                var (from, to) = step;
-                if (settled[to]) continue;
+                adjacency[other].Remove(mergeNode);
 
-                var link = adjacency[from].First(a => a.Other == to);
-                shifts[to] = shifts[from] - FoldsAcross(link, sizes[to], interval);
-                settled[to] = true;
-                Push(to);
+                var combined = adjacency[baseNode].TryGetValue(other, out var existing)
+                    ? (Count: existing.Count + edge.Count, SumDiff: existing.SumDiff + edge.SumDiff)
+                    : edge;
+
+                adjacency[baseNode][other] = combined;
+                adjacency[other][baseNode] = (combined.Count, -combined.SumDiff);
+                queue.Enqueue((baseNode, other), -combined.Count);
             }
+            adjacency[mergeNode].Clear();
+
+            parent[mergeNode] = baseNode;
+            nodeSize[baseNode] += nodeSize[mergeNode];
+            regionsInNode[baseNode].AddRange(regionsInNode[mergeNode]);
+            regionsInNode[mergeNode] = [];
         }
-        return shifts;
+
+        AnchorOnLargestRegion(regionCount, regionSize, regionsInNode, parent, unwrap);
+        return unwrap;
     }
 
     /// <summary>
-    /// How many whole intervals the far side of a boundary is folded by, or zero when the
-    /// evidence does not support a fold. Defaulting to zero is the conservative answer: it
-    /// leaves the radar's own reading in place rather than asserting a velocity that was
-    /// never measured.
+    /// Merging only ever fixes regions <em>relative to each other</em>, so a whole connected
+    /// group can come out shifted as a block. Anchor each group on its largest region, which
+    /// leaves the values the radar actually reported standing wherever the evidence is
+    /// strongest, and leaves an isolated island alone entirely.
+    ///
+    /// Py-ART instead centres each sweep so the mean fold is zero. That spreads a correction
+    /// onto gates that never needed one, which is the wrong trade here: a forecaster reading
+    /// a number off the screen should get the measured value unless there was a reason to
+    /// change it.
     /// </summary>
-    private static int FoldsAcross(
-        (int Other, double MeanDiff, int Count) link, int targetSize, float interval)
+    private static void AnchorOnLargestRegion(
+        int regionCount, int[] regionSize, List<int>[] regionsInNode, int[] parent, int[] unwrap)
     {
-        if (targetSize < MinRegionGates || link.Count < MinBoundaryGates) return 0;
+        for (int node = 0; node < regionCount; node++)
+        {
+            if (parent[node] != node || regionsInNode[node].Count == 0) continue;
 
-        double intervals = link.MeanDiff / interval;
-        int n = (int)Math.Round(intervals, MidpointRounding.AwayFromZero);
-        if (n == 0) return 0;
+            int largest = -1;
+            foreach (int region in regionsInNode[node])
+                if (largest < 0 || regionSize[region] > regionSize[largest]) largest = region;
 
-        // Only commit when the step really does land near a whole interval.
-        return Math.Abs(intervals - n) <= FoldTolerance ? n : 0;
+            int anchor = unwrap[largest];
+            if (anchor == 0) continue;
+            foreach (int region in regionsInNode[node]) unwrap[region] -= anchor;
+        }
     }
 }
