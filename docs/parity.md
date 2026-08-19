@@ -69,7 +69,7 @@ premium tiers elsewhere and two have no commercial equivalent:
 | Velocity dealiasing | Costs users | **Done** — region-based, cross-checked against Py-ART; no quality mask yet |
 | Azimuthal shear / rotation tracks | Expected | **Done** — LLSD azimuthal shear as a live product, plus time-accumulated rotation-track swaths |
 | Hail size contours | Expected | **Partial** — per-cell markers sized by severe-hail probability, not contours |
-| VWP / VAD wind profile | Nice | **Open** — parsing is easy, the panel is the work |
+| VWP / VAD wind profile | Nice | **Done** — fitted from Level II velocity rather than decoded from NVW, so it works on any volume back to 1991 |
 | Soundings / hodographs | Nice | **Open** — arguably out of scope |
 | 3D volume rendering | Cosmetic | **Open** |
 

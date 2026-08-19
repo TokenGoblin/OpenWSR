@@ -14,6 +14,10 @@
                     <ToggleButton x:Name="LayersToggle" AutomationProperties.Name="Show or hide the layers panel" Style="{StaticResource RailToggle}" IsChecked="True"
                                   Content="▤" Checked="LayersToggle_Changed" Unchecked="LayersToggle_Changed"
                                   ToolTip="Show or hide the layers panel" />
+                    <ToggleButton x:Name="WindProfileToggle" AutomationProperties.Name="Wind profile"
+                                  Style="{StaticResource RailToggle}" Content="⇡"
+                                  Checked="WindProfile_Changed" Unchecked="WindProfile_Changed"
+                                  ToolTip="VAD wind profile — horizontal wind against height, fitted from this volume's velocity" />
                     <Button x:Name="HotspotButton" AutomationProperties.Name="Go to the heaviest precipitation in the USA" Style="{StaticResource RailButton}" Content="🎯"
                             Click="HotspotButton_Click"
                             ToolTip="Go to the heaviest precipitation in the USA right now" />
@@ -485,6 +489,43 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </Border>
+                </DockPanel>
+            </Border>
+
+            <Border x:Name="WindProfilePanel" DockPanel.Dock="Right" Width="196"
+                    Visibility="Collapsed" Background="{StaticResource Chrome}"
+                    BorderBrush="#FF272C35" BorderThickness="1,0,0,0">
+                <DockPanel Margin="8,6,6,6">
+                    <TextBlock DockPanel.Dock="Top" Text="WIND PROFILE" FontWeight="Bold" FontSize="11"
+                               Foreground="{StaticResource TextDim}" Margin="0,0,0,2" />
+                    <TextBlock x:Name="WindProfileNote" DockPanel.Dock="Top" FontSize="10.5"
+                               FontStyle="Italic" TextWrapping="Wrap" Margin="0,0,0,6"
+                               Foreground="{StaticResource TextDim}" Text="" />
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="WindProfileList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Height="30">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="46" />
+                                            <ColumnDefinition Width="42" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding Height}" FontFamily="Consolas" FontSize="11"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{StaticResource TextDim}" />
+                                        <Path Grid.Column="1" Data="{Binding Barb}" Stroke="{StaticResource Text}"
+                                              Fill="{StaticResource Text}" StrokeThickness="1.4"
+                                              HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Stretch="None" />
+                                        <TextBlock Grid.Column="2" Text="{Binding Wind}" FontFamily="Consolas"
+                                                   FontSize="11" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource Text}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
                 </DockPanel>
             </Border>
 

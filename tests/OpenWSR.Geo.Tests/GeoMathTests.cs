@@ -215,3 +215,40 @@ public class MercatorTests
         Assert.True(Math.Abs(lon - lon2) < 1e-9, $"lon error {Math.Abs(lon - lon2)}");
     }
 }
+
+/// <summary>
+/// <see cref="GeoMath.SlantRangeForHeight"/> is the inverse of <see cref="GeoMath.BeamPath"/>,
+/// so the pair has an analytic test: go one way and back, and land where you started.
+/// </summary>
+public class BeamPathInverseTests
+{
+    [Theory]
+    [InlineData(0.5, 1000)]
+    [InlineData(0.5, 10000)]
+    [InlineData(2.4, 3000)]
+    [InlineData(6.0, 8000)]
+    [InlineData(19.5, 12000)]
+    public void SlantRangeRoundTripsThroughBeamPath(double elevationDeg, double heightM)
+    {
+        double elevation = elevationDeg * Math.PI / 180.0;
+        double slant = GeoMath.SlantRangeForHeight(heightM, elevation);
+        var (_, height) = GeoMath.BeamPath(slant, elevation);
+        Assert.Equal(heightM, height, 6);
+    }
+
+    [Fact]
+    public void ABeamCannotReachBelowItself()
+    {
+        // A height under the beam at zero range has no solution; report zero rather than
+        // a negative range.
+        Assert.Equal(0, GeoMath.SlantRangeForHeight(-100_000, 0.5 * Math.PI / 180.0));
+    }
+
+    [Fact]
+    public void HigherCutsReachAHeightSooner()
+    {
+        double low = GeoMath.SlantRangeForHeight(5000, 0.5 * Math.PI / 180.0);
+        double high = GeoMath.SlantRangeForHeight(5000, 10.0 * Math.PI / 180.0);
+        Assert.True(high < low, $"10 deg reached 5 km at {high:F0} m, 0.5 deg at {low:F0} m");
+    }
+}

@@ -98,6 +98,15 @@ public sealed class RadarDisplayController(MapView mapView)
     /// <summary>The sweep currently on screen — feeds the hover inspector.</summary>
     public Sweep? DisplayedSweep { get; private set; }
 
+    /// <summary>
+    /// Every velocity cut in the volume, whatever product is on screen. The wind profile
+    /// needs them all — it works in heights, and each cut reaches a different one.
+    /// </summary>
+    public IReadOnlyList<Sweep> AllVelocitySweeps() =>
+        _volume is null
+            ? []
+            : [.. _volume.Sweeps.Where(s => s.Moment == Moment.Velocity).OrderBy(s => s.ElevationIndex)];
+
     /// <summary>Every sweep of the current moment, for analysis across the whole volume.</summary>
     public IReadOnlyList<Sweep> SweepsForCurrentMoment() => [.. CutsForMoment(_moment).Select(Materialise)];
 

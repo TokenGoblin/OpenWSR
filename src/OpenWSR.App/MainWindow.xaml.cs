@@ -72,7 +72,11 @@ public partial class MainWindow : Window
 
         _radar = new RadarDisplayController(_mapView);
         _radar.StatusChanged += text => Dispatcher.BeginInvoke(() => Report(text));
-        _radar.SelectionChanged += () => Dispatcher.BeginInvoke(SyncProductBar);
+        _radar.SelectionChanged += () => Dispatcher.BeginInvoke(() =>
+        {
+            SyncProductBar();
+            RebuildWindProfile();
+        });
 
         // One place interprets map keys. Wiring both this and Window.KeyDown to the same
         // handler double-stepped the tilt and let text typed into the search box change
@@ -1140,6 +1144,63 @@ public partial class MainWindow : Window
             _lightning.Disable();
             LightningNoteText.Text = "";
         }
+    }
+
+    // ---- wind profile ----
+
+    /// <summary>One row of the profile, shaped for the panel's template.</summary>
+    private sealed record WindRow(string Height, string Wind, System.Windows.Media.Geometry Barb);
+
+    private void WindProfile_Changed(object sender, RoutedEventArgs e)
+    {
+        if (WindProfilePanel is null) return;
+        bool on = WindProfileToggle.IsChecked == true;
+        WindProfilePanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        if (on) RebuildWindProfile();
+    }
+
+    /// <summary>
+    /// Fit the profile from the volume on screen. Sampling costs real time on a full
+    /// volume, so it runs off the UI thread and only while the panel is open.
+    /// </summary>
+    private async void RebuildWindProfile()
+    {
+        if (WindProfileToggle.IsChecked != true) return;
+
+        var sweeps = _radar.AllVelocitySweeps();
+        if (sweeps.Count == 0)
+        {
+            WindProfileList.ItemsSource = null;
+            WindProfileNote.Text = "No velocity in this volume.";
+            return;
+        }
+
+        WindProfileNote.Text = "Fitting…";
+        var levels = await Task.Run(() => VadProfile.Compute(sweeps));
+
+        if (levels.Count == 0)
+        {
+            WindProfileList.ItemsSource = null;
+            WindProfileNote.Text =
+                "No level had enough echo around the radar to fit a wind. Clear air often will not.";
+            return;
+        }
+
+        // Top of the profile first, the way a sounding is read.
+        WindProfileList.ItemsSource = levels
+            .OrderByDescending(l => l.AltitudeM)
+            .Select(l => new WindRow(
+                Units.System == UnitSystem.Metric
+                    ? $"{l.AltitudeM / 1000:F1} km"
+                    : $"{l.AltitudeM * 3.28084 / 1000:F1} kft",
+                $"{l.DirectionDeg:F0}° {l.SpeedKnots:F0}kt",
+                WindBarbs.Build(l.SpeedKnots, l.DirectionDeg)))
+            .ToList();
+
+        var lowest = levels[0];
+        WindProfileNote.Text =
+            $"{levels.Count} levels to {levels[^1].AltitudeM / 1000:F1} km · "
+            + $"surface flow {lowest.DirectionDeg:F0}° at {lowest.SpeedKnots:F0} kt";
     }
 
     private void SymbolKeyButton_Click(object sender, RoutedEventArgs e) =>

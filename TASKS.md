@@ -528,3 +528,36 @@ view could compare products but never places.
 **Gate:** [PASSED] 210/210 tests; build clean in Debug and Release. Verified live with two
 panes: KMTX reflectivity over Utah beside KTLX velocity over Oklahoma, each on its own
 feed, each with its own scan time — then unpinned and watched the pane rejoin the primary.
+
+
+## VAD wind profile (2026-08-19)
+
+A single radar measures only motion along its own beam — but it measures it all the way
+around. Ride a ring of constant range and the radial velocity traces a sine wave whose
+amplitude is the wind speed and whose phase is its direction. That is the whole Velocity
+Azimuth Display idea, and it turns one number per gate into a wind.
+
+- [x] `VadProfile`: least-squares fit of `v = a0 + a1·sin(az) + a2·cos(az)` on a ring of
+      constant *height*, per layer, choosing whichever cut fits cleanest.
+      `GeoMath.SlantRangeForHeight` — the inverse of `BeamPath`, now living beside it —
+      turns a height into the range to sample
+- [x] **Derived from Level II, not decoded from NVW.** NVW is still distributed (checked:
+      TLX had files today), but this project already lost the cell attributes when NSS
+      stopped being generated around 2021. Deriving works on any volume back to 1991, at
+      every scan rather than every tenth minute, and cannot be withdrawn
+- [x] Unfolds velocity first — a fold is a discontinuity around the ring, and least squares
+      will happily average it into a wind that was never blowing
+- [x] Refuses rather than guesses: a ring needs eight of twelve azimuth sectors populated,
+      and a residual small against its own amplitude. A sine fitted through one quadrant is
+      that quadrant's velocities wearing a wind's clothes
+- [x] Proper station-model barbs — pennant fifty knots, full barb ten, half barb five, staff
+      pointing where the wind comes from. A column of barbs shows veering at a glance in a
+      way a column of figures does not
+- [x] 19 tests: exact recovery of known winds across five directions including the north
+      wrap, the beam-geometry round trip, a folded wind, a veering profile, and refusal of
+      both partial rings and noise
+
+**Gate:** [PASSED] 229/229 tests; build clean in Debug and Release. Verified on the
+committed KTLX 2013-05-20 20:16Z volume: 40 levels to 12 km, surface flow 134° at 17 kt
+with 238-253° at 45-73 kt aloft — about 120° of directional shear between the inflow and
+the storm top, which is the hodograph that made that day what it was.

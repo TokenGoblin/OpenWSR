@@ -32,6 +32,9 @@ No account, no API key, no subscription. Everything it reads is public data.
   a sentinel-aware Gaussian that excludes no-data gates rather than smearing them in.
 - **Vertical cross-section** — right-drag a line and get a true vertical slice through
   the volume, interpolated between elevation cuts.
+- **Wind profile** — horizontal wind against height, fitted from the velocity field
+  itself: ride a ring of constant range and the radial velocity traces a sine wave whose
+  amplitude is the wind speed and whose phase is its direction. Drawn as station barbs.
 - **Storm-relative velocity** — subtracts tracked storm motion so rotation stands out.
 - **Velocity unfolding** — recovers velocities past the Nyquist limit, where a strong
   couplet otherwise reads with its sign reversed. Region-based, needing no sounding or

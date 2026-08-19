@@ -24,7 +24,7 @@ Scratch directories are session-scoped and get lost.
 
 ```
 dotnet build OpenWSR.slnx                    # NOTE: .slnx, not .sln
-dotnet test OpenWSR.slnx                     # 210 tests
+dotnet test OpenWSR.slnx                     # 229 tests
 dotnet run --project src/OpenWSR.App
 dotnet publish src/OpenWSR.App -c Release    # single-file self-contained exe
 ```
@@ -165,6 +165,14 @@ draws under the radar sweep (model output, mosaics) and `Analysis` draws over it
 products read *against* the echo). They are independent, so the HRRR forecast and a
 rotation-track swath no longer fight over one slot.
 
+**Prefer deriving over decoding, where the maths is honest.** The wind profile is fitted
+from Level II velocity rather than decoded from the Level III NVW product, and azimuthal
+shear likewise. NVW is still distributed, but this project already lost the storm-structure
+cell attributes when NSS stopped being generated around 2021 — deriving keeps a product
+working on any volume back to 1991 and makes it impossible to take away. `GeoMath.BeamPath`
+and its inverse `GeoMath.SlantRangeForHeight` are the pair that makes height-based products
+possible.
+
 **Derived products.** `Moment.AzimuthalShear` sits in the moment enum so the product bar
 and palettes treat it uniformly, but the decoder never emits it — `RadarDisplayController`
 materialises it from velocity on demand and caches per cut. Add further derived products at
@@ -215,8 +223,7 @@ screen. `--soak` runs the live pipeline headless.
 
 ## Open work
 
-VWP panel, placefile icon sheets, drawing tools, 3D volume rendering, loops longer than
-30 frames.
+Placefile icon sheets, drawing tools, 3D volume rendering, loops longer than 30 frames.
 
 Every gap in `docs/parity.md` is now closed. What is left is the "Nice" and "Cosmetic"
 tier plus the two Partials.

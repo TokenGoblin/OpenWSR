@@ -27,6 +27,20 @@ public static class GeoMath
     }
 
     /// <summary>
+    /// The inverse of <see cref="BeamPath"/>: the slant range at which a beam of this
+    /// elevation reaches a given height above the radar. Solving the 4/3-earth relation
+    /// directly beats stepping gates until one is close enough, and it is what a wind
+    /// profile needs — it works in heights, while the radar works in ranges.
+    /// </summary>
+    public static double SlantRangeForHeight(double heightM, double elevationRad)
+    {
+        double ka = EffectiveEarthRadiusM;
+        double sin = Math.Sin(elevationRad), cos = Math.Cos(elevationRad);
+        double inner = (heightM + ka) * (heightM + ka) - ka * ka * cos * cos;
+        return inner <= 0 ? 0 : Math.Sqrt(inner) - ka * sin;
+    }
+
+    /// <summary>
     /// Spherical great-circle destination point: from (lat0, lon0), travel
     /// <paramref name="groundRangeM"/> along the initial azimuth. Degrees in, degrees out.
     /// </summary>
