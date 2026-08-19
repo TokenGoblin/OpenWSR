@@ -89,7 +89,7 @@ the whole open-source field — no OSS viewer has it."* It is now done.
 | Independent site per pane | Expected | **Done** — any pane can be pinned to its own radar, in live or archive; pinned panes leave the camera link |
 | Units preference | Expected | **Done** |
 | Longer loops | Nice | **Open** — still capped at 30 frames, already parameterised |
-| Drawing and annotation | Nice | **Open** |
+| Drawing and annotation | Nice | **Done** — lines, areas, circles, labels; saved as placefiles |
 | Spotter Network | Nice | **Open** — requires an account, niche outside active chasers |
 | Mobile client | Cosmetic | **Out of scope** — a different product |
 
