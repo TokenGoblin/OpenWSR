@@ -735,3 +735,50 @@ swath built live from an archive day.
 
 Still open: ground and sea clutter return strongly, so reflectivity keeps them. That is a
 different problem from noise and needs a discriminator that separates clutter from debris.
+
+## Code review of the 3D and dealiasing work
+
+A review of `HEAD~4..HEAD` — the 3D volume rendering, the Py-ART merge rewrite, the shear
+quality mask and the measurement harnesses. Eight findings, all applied.
+
+- [x] **The azimuth index answered with a floor, not a nearest.** Both its doc comments
+      claimed nearest and both passes of the gap fill swept the same direction, so the second
+      was a no-op. Every consumer — the volume grid, the reflectivity mask, the rotation-track
+      swath — was biased the same quarter of a degree clockwise, 650 m at 150 km. It swept
+      once each way now, keeping whichever candidate is fewer bins away
+- [x] Nothing caught it, because the error is smaller than a radial spacing: no decode
+      changes and no golden file moves. `AzimuthIndexTests` is the guard, and two of its five
+      cases were confirmed to fail against the old implementation
+- [x] Re-derived every figure that reads through the index. The shear quality numbers are
+      bit-identical — 88.8 %, peak 0.1297 1/s, 34.6 % of debris-signature gates under CC 0.85.
+      The **smoothing comparison moved**, and its conclusion with it: measured again, none 34
+      / mean 25 / median 23 strong cells, so the median now removes **32 %** of the speckle
+      against the mean's 26 % for the same 8 % of peak against 16 %. It used to be a trade
+      the median lost on volume; it is a clean win. The table in `RotationTracks.Smooth` and
+      the recorded result in `SmoothingMeasurement.cs` both carry the new numbers
+- [x] **The 3D view materialised its cuts on the UI thread.** Only the grid build was behind
+      `Task.Run`; `SweepsForCurrentMoment` was in front of it, and for a derived moment that
+      is a full dealias and shear recompute per cut — fourteen of them on VCP 212, on every
+      live volume. Moved behind the same `Task.Run`, which meant making `_shearCache`
+      concurrent: the map materialises the displayed cut on the UI thread at the same time
+- [x] **Leaving 3D never released its textures.** `Clear()` only stages the release and
+      `Draw` services it, but `VolumeMode` is cleared first so `Draw` never runs again — 4 MB
+      of R8 volume texture plus the palette and the voxel array stayed resident until the next
+      entry. `ClearNow()` releases on the render thread, where the caller already is
+- [x] `stackalloc` inside the per-gate loop in `RotationTracks.Smooth` — `localloc` is not
+      reclaimed until the frame returns, so a 1832-gate sweep grew each `Parallel.For` body's
+      stack by 64 KB. The only warning the build emitted (`CA2014`); the build is clean now
+- [x] The volume shader normalised its step length against a hardcoded 256 cells, which is a
+      parameter of `VolumeGrid3D.Build` the renderer cannot know — the tests already pass 64
+      and 96. It comes from the upload now
+- [x] `VolumeCamera` was documented as safe to read across the thread boundary and was a
+      mutable class; a pan concurrent with a frame could tear the twelve bytes of `TargetM`.
+      Its pose is an immutable record swapped in one reference write now, which is what the
+      comment always claimed
+- [x] `ResetVolumeCamera` hardcoded the box top instead of reading `VolumeController.TopHeightM`
+- [x] `CLAUDE.md`'s velocity-aliasing note still described the deleted `MinBoundaryGates` and
+      told the reader to go and read its measurements. It describes the merge solver now
+
+**Gate:** [PASSED] 333/333 tests, 0 warnings. The shear and smoothing harnesses were both
+re-run against the fixed index; the new `AzimuthIndexTests` were checked to fail against the
+old one.

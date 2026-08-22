@@ -1301,7 +1301,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void ResetVolumeCamera()
     {
-        float top = (float)(20_000 * _mapView.VolumeExaggeration);
+        float top = (float)(VolumeController.TopHeightM * _mapView.VolumeExaggeration);
         _mapView.VolumeCamera.Reset(
             new System.Numerics.Vector3(0, 0, top * 0.35f),
             _volume.HalfWidthM * 2.6);

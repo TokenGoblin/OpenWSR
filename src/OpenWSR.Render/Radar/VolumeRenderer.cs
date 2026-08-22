@@ -43,7 +43,7 @@ public sealed class VolumeRenderer : IDisposable
             float4 boxMin;     // xyz metres, w alpha floor (normalised)
             float4 boxMax;     // xyz metres, w alpha ramp width (normalised)
             float4 misc;       // x density, y ring spacing m, z ring width m, w disc radius m
-            float4 misc2;      // x ground z, y pixel angle, z unused, w unused
+            float4 misc2;      // x ground z, y pixel angle, z cells across, w unused
         };
 
         Texture3D<float> volume : register(t0);
@@ -90,7 +90,7 @@ public sealed class VolumeRenderer : IDisposable
                 // Alpha per step is scaled by how far the step covered, so the picture does
                 // not get denser just because the camera moved closer and the steps got
                 // shorter. Reference length is one grid cell.
-                float cell = (boxMax.x - boxMin.x) / 256.0;
+                float cell = (boxMax.x - boxMin.x) / max(misc2.z, 1.0);
                 float stepScale = dt / max(cell, 1.0);
 
                 float3 boxSpan = boxMax.xyz - boxMin.xyz;
@@ -179,7 +179,7 @@ public sealed class VolumeRenderer : IDisposable
         public float BoxMinX, BoxMinY, BoxMinZ, AlphaFloor;
         public float BoxMaxX, BoxMaxY, BoxMaxZ, AlphaRange;
         public float Density, RingSpacingM, RingWidthM, DiscRadiusM;
-        public float GroundZ, PixelAngle, Pad0, Pad1;
+        public float GroundZ, PixelAngle, CellsAcross, Pad1;
     }
 
     private readonly ID3D11Device _device;
@@ -310,6 +310,24 @@ public sealed class VolumeRenderer : IDisposable
         }
     }
 
+    /// <summary>
+    /// Render thread: drop the volume and its textures now.
+    ///
+    /// <see cref="Clear"/> only stages the request, and it is serviced inside
+    /// <see cref="Draw"/> — which stops being called the moment the view is left, so the
+    /// staged release would never happen and several megabytes of 3D texture would stay
+    /// resident for as long as the user was back on the map.
+    /// </summary>
+    public void ClearNow()
+    {
+        lock (_pendingLock)
+        {
+            _pending = null;
+            _clearRequested = false;
+        }
+        Release();
+    }
+
     /// <summary>Render thread: apply anything staged, then draw.</summary>
     public unsafe void Draw(VolumeCameraSnapshot cam, int viewportHeightPx)
     {
@@ -352,6 +370,10 @@ public sealed class VolumeRenderer : IDisposable
             DiscRadiusM = halfW,
             GroundZ = 0f,
             PixelAngle = viewportHeightPx > 0 ? 2f * cam.TanHalfFov / viewportHeightPx : 1e-4f,
+            // Step opacity is normalised against one grid cell, so the resolution has to
+            // come from the grid that was actually built — it is a parameter of
+            // VolumeGrid3D.Build, not a constant the renderer can assume.
+            CellsAcross = v.Nx,
         };
         _context.UpdateSubresource(constants, _constants);
 

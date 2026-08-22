@@ -24,7 +24,11 @@ public sealed class VolumeController(MapView mapView, RadarDisplayController rad
     private const int VerticalCells = 64;
 
     private const double DefaultHalfWidthM = 150_000;
-    private const double TopHeightM = 20_000;
+    /// <summary>
+    /// Top of the resampled box. Public because the camera has to frame the same height the
+    /// grid was built to — two copies of the number drift apart silently.
+    /// </summary>
+    public const double TopHeightM = 20_000;
 
     private CancellationTokenSource? _building;
     private CancellationTokenSource? _debounce;
@@ -98,28 +102,6 @@ public sealed class VolumeController(MapView mapView, RadarDisplayController rad
     {
         if (!IsActive) return;
 
-        var sweeps = radar.SweepsForCurrentMoment();
-
-        // A live volume is published as it is scanned, so for the first minutes of every
-        // scan there are too few cuts to build from. Keep showing the volume already up
-        // rather than blanking the view every five minutes — the old one is a few minutes
-        // stale, which is far better than nothing at all.
-        if (sweeps.Count < 2)
-        {
-            string why = sweeps.Count == 0
-                ? "No volume loaded to build a 3D view from."
-                : "3D needs more than one elevation cut; this volume is still scanning.";
-            StatusChanged?.Invoke(_hasVolumeOnScreen ? $"{why} Showing the previous volume." : why);
-
-            if (!_hasVolumeOnScreen)
-            {
-                mapView.ClearVolume();
-                Summary = null;
-            }
-            Changed?.Invoke();
-            return;
-        }
-
         _building?.Cancel();
         _building?.Dispose();
         var cts = _building = new CancellationTokenSource();
@@ -130,10 +112,37 @@ public sealed class VolumeController(MapView mapView, RadarDisplayController rad
         float min = table.MinValue, max = table.MaxValue;
         double halfWidth = HalfWidthM;
 
-        StatusChanged?.Invoke($"Building the 3D volume from {sweeps.Count} cuts…");
-
         try
         {
+            // Materialising the cuts is not the cheap part it looks like. For a derived
+            // moment it dealiases and recomputes every one of them — fourteen dealiases for
+            // a VCP 212 volume — so it belongs behind the same Task.Run as the grid build.
+            // Left on the UI thread it froze the window each time a live volume arrived.
+            var sweeps = await Task.Run(radar.SweepsForCurrentMoment, token);
+
+            if (token.IsCancellationRequested || !IsActive) return;
+
+            // A live volume is published as it is scanned, so for the first minutes of every
+            // scan there are too few cuts to build from. Keep showing the volume already up
+            // rather than blanking the view every five minutes — the old one is a few minutes
+            // stale, which is far better than nothing at all.
+            if (sweeps.Count < 2)
+            {
+                string why = sweeps.Count == 0
+                    ? "No volume loaded to build a 3D view from."
+                    : "3D needs more than one elevation cut; this volume is still scanning.";
+                StatusChanged?.Invoke(_hasVolumeOnScreen ? $"{why} Showing the previous volume." : why);
+
+                if (!_hasVolumeOnScreen)
+                {
+                    mapView.ClearVolume();
+                    Summary = null;
+                }
+                return;
+            }
+
+            StatusChanged?.Invoke($"Building the 3D volume from {sweeps.Count} cuts…");
+
             var grid = await Task.Run(() => VolumeGrid3D.Build(
                 sweeps, min, max,
                 horizontalCells: HorizontalCells,

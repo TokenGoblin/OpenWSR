@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using OpenWSR.Nexrad;
 using OpenWSR.Nexrad.Analysis;
 using OpenWSR.Palettes;
@@ -244,8 +245,13 @@ public sealed class RadarDisplayController(MapView mapView)
     /// <summary>
     /// Derived products are computed here, once per cut, because computing one costs real
     /// time and scrubbing a loop would otherwise pay it on every frame.
+    ///
+    /// Concurrent because the 3D view materialises a whole volume on the thread pool while
+    /// the map is materialising the displayed cut on the UI thread. A plain dictionary
+    /// written from both corrupts. Two threads racing to compute the same cut only waste
+    /// the work; one of the two results wins and they are equal.
     /// </summary>
-    private readonly Dictionary<(int Elevation, DateTime Time), Sweep> _shearCache = [];
+    private readonly ConcurrentDictionary<(int Elevation, DateTime Time), Sweep> _shearCache = new();
 
     /// <summary>
     /// Turn a backing cut into the sweep actually displayed.

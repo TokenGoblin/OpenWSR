@@ -158,10 +158,14 @@ tabular pointer in the *symbology* offset slot.
 radials (take the first that has it), differs between the split surveillance and Doppler
 cuts of VCP 12/212, and is missing entirely from pre-2000 archives — hence
 `Sweep.NyquistMs` is nullable. Raw velocity pinned at exactly ±V_nyquist is the signature
-of folding, not of real data. Unfolding is region-based and deliberately conservative: a
-correction must never cross a hairline region boundary, because corrections chain, and two
-stacked guesses turn −22 m/s into +82 m/s. `MinBoundaryGates` carries the measurements
-behind its value — read them before touching it.
+of folding, not of real data. Unfolding is region-based and follows Py-ART: regions are
+**merged** in order of boundary strength, each merge pooling both sides' remaining
+boundaries, so a region reached only through several thin boundaries is judged on all of
+them at once. There are no width or tolerance thresholds left to tune — the three the older
+spanning-tree walk needed were deleted with it, and the fold count is `Math.Round` of the
+mean boundary difference. Corrections still chain, so the failure mode to watch for has not
+changed: two stacked guesses turn −22 m/s into +82 m/s. `docs/verification.md` carries the
+rate measurements and the two dead ends that were ruled out.
 
 **The Field overlay slot has three claimants** — the HRRR forecast, the native MRMS
 composite, and anything gridded added later. They are mutually exclusive by construction:

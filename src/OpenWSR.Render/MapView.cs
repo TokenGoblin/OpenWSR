@@ -299,8 +299,9 @@ public sealed class MapView : IDisposable
 
     /// <summary>
     /// The orbit camera for the 3D view. Held here rather than inside the renderer because
-    /// input arrives on the UI thread and the renderer belongs to the render thread; a
-    /// camera is small, immutable per frame, and safe to read across that line.
+    /// input arrives on the UI thread and the renderer belongs to the render thread; it
+    /// keeps its pose in an immutable record swapped in one reference write, which is what
+    /// makes reading it from the render thread safe.
     /// </summary>
     public VolumeCamera VolumeCamera { get; } = new();
 
@@ -599,7 +600,9 @@ public sealed class MapView : IDisposable
                 }
                 else if (_volumeClearRequested)
                 {
-                    volume.Clear();
+                    // Not volume.Clear(): this is the render thread, and the release has to
+                    // happen here. Staging it would leave it for a Draw that no longer runs.
+                    volume.ClearNow();
                     _volumeClearRequested = false;
                 }
             }

@@ -140,13 +140,14 @@ public static class RotationTracks
     /// the Moore volume:
     ///
     ///   filter    strong cells   peak
-    ///   none                37   0.0616 1/s
-    ///   mean                23   0.0519
-    ///   median              27   0.0565
+    ///   none                34   0.0616 1/s
+    ///   mean                25   0.0519
+    ///   median              23   0.0565
     ///
-    /// It is a trade rather than a free win — the mean removes more — but the median gives
-    /// up far less of the amplitude that the product exists to report, removing 27 % of the
-    /// speckle for 8 % of the peak where the mean removes 38 % for 16 %.
+    /// The median wins on both counts: it removes 32 % of the speckle against the mean's
+    /// 26 %, and gives up 8 % of the peak where the mean gives up 16 %. Re-measure these
+    /// with `resources/measurements/SmoothingMeasurement.cs` before changing the filter —
+    /// they moved once already, when the azimuth index stopped rounding one way.
     /// </summary>
     private static Sweep Smooth(Sweep sweep)
     {
@@ -156,11 +157,15 @@ public static class RotationTracks
 
         Parallel.For(0, radials, r =>
         {
+            // Hoisted out of the gate loop deliberately: stack allocated inside it, the
+            // space is not reclaimed until this lambda returns, so a 1832-gate sweep would
+            // grow the frame by 64 KB before it finished one radial.
+            Span<float> window = stackalloc float[9];
+
             for (int g = 0; g < gates; g++)
             {
                 if (float.IsNaN(sweep.Data[r * gates + g])) continue;
 
-                Span<float> window = stackalloc float[9];
                 int n = 0;
                 for (int dr = -1; dr <= 1; dr++)
                 {
@@ -186,8 +191,4 @@ public static class RotationTracks
         return sweep with { Data = result };
     }
 
-    /// <summary>
-    /// Nearest radial for each azimuth bin. Radials are not evenly spaced, and scanning
-    /// them per sample would be a linear search inside a million-cell loop.
-    /// </summary>
 }

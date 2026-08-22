@@ -10,9 +10,9 @@
 // for the no-filter row. Recorded result on one masked scan of the Moore volume:
 //
 //   filter    strong cells   peak
-//   none                37   0.0616 1/s
-//   mean                23   0.0519
-//   median              27   0.0565
+//   none                34   0.0616 1/s
+//   mean                25   0.0519
+//   median              23   0.0565
 
 using OpenWSR.Nexrad.Analysis;
 
