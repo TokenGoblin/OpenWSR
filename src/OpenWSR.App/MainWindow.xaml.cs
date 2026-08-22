@@ -880,7 +880,10 @@ public partial class MainWindow : Window
     {
         var lines = new List<string>
         {
-            $"Moving {ThreatMonitor.CompassPoint(storm.BearingDeg)} ({storm.BearingDeg:F0}°) at {Units.Speed(storm.SpeedKmh)}",
+            storm.SpeedKmh is { } kmh && storm.BearingDeg is { } deg
+                ? $"Moving {ThreatMonitor.CompassPoint(deg)} ({deg:F0}°) at {Units.Speed(kmh)}"
+                // Saying "0 mph" here would claim the cell was measured to be standing still.
+                : "Motion not tracked yet — the algorithm needs a second scan of this cell.",
         };
         if (storm.ProbabilityOfHail > 0)
             lines.Add($"Hail {storm.ProbabilityOfHail}% · severe {Math.Max(0, storm.ProbabilityOfSevereHail)}%" +
@@ -1103,11 +1106,11 @@ public partial class MainWindow : Window
     /// </summary>
     private void UpdateStormMotion(IReadOnlyList<TrackedStorm> storms)
     {
-        var moving = storms.Where(s => s.SpeedKmh > 3).ToList();
+        var moving = storms.Where(s => s is { SpeedKmh: > 3, BearingDeg: not null }).ToList();
         if (moving.Count == 0) return;
 
-        double u = moving.Average(s => s.SpeedKmh * Math.Sin(s.BearingDeg * Math.PI / 180.0));
-        double v = moving.Average(s => s.SpeedKmh * Math.Cos(s.BearingDeg * Math.PI / 180.0));
+        double u = moving.Average(s => s.SpeedKmh!.Value * Math.Sin(s.BearingDeg!.Value * Math.PI / 180.0));
+        double v = moving.Average(s => s.SpeedKmh!.Value * Math.Cos(s.BearingDeg!.Value * Math.PI / 180.0));
         double speed = Math.Sqrt(u * u + v * v);
         double bearing = (Math.Atan2(u, v) * 180.0 / Math.PI + 360.0) % 360.0;
 

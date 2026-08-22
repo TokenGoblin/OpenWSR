@@ -59,7 +59,9 @@ public sealed class ThreatMonitor
                 $"storm:{storm.Id}",
                 $"Storm {storm.Id} approaching your area",
                 $"Track passes within {Units.Distance(a.DistanceKm)} of home {when} " +
-                $"(moving {CompassPoint(storm.BearingDeg)} at {Units.Speed(storm.SpeedKmh)}" +
+                (storm.SpeedKmh is { } kmh && storm.BearingDeg is { } deg
+                    ? $"(moving {CompassPoint(deg)} at {Units.Speed(kmh)}"
+                    : "(motion not tracked yet") +
                 (extras.Count > 0 ? $"; {string.Join(", ", extras)})" : ")"),
                 storm.MesoRadiusKm is not null));
         }

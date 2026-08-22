@@ -836,3 +836,35 @@ smoothing slider still at 0, 60 fps, 1.1–2.0 ms uploads.
 
 Note: the Smoothing slider's 0 end now means bilinear, not raw gates. There is currently no
 way to see unfiltered gate blocks.
+
+## Storm motion: 0 mph was two claims nobody measured
+
+Reported from the app: clicking a storm showed its distance but "0 MPH". The decoder was
+fine — live NST pulled for eight sites showed most cells carrying tracks — and the bug was
+in deriving motion from them. Two bugs, in fact.
+
+- [x] **A forecast point sitting on the cell is not motion.** The algorithm emits a cell the
+      first time it sees one with `fc0` exactly equal to the current position. The old code
+      took the distance between two identical points, got zero, and rendered "Moving N (0°)
+      at 0 mph" — a claim that the storm was measured stationary *and* measured to be heading
+      north. `SpeedKmh`/`BearingDeg` are nullable now and the popup says the motion is not
+      tracked yet, the same distinction as voxel 0 meaning unsampled
+- [x] **The past-position fallback was on the wrong clock.** The first forecast step is 15
+      minutes out by definition of the product; the most recent past position is one *volume
+      scan* back. Both were read as 15 minutes. Measured against the forecast leg on 24
+      tracked cells across four sites, the past leg came out at a median of **0.30** of the
+      real speed — 4.5 minutes, exactly the VCP 12/212 scan time. Those cells were reporting
+      about a third of how fast they were moving
+- [x] `VolumeCoveragePattern.NominalScanMinutes` derives the interval from the VCP, which
+      `Level3Product` already carries, rather than hardcoding one. Precipitation VCPs sweep in
+      4.5–6 minutes, clear-air ones take 7–10
+- [x] A leg under 250 m — one quarter-kilometre centroid step, the resolution positions are
+      reported at — is rounding rather than movement, so a degenerate forecast now falls
+      *through* to a usable past track instead of winning with a zero
+- [x] The wrong speeds were also feeding the average storm motion behind storm-relative
+      velocity, the projection cones and the proximity alerts
+- [x] Motion logic extracted to `StormTrackMotion` because it was private inside a controller
+      that needs a live `MapView` and so could not be tested at all. Sixteen tests
+
+**Gate:** [PASSED] 355/355 tests, 0 warnings. Verified against live NST from KMTX, KEAX,
+KMLB, KAMX, KTLX and KFWS; the 0.30 ratio is reproducible from that dump.
