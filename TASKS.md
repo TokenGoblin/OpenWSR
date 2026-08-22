@@ -782,3 +782,17 @@ quality mask and the measurement harnesses. Eight findings, all applied.
 **Gate:** [PASSED] 333/333 tests, 0 warnings. The shear and smoothing harnesses were both
 re-run against the fixed index; the new `AzimuthIndexTests` were checked to fail against the
 old one.
+
+## Home marker sized at the wrong zoom
+
+- [x] The home triangle was drawn ~80 km across once the camera was over a single site.
+      `RebuildHomeGeometry` sizes it in pixels (`6 * MetersPerPixel`) but ran only at startup,
+      on setting home, and on settings-apply — never from the 500 ms tick that rebuilds the
+      storm, lightning and MRMS overlays when the zoom moves. So it kept whatever metre size
+      it was handed during startup, which is a national-zoom size
+- [x] `NotifyHomeViewChanged` joins that tick on the same 5 % threshold the others use. The
+      radius ring is a true ground extent and was always right; only the marker moves
+
+**Gate:** [PASSED] 333/333 tests. This is the failure mode `CLAUDE.md` warns about under
+"Overlay symbols are sized in screen pixels" — the home marker was the one symbol that had
+the multiply but not the rebuild.

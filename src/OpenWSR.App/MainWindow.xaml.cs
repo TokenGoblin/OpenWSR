@@ -39,6 +39,7 @@ public partial class MainWindow : Window
     private readonly DrawingController _drawing;
     private readonly VolumeController _volume;
     private OverlayGeometry? _homeGeometry;
+    private double _homeBuiltAtMetresPerPixel;
     private bool _suppressSliderEvents;
     private bool _suppressModeEvents;
     private bool _suppressDayEvents;
@@ -265,6 +266,7 @@ public partial class MainWindow : Window
             _storms.NotifyViewChanged();
             _lightning.NotifyViewChanged();
             _mrms.NotifyViewChanged();
+            NotifyHomeViewChanged();
         };
         _statusTimer.Start();
 
@@ -949,11 +951,31 @@ public partial class MainWindow : Window
         double mercatorRadius = _settings.AlertRadiusKm * 1000.0 / Math.Cos(lat * Math.PI / 180.0);
         StormOverlayController.AddCircle(geometry, (centre.X, centre.Y), mercatorRadius, color, 2f);
         // The marker itself is a symbol, so it is sized in pixels, not metres.
-        double s = 6 * _mapView.Camera.Snapshot().MetersPerPixel;
+        _homeBuiltAtMetresPerPixel = _mapView.Camera.Snapshot().MetersPerPixel;
+        double s = 6 * _homeBuiltAtMetresPerPixel;
         geometry.FillTriangles.Add((centre.X - s, centre.Y - s, color));
         geometry.FillTriangles.Add((centre.X, centre.Y + s, color));
         geometry.FillTriangles.Add((centre.X + s, centre.Y - s, color));
         _homeGeometry = geometry;
+    }
+
+    /// <summary>
+    /// Rebuild the home marker when the zoom moves materially — the same contract the storm,
+    /// lightning and MRMS overlays have, and for the same reason: the triangle is a symbol
+    /// sized in screen pixels, so its metre extent is only correct for the zoom it was built
+    /// at. Left out of the tick, it kept whatever size it was given during startup, which is
+    /// a national-zoom size — an 80 km triangle once the camera is over a single site. The
+    /// radius ring is a true ground extent and is right at any zoom; only the marker moves.
+    /// </summary>
+    private void NotifyHomeViewChanged()
+    {
+        if (_homeGeometry is null) return;
+
+        double now = _mapView.Camera.Snapshot().MetersPerPixel;
+        if (Math.Abs(now - _homeBuiltAtMetresPerPixel) / Math.Max(now, 1e-6) <= 0.05) return;
+
+        RebuildHomeGeometry();
+        ComposeOverlay();
     }
 
     private void OnThreat(Threat threat)
