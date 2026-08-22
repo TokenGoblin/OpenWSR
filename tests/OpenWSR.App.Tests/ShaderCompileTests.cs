@@ -11,4 +11,7 @@ public sealed class ShaderCompileTests
 {
     [Fact]
     public void TheVolumeShadersCompile() => VolumeRenderer.ValidateShaders();
+
+    [Fact]
+    public void TheSweepShadersCompile() => RadarSweepRenderer.ValidateShaders();
 }

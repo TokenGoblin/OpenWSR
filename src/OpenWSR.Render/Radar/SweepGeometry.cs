@@ -10,11 +10,23 @@ namespace OpenWSR.Render.Radar;
 /// </summary>
 public sealed class SweepGeometry
 {
-    public const float NoData = -1e30f;
-    public const float RangeFolded = -2e30f;
-
     public required float[] EdgeAzimuthsRad;  // radialCount + 1, ascending
-    public required float[] Data;             // radialCount * gateCount, sentinel-encoded
+
+    /// <summary>
+    /// The field the GPU filters: each gate's value multiplied by whether it has one, so an
+    /// unmeasured gate contributes 0 to a weighted sum rather than a sentinel that would
+    /// poison it. Paired with <see cref="Mask"/>, which carries the weights.
+    /// </summary>
+    public required float[] Values;           // radialCount * gateCount
+
+    /// <summary>
+    /// Two bytes a gate: 255 where the gate measured something, then 255 where it was range
+    /// folded. Filtering these alongside <see cref="Values"/> is what lets a bilinear tap or
+    /// a mip level come out as a mean over the gates that measured something, divided by how
+    /// much of the footprint they covered — which the old single sentinel-encoded channel
+    /// could not express, because there is no value that averages correctly with real data.
+    /// </summary>
+    public required byte[] Mask;              // radialCount * gateCount * 2
     public required int RadialCount;
     public required int GateCount;
     public required float FirstGateM;
@@ -49,25 +61,32 @@ public sealed class SweepGeometry
         edges[0] = edges[n] - 2f * MathF.PI;
         _ = wrapMid;
 
-        var data = new float[n * gates];
+        // Built here rather than at upload time because this runs on the thread pool and
+        // the upload runs on the render thread, where the same loop over 1.3 million gates
+        // measured 9 ms — a hitch on every new volume, and on every frame of an archive loop.
+        var values = new float[n * gates];
+        var mask = new byte[n * gates * 2];
         for (int j = 0; j < n; j++)
         {
             int src = order[j];
             var srcSpan = sweep.Data.AsSpan(src * gates, gates);
-            var dstSpan = data.AsSpan(j * gates, gates);
+            int row = j * gates;
             for (int g = 0; g < gates; g++)
             {
                 float v = srcSpan[g];
-                dstSpan[g] = float.IsNaN(v)
-                    ? (sweep.RangeFoldedMask[src * gates + g] ? RangeFolded : NoData)
-                    : v;
+                bool valid = !float.IsNaN(v);
+                values[row + g] = valid ? v : 0f;
+                mask[(row + g) * 2] = valid ? (byte)255 : (byte)0;
+                mask[(row + g) * 2 + 1] =
+                    !valid && sweep.RangeFoldedMask[src * gates + g] ? (byte)255 : (byte)0;
             }
         }
 
         return new SweepGeometry
         {
             EdgeAzimuthsRad = edges,
-            Data = data,
+            Values = values,
+            Mask = mask,
             RadialCount = n,
             GateCount = gates,
             FirstGateM = sweep.FirstGateM,

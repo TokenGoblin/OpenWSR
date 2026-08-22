@@ -796,3 +796,43 @@ old one.
 **Gate:** [PASSED] 333/333 tests. This is the failure mode `CLAUDE.md` warns about under
 "Overlay symbols are sized in screen pixels" — the home marker was the one symbol that had
 the multiply but not the rebuild.
+
+## Radar field: hardware filtering instead of a point sample
+
+Asked for "anti-aliasing like GPUs use" on the map. MSAA is the wrong tool for it and the
+investigation is the useful part: each radial is an instanced triangle strip and adjacent
+gates share edges, so the colour step between gates falls in the rasterised interior where
+coverage is 100 %. There is no geometric edge for MSAA to resolve. What the field needed was
+filtering, which the sentinel encoding made impossible.
+
+- [x] **The field ships as two planes now.** `Values` holds value×valid and `Mask` holds
+      (valid, rangeFolded). Premultiplying is the whole trick: a bilinear tap and a mip level
+      both reduce to a mean over the gates that measured something, divided by how much of the
+      footprint they covered. A single sentinel-encoded plane cannot be filtered at all —
+      there is no sentinel value that averages correctly with real data, which is why point
+      sampling was the only safe thing to do with it
+- [x] The `NoData`/`RangeFolded` constants and both magic thresholds in the shader are gone;
+      validity is explicit
+- [x] Full mip chain via `GenerateMips` — a box filter over premultiplied planes is exactly
+      the weighted average wanted — sampled 16× anisotropic, because a pixel's footprint in
+      gate/radial space is wildly elongated and an isotropic filter has to pick a mip for the
+      worse axis and blurs the other away with it
+- [x] **`o.uv.y` was constant across each wedge**, so every pixel sampled one texel row and no
+      amount of filtering could blend across azimuth. It walks from one radial boundary to the
+      next now, which also fixes the LOD derivative at the seam between two instances
+- [x] Echo edges were a hard `discard` and are feathered by coverage — the actual antialiasing
+      of the boundary, and free because coverage is already in hand
+- [x] **Upload went 40.2 ms → 1.1 ms**, measured rather than guessed. Instrumenting it showed
+      `GenerateMips` free and the whole cost in the CPU split: keeping the textures across
+      uploads removed the mip-chain allocation, and moving the split into `SweepGeometry.Build`
+      took the rest off the render thread. Costs ~50 % more per archive-loop frame (4 bytes
+      plus 2, against 4) — the trade for not hitching on every new volume
+- [x] The sweep shader had no compile test; only the volume one did. `ValidateShaders` and
+      five tests on the encoding, including the property the design rests on: four gates with
+      two holes must average to 30, not 15
+
+**Gate:** [PASSED] 339/339 tests, 0 warnings. Verified live on KMTX — smooth field with the
+smoothing slider still at 0, 60 fps, 1.1–2.0 ms uploads.
+
+Note: the Smoothing slider's 0 end now means bilinear, not raw gates. There is currently no
+way to see unfiltered gate blocks.
