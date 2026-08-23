@@ -43,7 +43,7 @@ satellite layers ship in hours instead of behind a full GRIB2/NetCDF pipeline.
 | Endpoint | Provides |
 |---|---|
 | `mesonet.agron.iastate.edu/cache/tile.py/1.0.0/n0q-{ts}/{z}/{x}/{y}.png` | National reflectivity mosaic (XYZ) |
-| `mesonet.agron.iastate.edu/cache/tile.py/1.0.0/goes_east_conus_ch13/{z}/{x}/{y}.png` | GOES-East infrared (channel 13) |
+| `mesonet.agron.iastate.edu/cache/tile.py/1.0.0/goes_east_conus_ch13/{z}/{x}/{y}.png` | GOES-East infrared (channel 13) — **fallback only**, see ABI below |
 | `mesonet.agron.iastate.edu/api/1/spc_watch_outline.geojson` | SPC watch boxes |
 | `mesonet.agron.iastate.edu/api/1/nws/spc_mcd.geojson` | Mesoscale discussions |
 | `mesonet.agron.iastate.edu/geojson/lsr.geojson` | Local storm reports |
@@ -118,6 +118,37 @@ you need the pages again.
 the NCEI HOMR station table (all 163 WSR-88D sites with coordinates and elevations). The
 shipping site table is embedded in `OpenWSR.Ingest`; this is the source it came from.
 
+
+## GOES ABI imagery
+
+The cloud layer, decoded from the source rather than from anyone's pre-rendered tiles. Same
+bucket as GLM.
+
+```
+https://noaa-goes19.s3.amazonaws.com/ABI-L2-CMIPC/{yyyy}/{ddd}/{HH}/
+    OR_ABI-L2-CMIPC-M6C{bb}_G19_s{start}_e{end}_c{created}.nc
+```
+
+`CMIPC` is the CONUS sector: five minutes, 2 km, about 4 MB for one band. `CMIPF` is full
+disk at ten minutes and much larger, for ground this app never shows. The `M6` is the scan
+mode and varies with the schedule, so a prefix filter must stop before it; the band is the
+two digits after `C`.
+
+| Band | What it is | Resolution |
+|---|---|---|
+| 13 | Clean longwave IR, 10.3 µm — cloud tops day and night | 2 km |
+| 2 | Red visible, 0.64 µm — daylight only, four times the detail | 0.5 km |
+| 1, 3 | Blue and veggie — needed with 2 to synthesise a true-colour green | 1 km |
+
+Everything needed to interpret the pixels is an **attribute**, not data: `scale_factor`,
+`add_offset`, `valid_range`, `_Unsigned`, and the whole projection on `goes_imager_projection`.
+See the `MiniHdf5` notes — attributes are stored densely in a fractal heap, not in the object
+header.
+
+The grid is a **geostationary perspective projection**, not a map projection: its coordinates
+are scan angles in radians and most of a full-disk grid is empty space. The corners of the
+CONUS rectangle are off the limb of the earth, so a bounding box built from the four corners
+is built partly from a non-place — walk the edges instead.
 
 ## GOES lightning (GLM)
 

@@ -179,11 +179,23 @@ public sealed class MapView : IDisposable
     {
         /// <summary>Under the radar sweep — model fields, mosaics.</summary>
         Field = 0,
+
         /// <summary>Over the radar sweep — derived products read against the echo.</summary>
         Analysis = 1,
+
+        /// <summary>
+        /// Below everything else: cloud imagery, drawn where the satellite tiles are.
+        ///
+        /// Separate from <see cref="Field"/> on purpose. Field's claimants — the forecast
+        /// raster, the MRMS composite — are the same quantity as the radar and are mutually
+        /// exclusive with each other by construction. Clouds are a different measurement
+        /// entirely and the whole point is to see them *under* precipitation, so sharing a
+        /// slot would make the two turn each other off.
+        /// </summary>
+        Satellite = 2,
     }
 
-    private const int OverlaySlotCount = 2;
+    private const int OverlaySlotCount = 3;
     private readonly ImageOverlay?[] _imageOverlays = new ImageOverlay?[OverlaySlotCount];
     private readonly ImageOverlay?[] _uploadedImages = new ImageOverlay?[OverlaySlotCount];
     private readonly Vortice.Direct3D11.ID3D11Texture2D?[] _imageTextures =
@@ -636,6 +648,9 @@ public sealed class MapView : IDisposable
 
             quads.Begin();
             DrawTiles(cam, textures, quads, _fetcher);
+            // Native ABI when it is loaded, pre-rendered tiles otherwise. Both draw here,
+            // under the radar layers: cloud context, not the subject.
+            DrawImageOverlay(OverlaySlot.Satellite, cam, quads, device);
             // Satellite sits under the radar layers: cloud context, not the subject.
             //
             // Capped at the sensor's real resolution rather than at what the server will

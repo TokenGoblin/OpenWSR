@@ -1023,3 +1023,35 @@ lightning never caught it. In two a chunk is a **tile** spanning many rows of th
 and has to be scattered a row at a time. The old code laid each whole tile along one row and
 left the rest of the array at zero, which for scaled data decodes as a uniform field of the
 `add_offset` — 89.62 K everywhere — rather than as anything that looks broken.
+
+### Phase 1a/1d/1e — fetch, reproject, and put it on the map
+
+- [x] `AbiClient` reads `ABI-L2-CMIPC` from `noaa-goes19`, the same bucket GLM already uses.
+      CONUS is the sector worth having: five minutes, 2 km, about 4 MB a band. The scan-mode
+      digit varies with the schedule, so a key prefix has to stop before it and the band is
+      matched from the `C{nn}` token
+- [x] A third overlay slot, `Satellite`, drawn below everything. Deliberately not `Field`:
+      Field's claimants are all the same quantity as the radar and are mutually exclusive by
+      construction, whereas the whole point of clouds is seeing them *under* precipitation.
+      Sharing a slot would have made the two turn each other off
+- [x] `SatelliteController` resamples by walking the output raster and projecting each pixel
+      back — the same reverse mapping the HRRR raster and the 3D volume use, and for the same
+      reason. This source stretches hard: it is angles from a camera, so a pixel over Canada
+      covers several times the ground one over the Gulf does
+- [x] **The bounding box comes from the edges, not the corners.** Three of the four corners of
+      the CONUS rectangle are on the earth and one is not, which is exactly the shape of trap
+      that survives review — a corner-based box looks like it works
+- [x] The infrared enhancement leaves warm ground transparent. An IR image has a reading at
+      every pixel, so painting all of them buries the basemap under a grey sheet; what the
+      layer is for is where the cloud is. Grey to about −40 °C, then the colour ramp every
+      broadcast product uses for glaciated tops
+- [x] The tile layer is kept as the fallback and draws beneath the native raster, so a bucket
+      outage degrades to somebody's pictures rather than to nothing
+- [x] Eight raster tests, on top of the pyproj-checked projection: the box covers CONUS, a
+      pixel over Utah carries the temperature the source has at that ground, opacity rises
+      monotonically as tops get colder, and deep cold is coloured where ordinary cloud is grey
+- [x] Verified live: `GOES-East IR 03:42Z (3 min old)`, against the tile layer's tens of
+      minutes
+
+**Still open in this phase group:** Phase 2 (GeoColor-style day/night blend) and Phase 3
+(TDWR).

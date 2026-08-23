@@ -360,10 +360,13 @@
                                        Margin="18,0,0,4" Text="" />
 
                             <CheckBox x:Name="FilterSatellite" AutomationProperties.Name="Satellite" Content="Satellite (GOES IR)"
-                                      ToolTip="Infrared cloud tops from GOES-East, under the radar layers"
+                                      ToolTip="Infrared cloud tops from GOES-East ABI, decoded from the source every five minutes and drawn under the radar layers"
                                       Checked="SatelliteFilter_Changed" Unchecked="SatelliteFilter_Changed" />
                             <Slider x:Name="SatelliteOpacitySlider" AutomationProperties.Name="Satellite opacity" Minimum="0" Maximum="100" Value="60"
-                                    Margin="18,0,0,4" ValueChanged="SatelliteOpacity_Changed" />
+                                    Margin="18,0,0,0" ValueChanged="SatelliteOpacity_Changed" />
+                            <TextBlock x:Name="SatelliteNoteText" FontSize="10.5" FontStyle="Italic"
+                                       TextWrapping="Wrap" Foreground="{StaticResource TextDim}"
+                                       Margin="18,0,0,4" Text="" />
 
                             <CheckBox x:Name="FilterLightning" AutomationProperties.Name="Lightning"
                                       Content="Lightning (GOES GLM)"

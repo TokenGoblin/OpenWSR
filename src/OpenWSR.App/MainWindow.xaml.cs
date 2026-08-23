@@ -25,6 +25,7 @@ public partial class MainWindow : Window
     private readonly InspectorTools _inspector;
     private readonly StormOverlayController _storms;
     private readonly ThreatMonitor _threats = new();
+    private SatelliteController? _satellite;
     private readonly OutlookOverlayController _outlooks;
     private readonly FutureRadarController _future;
     private readonly PlacefileController _placefiles;
@@ -187,6 +188,18 @@ public partial class MainWindow : Window
         });
         _lightning.ErrorRaised += text => Dispatcher.BeginInvoke(() => ReportError(text));
 
+        _satellite = new SatelliteController(_mapView);
+        _satellite.StatusChanged += text => Dispatcher.BeginInvoke(() =>
+        {
+            Report(text);
+            SatelliteNoteText.Text = text;
+        });
+        _satellite.ErrorRaised += text => Dispatcher.BeginInvoke(() =>
+        {
+            ReportError(text);
+            SatelliteNoteText.Text = "Falling back to pre-rendered tiles.";
+        });
+
         _mrms = new MrmsController(_mapView);
         _mrms.StatusChanged += text => Dispatcher.BeginInvoke(() =>
         {
@@ -300,6 +313,7 @@ public partial class MainWindow : Window
             _tracks.Dispose();
             _lightning.Dispose();
             _mrms.Dispose();
+            _satellite?.Dispose();
             _future.Dispose();
             _outlooks.Dispose();
             _geocoder.Dispose();
@@ -1131,16 +1145,26 @@ public partial class MainWindow : Window
             _mapView.MosaicOpacity = (float)(e.NewValue / 100.0);
     }
 
+    /// <summary>
+    /// Native ABI is the layer; the pre-rendered tiles are the fallback. Both are switched
+    /// together so a bucket outage degrades to the tiles rather than to nothing — the tile
+    /// layer draws under the native raster, so where both are present the good one wins and
+    /// where only tiles arrive the map still has clouds on it.
+    /// </summary>
     private void SatelliteFilter_Changed(object sender, RoutedEventArgs e)
     {
-        if (_mapView is not null)
-            _mapView.SatelliteEnabled = FilterSatellite.IsChecked == true;
+        if (_mapView is null || _satellite is null) return;
+        bool on = FilterSatellite.IsChecked == true;
+        _mapView.SatelliteEnabled = on;
+        if (on) _satellite.Enable(); else _satellite.Disable();
+        SatelliteNoteText.Text = on ? "Fetching…" : "";
     }
 
     private void SatelliteOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         if (_mapView is not null)
             _mapView.SatelliteOpacity = (float)(e.NewValue / 100.0);
+        _satellite?.SetOpacity((float)(e.NewValue / 100.0));
     }
 
     private void SiteMarkers_Changed(object sender, RoutedEventArgs e)
