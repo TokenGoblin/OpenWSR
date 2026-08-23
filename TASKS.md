@@ -1124,3 +1124,36 @@ the storm field: six cells in an 80 km radius all classified **passing wide**, h
 a tray balloon. Widening the direct-hit radius over the same weather flipped the heading to
 `APPROACHING · 6 · 1 passing wide` with the direct rows carrying no compass letter, because a
 direct hit does not pass to a side. Settings were backed up and restored.
+
+### Phase 2c — the day/night composite
+
+- [x] Daylight decides the fetch as well as the pixel. `AnyDaylightOverConus` samples across
+      the sector rather than at its centre, because CONUS spans about three hours of longitude
+      and at dawn one edge is lit while the other is dark — a centre reading would drop the
+      visible bands for half the country. Dark everywhere means the single 3 MB infrared band
+      instead of 40-plus for all sixteen
+- [x] `SolarPosition.DaylightFraction` cross-fades the two per pixel, so the terminator is a
+      band rather than a line sweeping westward across the map
+- [x] **The satellite here is an overlay, not a basemap, and that changes the colour science.**
+      GeoColor paints the whole earth because there the satellite *is* the base image. Here
+      there is an OSM basemap underneath carrying the roads and boundaries a radar view is read
+      against, so true-colour land would hide the map. True colour is kept, but alpha falls
+      away over clear ground
+- [x] Green is synthesised — ABI has no green detector — as the community's hybrid,
+      `0.45·red + 0.10·veggie + 0.45·blue`. A plain red/blue average leaves vegetation brown
+- [x] **Brightness alone is not a cloud test, and the first version got this wrong.** Rendering
+      a real midday CONUS scene showed the desert southwest washed tan across the whole
+      basemap: desert reflectance clears any threshold cloud does. Cloud is also spectrally
+      *flat* across 0.47, 0.64 and 0.86 µm — which is why it looks white — where desert is
+      markedly redder than it is blue. Alpha is brightness × neutrality now, and the wash is
+      gone
+- [x] Snow survives that and always will. It is genuinely bright and genuinely neutral, and
+      three visible bands cannot separate it from cloud. There is a test asserting it shows,
+      so the limitation is recorded rather than discovered later
+
+**Gate:** [PASSED] 492/492 tests, 0 warnings. The day composite was verified by rendering a
+real midday CONUS scan through the production path and looking at it — the night path cannot
+show it, and waiting for daylight was not the way to find the desert problem. Cross-checked
+against the Phase 1 raster, whose placement over the basemap was already verified in the app,
+to confirm the sector footprint was unchanged. The night path was verified live in the app:
+`GOES-East IR 05:17Z (2 min old)`, correctly choosing the 3 MB single-band fetch.

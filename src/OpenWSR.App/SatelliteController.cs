@@ -78,10 +78,19 @@ public sealed class SatelliteController : IDisposable
     private async Task RefreshAsync()
     {
         int generation = ++_generation;
+        bool daylit = AnyDaylightOverConus(DateTime.UtcNow);
         try
         {
-            StatusChanged?.Invoke("Satellite: fetching GOES-East infrared…");
-            var product = await _client.GetLatestAsync(AbiClient.CleanInfrared);
+            StatusChanged?.Invoke(daylit
+                ? "Satellite: fetching GOES-East imagery…"
+                : "Satellite: fetching GOES-East infrared…");
+
+            // At night the reflective bands are noise, so there is nothing to fetch them for:
+            // one band is 3 MB against 40-plus for all sixteen. This is the same decision the
+            // blend makes per pixel, taken once for the whole download.
+            var product = daylit
+                ? await _client.GetLatestMultibandAsync()
+                : await _client.GetLatestAsync(AbiClient.CleanInfrared);
             if (generation != _generation || !_enabled) return;
             if (product is null)
             {
@@ -91,10 +100,19 @@ public sealed class SatelliteController : IDisposable
                 return;
             }
 
-            var (overlay, time) = await Task.Run(() =>
+            var (overlay, time, lit) = await Task.Run(() =>
             {
-                var image = AbiFile.Decode(product.NetCdf);
-                return (Rasterize(image, _opacity), image.TimeUtc);
+                if (!daylit)
+                {
+                    var infrared = AbiFile.Decode(product.NetCdf);
+                    return (Rasterize(infrared, null, _opacity), infrared.TimeUtc, false);
+                }
+
+                var bands = AbiFile.DecodeMultiband(product.NetCdf, 1, 2, 3, AbiClient.CleanInfrared);
+                var visible = new VisibleBands(
+                    bands[1].Values, bands[2].Values, bands[3].Values);
+                var image = bands[AbiClient.CleanInfrared];
+                return (Rasterize(image, visible, _opacity), image.TimeUtc, true);
             });
             if (generation != _generation || !_enabled) return;
 
@@ -103,7 +121,8 @@ public sealed class SatelliteController : IDisposable
             _mapView.SetImageOverlay(MapView.OverlaySlot.Satellite, overlay);
 
             double age = (DateTime.UtcNow - time).TotalMinutes;
-            StatusChanged?.Invoke($"Satellite: GOES-East IR {time:HH:mm}Z ({age:F0} min old)");
+            StatusChanged?.Invoke(
+                $"Satellite: GOES-East {(lit ? "visible + IR" : "IR")} {time:HH:mm}Z ({age:F0} min old)");
         }
         catch (Exception ex)
         {
@@ -113,13 +132,39 @@ public sealed class SatelliteController : IDisposable
     }
 
     /// <summary>
+    /// Whether any part of the sector is lit well enough for the reflective bands to say
+    /// anything.
+    ///
+    /// Sampled across CONUS rather than taken at its centre: the sector spans about three
+    /// hours of longitude, so around dawn and dusk one edge is in daylight while the other is
+    /// still dark, and a centre reading would drop the visible bands for the half of the
+    /// country that still has them.
+    /// </summary>
+    internal static bool AnyDaylightOverConus(DateTime utc)
+    {
+        for (double lat = 25; lat <= 49; lat += 8)
+            for (double lon = -125; lon <= -67; lon += 8)
+                if (SolarPosition.DaylightFraction(SolarPosition.ZenithDeg(lat, lon, utc)) > 0.01)
+                    return true;
+        return false;
+    }
+
+    /// <summary>
     /// Resample the fixed grid into Mercator by walking the output raster and projecting each
     /// pixel back — the same reverse mapping the HRRR raster and the 3D volume use, and for
     /// the same reason: a forward splat leaves holes wherever the source stretches, and this
     /// source stretches a great deal. A pixel over Canada covers several times the ground a
     /// pixel over the Gulf does, because the grid is angles from a camera rather than metres.
     /// </summary>
-    internal static MapView.ImageOverlay Rasterize(AbiImage image, float opacity)
+    internal static MapView.ImageOverlay Rasterize(AbiImage image, float opacity) =>
+        Rasterize(image, null, opacity);
+
+    /// <summary>
+    /// The same resample, compositing the reflective bands over the infrared where the sun is
+    /// up. <paramref name="visible"/> is null at night or when only the infrared was fetched.
+    /// </summary>
+    internal static MapView.ImageOverlay Rasterize(
+        AbiImage image, VisibleBands? visible, float opacity)
     {
         var projection = new Geostationary(
             image.Projection.PerspectivePointHeightM,
@@ -153,10 +198,29 @@ public sealed class SatelliteController : IDisposable
                 int j = (int)Math.Round((scan.Y - y0) / dy);
                 if (i < 0 || i >= image.Width || j < 0 || j >= image.Height) continue;
 
-                float kelvin = image.Values[j * image.Width + i];
+                int index = j * image.Width + i;
+                float kelvin = image.Values[index];
                 if (float.IsNaN(kelvin)) continue;
 
                 var (r, g, b, a) = InfraredColour(kelvin);
+
+                // Where the sun is up, cross-fade to what the reflective bands see. The two
+                // halves are different measurements — emitted heat and reflected sunlight —
+                // and the daylight fraction is the only honest way to weigh them.
+                if (visible is { } bands)
+                {
+                    double daylight = SolarPosition.DaylightFraction(
+                        SolarPosition.ZenithDeg(lat, lon, image.TimeUtc));
+                    if (daylight > 0)
+                    {
+                        var day = VisibleColour(bands, index);
+                        r = Mix(r, day.R, daylight);
+                        g = Mix(g, day.G, daylight);
+                        b = Mix(b, day.B, daylight);
+                        a = Mix(a, day.A, daylight);
+                    }
+                }
+
                 if (a == 0) continue;
                 int target = (row * RasterSize + column) * 4;
                 bgra[target + 0] = b;
@@ -245,6 +309,66 @@ public sealed class SatelliteController : IDisposable
             _ => Ramp((u - 0.75f) / 0.25f, (255, 220, 0), (255, 40, 200)),
         };
     }
+
+    /// <summary>The three reflective bands of one scan, already on a shared grid.</summary>
+    internal sealed record VisibleBands(float[] Blue, float[] Red, float[] Veggie);
+
+    /// <summary>
+    /// Daytime colour: what the eye would see, with clear ground left transparent.
+    ///
+    /// This departs from CIRA's GeoColor deliberately, and the reason is what sits underneath.
+    /// In GeoColor the satellite <em>is</em> the base image, so painting the whole earth is
+    /// the point. Here it is an overlay on a real vector basemap — roads, boundaries, terrain,
+    /// the things a radar viewer is read against — and painting true-colour land over that
+    /// hides the map. So the colour is true-colour where there is something in the air and the
+    /// alpha falls away over clear ground.
+    ///
+    /// ABI has no green detector. Green is synthesised from the other three as
+    /// 0.45·red + 0.10·veggie + 0.45·blue, the hybrid the GOES-R community settled on: a
+    /// straight red/blue average leaves vegetation an unconvincing brown, and leaning harder
+    /// on the 0.86 µm band turns forests luminous green.
+    /// </summary>
+    internal static (byte R, byte G, byte B, byte A) VisibleColour(VisibleBands bands, int index)
+    {
+        float blue = bands.Blue[index], red = bands.Red[index], veggie = bands.Veggie[index];
+        if (float.IsNaN(blue) || float.IsNaN(red) || float.IsNaN(veggie)) return (0, 0, 0, 0);
+
+        float green = 0.45f * red + 0.10f * veggie + 0.45f * blue;
+
+        // Reflectance is linear in radiance; eyes are not. The square-root stretch is what
+        // stops everything but cloud tops reading as near-black.
+        byte r = Stretch(red), g = Stretch(green), b = Stretch(blue);
+
+        // Cloud is what is worth drawing, and cloud is bright: ground reflectance runs to
+        // about 0.2 over vegetation and 0.35 over desert, where cloud goes well past 0.5.
+        const float clearGround = 0.22f, solidCloud = 0.55f;
+        float brightness = 0.4f * red + 0.4f * blue + 0.2f * veggie;
+        float bright = Math.Clamp((brightness - clearGround) / (solidCloud - clearGround), 0f, 1f);
+
+        // Brightness alone is not enough, because bright desert clears that bar. Cloud is also
+        // spectrally *flat* — it scatters all three wavelengths about equally, which is why it
+        // looks white — while ground is not: desert is markedly redder than it is blue, and
+        // vegetation is several times brighter at 0.86 µm than at 0.64. Weighting by how
+        // neutral the pixel is separates the two, and it is the same reasoning behind the
+        // colour being kept at all rather than everything cloud-like being painted white.
+        //
+        // Snow survives this, being genuinely bright and genuinely neutral. That is a real
+        // ambiguity in the measurement rather than a shortcut here — snow and cloud look alike
+        // to these three bands — and it shows up as a fainter wash rather than solid cloud.
+        float peak = Math.Max(red, Math.Max(blue, veggie));
+        float trough = Math.Min(red, Math.Min(blue, veggie));
+        float neutrality = peak <= 0 ? 0 : 1f - (peak - trough) / peak;
+        float flat = Math.Clamp((neutrality - 0.55f) / (0.95f - 0.55f), 0f, 1f);
+
+        return (r, g, b, (byte)(255 * bright * flat));
+    }
+
+    /// <summary>Gamma 2.2, which is the sRGB curve the value is about to be shown through.</summary>
+    private static byte Stretch(float reflectance) =>
+        (byte)(255 * Math.Clamp(MathF.Pow(Math.Clamp(reflectance, 0f, 1f), 1f / 2.2f), 0f, 1f));
+
+    private static byte Mix(byte night, byte day, double daylight) =>
+        (byte)Math.Clamp(night + (day - night) * daylight, 0, 255);
 
     private static (byte R, byte G, byte B, byte A) Ramp(
         float t, (int R, int G, int B) from, (int R, int G, int B) to)

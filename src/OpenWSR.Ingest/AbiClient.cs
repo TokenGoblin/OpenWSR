@@ -87,6 +87,49 @@ public sealed class AbiClient : IDisposable
         return null;
     }
 
+    /// <summary>
+    /// The newest CONUS <b>multiband</b> image: all sixteen bands on one 2 km grid.
+    ///
+    /// Larger than one band in absolute terms and smaller than the one band that matters.
+    /// Band 2 is published at 0.5 km and runs to 65 MB at midday, four times finer than a
+    /// display raster can use; this is 57 MB for everything at the resolution actually
+    /// wanted, co-registered, in one request.
+    /// </summary>
+    public async Task<AbiProduct?> GetLatestMultibandAsync(
+        string bucket = EastBucket, CancellationToken ct = default)
+    {
+        for (int hoursBack = 0; hoursBack <= 2; hoursBack++)
+        {
+            var hour = DateTime.UtcNow.AddHours(-hoursBack);
+            string prefix = $"ABI-L2-MCMIPC/{hour:yyyy}/{hour.DayOfYear:D3}/{hour:HH}/";
+
+            string? newest = null;
+            var request = new ListObjectsV2Request { BucketName = bucket, Prefix = prefix };
+            do
+            {
+                var response = await _s3.ListObjectsV2Async(request, ct);
+                foreach (var o in response.S3Objects ?? [])
+                    if (newest is null || StringComparer.Ordinal.Compare(o.Key, newest) > 0)
+                        newest = o.Key;
+                request.ContinuationToken = response.NextContinuationToken;
+            } while (request.ContinuationToken is not null);
+
+            if (newest is null) continue;
+
+            using var data = await _s3.GetObjectAsync(bucket, newest, ct);
+            using var buffer = new MemoryStream();
+            await data.ResponseStream.CopyToAsync(buffer, ct);
+
+            var start = StartTimeOf(newest) ?? DateTime.UtcNow;
+            Log.Debug("ABI multiband {Key}: {Bytes} bytes, scan start {Time:HH:mm:ss}Z",
+                newest, buffer.Length, start);
+            return new AbiProduct(buffer.ToArray(), start, newest);
+        }
+
+        Log.Warning("ABI: no multiband imagery in the last three hours of {Bucket}", bucket);
+        return null;
+    }
+
     /// <summary>The band number out of the <c>-M6C13_</c> token, or -1 if the key is not one.</summary>
     internal static int BandOf(string key)
     {

@@ -236,6 +236,28 @@ composite, and anything gridded added later. They are mutually exclusive by cons
 enabling MRMS leaves forecast mode, and entering forecast mode switches MRMS off. Native
 MRMS and the tile mosaic are the same field, so each turns the other off too.
 
+**The satellite is an overlay, not a basemap, and that changes the colour science.** CIRA's
+GeoColor paints the whole earth because there the satellite *is* the base image. Here there is
+an OSM basemap underneath carrying the roads and boundaries a radar view is read against, so
+painting true-colour land hides the map. The day composite therefore keeps true colour but
+lets the alpha fall away over clear ground.
+
+Deciding what is cloud takes two things, not one. Brightness alone lets desert through — its
+reflectance clears any threshold cloud does. Cloud is also spectrally **flat** across 0.47,
+0.64 and 0.86 µm, which is why it looks white, where desert is markedly redder than it is blue
+and vegetation is several times brighter in the near infrared. Alpha is brightness × neutrality.
+Snow survives that and always will: it is genuinely bright and genuinely neutral, and three
+visible bands cannot separate it from cloud. ABI has no green detector, so green is the
+community's hybrid, `0.45·red + 0.10·veggie + 0.45·blue`.
+
+**Fetch the multiband product, not the band you want.** Band 2 is published at 0.5 km and runs
+to 65 MB at midday; the display raster is about 2.4 km per pixel, so nineteen twentieths of it
+is discarded. `ABI-L2-MCMIPC` carries all sixteen bands already resampled to 2 km for 57 MB —
+less than that one band, at the resolution actually wanted, co-registered on one set of scan
+angles. At night the reflective bands are noise, so `AnyDaylightOverConus` drops back to the
+single 3 MB infrared band; it samples across the sector rather than at its centre, because
+CONUS spans three hours of longitude and at dawn one edge is lit while the other is dark.
+
 **Two image-overlay slots.** `MapView.SetImageOverlay` takes an `OverlaySlot`: `Field`
 draws under the radar sweep (model output, mosaics) and `Analysis` draws over it (derived
 products read *against* the echo). They are independent, so the HRRR forecast and a
