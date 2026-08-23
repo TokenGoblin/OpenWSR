@@ -637,8 +637,16 @@ public sealed class MapView : IDisposable
             quads.Begin();
             DrawTiles(cam, textures, quads, _fetcher);
             // Satellite sits under the radar layers: cloud context, not the subject.
+            //
+            // Capped at the sensor's real resolution rather than at what the server will
+            // answer. ABI band 13 is 2 km at nadir and worse at CONUS latitudes, which is
+            // about z6 in Mercator; ask for z10 and IEM does not refuse, it nearest-neighbour
+            // upsamples, and every source pixel arrives as a hard-edged block. That was the
+            // jagged look. Requesting z7 and letting the GPU's linear filter magnify gives
+            // the smooth result, and is also the honest one — the detail past here was never
+            // measured. Clouds going soft as you zoom in is what the data actually supports.
             if (_satelliteEnabled)
-                DrawTiles(cam, satelliteTextures, quads, _satelliteFetcher, _satelliteOpacity, maxZoom: 10);
+                DrawTiles(cam, satelliteTextures, quads, _satelliteFetcher, _satelliteOpacity, maxZoom: 7);
             // The mosaic is only published to zoom 12; above that we stretch its deepest tile.
             if (_mosaicEnabled)
                 DrawTiles(cam, mosaicTextures, quads, _mosaicFetcher, _mosaicOpacity, maxZoom: 12);

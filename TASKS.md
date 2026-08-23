@@ -947,3 +947,21 @@ hardware; the panel verified against live KMTX storms.
 - [x] Verified by fetching two different tiles and confirming the bytes differ, which is the
       only check that means anything here; the fresh cache holds 24 tiles with 24 distinct
       contents. The national mosaic was checked the same way and is unaffected
+
+## Broadcast parity: clouds and terminal radar
+
+Phased. The question behind it was whether TV stations fuse radar and satellite into one
+product; they do not — the two stay independent layers composited at draw time, and the
+work that makes them look like TV is on each layer separately.
+
+### Phase 0 — GOES IR smoothing
+
+- [x] **The jagged look was fabricated zoom, not sampling.** The tile quads already sample
+      `MinMagMipLinear`. The layer was capped at z10, but ABI band 13 is 2 km at nadir and
+      worse at CONUS latitudes — about **z6** in Mercator. IEM does not refuse a z10 request,
+      it nearest-neighbour upsamples, so every source pixel arrived as a hard-edged block.
+      Fetched z8/z9/z10/z11 directly to confirm: the staircase is already visible at z8 and
+      by z11 the tile is a handful of flat parallelograms
+- [x] Capped at z7 — one level of oversample above native — and the GPU's linear filter does
+      the magnification. Also the honest answer: the detail past there was never measured, so
+      clouds going soft as you zoom in is what the data supports
