@@ -528,8 +528,29 @@ public partial class MainWindow : Window
             return;
         }
         LiveStateText.Text = $"Connecting to {site.Icao}…";
-        _mapView.Camera.MoveTo(site.LatDeg, site.LonDeg, 250);
+        FrameSite(site);
         await _liveFeed.StartAsync(site.Icao);
+    }
+
+    /// <summary>
+    /// Where the camera belongs when we start looking at a site. Home wins over the tower
+    /// whenever this is home's own radar: setting a home says which ground you care about,
+    /// and a WSR-88D is routinely fifty miles from it, so centring on the tower pushes your
+    /// own house out towards the edge of the view. Picking some other site deliberately is a
+    /// different intent and still frames the tower.
+    ///
+    /// This is a function of the site rather than a sequence of moves because it has three
+    /// callers that used to run in an order nobody could see: startup framed home, then
+    /// ApplyMode started the live feed, which framed the tower straight over the top of it.
+    /// Whoever moves the camera last now computes the same answer.
+    /// </summary>
+    private void FrameSite(RadarSite site)
+    {
+        if (_settings.HomeLatDeg is { } lat && _settings.HomeLonDeg is { } lon
+            && RadarSites.Nearest(lat, lon).Icao == site.Icao)
+            _mapView.Camera.MoveTo(lat, lon, 250);
+        else
+            _mapView.Camera.MoveTo(site.LatDeg, site.LonDeg, 250);
     }
 
     // ---- map tools ----
@@ -634,14 +655,14 @@ public partial class MainWindow : Window
             return;
         }
 
-        // With a home set, open on its radar, live. Otherwise stay on the national view
-        // with the mosaic on — a first screen that is about the weather now, rather than
-        // a hard-coded storm from 2013.
+        // With a home set, open on its radar, live, and centred on the house rather than the
+        // tower — see FrameSite. Otherwise stay on the national view with the mosaic on: a
+        // first screen that is about the weather now, rather than a hard-coded storm from 2013.
         if (_settings.HomeLatDeg is { } lat && _settings.HomeLonDeg is { } lon)
         {
             var site = RadarSites.Nearest(lat, lon);
             SiteCombo.SelectedItem = RadarSites.ByIcao(site.Icao);
-            _mapView.Camera.MoveTo(lat, lon, 250);
+            FrameSite(site);
             ApplyMode(DataMode.Live);
             return;
         }
@@ -700,7 +721,7 @@ public partial class MainWindow : Window
         // Follow the selection. Only live mode used to move the camera, and the archive
         // path only on the very first load — so picking a new site later left the map
         // sitting over the old one while the data quietly changed underneath.
-        _mapView.Camera.MoveTo(site.LatDeg, site.LonDeg, 250);
+        FrameSite(site);
 
         if (_vm.IsLive)
         {

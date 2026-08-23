@@ -927,3 +927,10 @@ Both of the ordering decisions came from looking at the live panel, not from rea
 
 **Gate:** [PASSED] 367/367 tests, 0 warnings. Location verified against Windows on real
 hardware; the panel verified against live KMTX storms.
+
+- [x] **Open on the house, not the tower.** Startup already framed home and then lost it: the
+      next line called `ApplyMode(Live)`, which starts the feed, which framed the tower
+      straight over the top of it. `FrameSite` makes that one decision instead of a sequence
+      of moves — home wins whenever the site in question is home's own radar, a deliberately
+      chosen other site still frames its tower — so whoever moves the camera last computes the
+      same answer. A WSR-88D is routinely fifty miles from the ground you care about
