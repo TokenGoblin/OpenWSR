@@ -53,6 +53,7 @@ public partial class MainWindow : Window
         DarkTitleBar.Apply(this);
         MomentBar.ItemsSource = _vm.Moments;
         TiltCombo.ItemsSource = _vm.Tilts;
+        ThreatList.ItemsSource = _vm.Threats;
         LinkToggle.IsEnabled = false; // only meaningful once a second pane exists
 
         var settings = _settings = AppSettings.Load();
@@ -212,6 +213,7 @@ public partial class MainWindow : Window
         });
         _warnings.AlertsUpdated += alerts => Dispatcher.BeginInvoke(() => _threats.EvaluateWarnings(alerts));
         _threats.ThreatDetected += threat => Dispatcher.BeginInvoke(() => OnThreat(threat));
+        _threats.ThreatsChanged += list => Dispatcher.BeginInvoke(() => ShowThreatList(list));
         _drawing.Changed += () => Dispatcher.BeginInvoke(() =>
         {
             ComposeOverlay();
@@ -267,6 +269,9 @@ public partial class MainWindow : Window
             _lightning.NotifyViewChanged();
             _mrms.NotifyViewChanged();
             NotifyHomeViewChanged();
+            // The alerts poll drops expired warnings once a minute; the list must not show
+            // one that has already run out in the meantime as though it were still in force.
+            _threats.ExpireStale(DateTimeOffset.UtcNow);
         };
         _statusTimer.Start();
 
@@ -857,6 +862,8 @@ public partial class MainWindow : Window
             SyncToolButtons();
             _settings.HomeLatDeg = lat;
             _settings.HomeLonDeg = lon;
+            _settings.HomeSource = "map";
+            _settings.HomeAccuracyM = null;
             _settings.Save();
             _threats.Configure(lat, lon, _settings.AlertRadiusKm);
             EnsureStormWatchForHome();
@@ -979,6 +986,39 @@ public partial class MainWindow : Window
 
         RebuildHomeGeometry();
         ComposeOverlay();
+    }
+
+    /// <summary>
+    /// Redraws the approaching list. The collection is rebuilt in place rather than reassigned
+    /// so the ItemsControl keeps its scroll position across a refresh — a list that jumps back
+    /// to the top every two minutes cannot be read.
+    /// </summary>
+    private void ShowThreatList(IReadOnlyList<Threat> threats)
+    {
+        _vm.Threats.Clear();
+        foreach (var threat in threats) _vm.Threats.Add(threat);
+
+        ThreatPanel.Visibility = threats.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        SyncRightColumn();
+        if (threats.Count == 0) return;
+
+        int tornadic = threats.Count(t => t.Rank == ThreatRank.Tornadic);
+        ThreatCount.Text = tornadic > 0 ? $"{threats.Count} · {tornadic} tornadic" : $"{threats.Count}";
+        // The heading carries the worst of it, because the heading is what gets read at a
+        // glance from across the room.
+        ThreatHeading.Text = tornadic > 0 ? "TORNADIC — APPROACHING" : "APPROACHING";
+        ThreatHeading.Foreground = tornadic > 0
+            ? System.Windows.Media.Brushes.OrangeRed
+            : new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromRgb(0xFF, 0x9B, 0x7A));
+    }
+
+    /// <summary>Put the camera on the threat that was clicked, at a single-storm zoom.</summary>
+    private void ThreatRow_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: Threat threat }) return;
+        _mapView.Camera.MoveTo(threat.LatDeg, threat.LonDeg, 150);
+        Report(threat.Detail);
     }
 
     private void OnThreat(Threat threat)
@@ -1781,6 +1821,20 @@ public partial class MainWindow : Window
     {
         if (LayersPanel is not null)
             LayersPanel.Visibility = LayersToggle.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        SyncRightColumn();
+    }
+
+    /// <summary>
+    /// The column itself goes away only when both halves are hidden — otherwise hiding the
+    /// layers leaves 248 px of empty chrome beside the map.
+    /// </summary>
+    private void SyncRightColumn()
+    {
+        if (RightColumn is null || LayersPanel is null || ThreatPanel is null) return;
+        RightColumn.Visibility =
+            LayersPanel.Visibility == Visibility.Visible || ThreatPanel.Visibility == Visibility.Visible
+                ? Visibility.Visible
+                : Visibility.Collapsed;
     }
 
     private void LinkToggle_Changed(object sender, RoutedEventArgs e)
@@ -1872,6 +1926,9 @@ public partial class MainWindow : Window
         _playback.LoopFrames = _settings.LoopFrames;
         SyncLoopTooltip();
         _threats.Configure(_settings.HomeLatDeg, _settings.HomeLonDeg, _settings.AlertRadiusKm);
+        // Settings can now set home outright (Use my location), not only arm the map picker,
+        // so the storm watch has to be re-pointed here as well as on the map-click path.
+        EnsureStormWatchForHome();
         RebuildHomeGeometry();
         ComposeOverlay();
         _radar.Refresh();

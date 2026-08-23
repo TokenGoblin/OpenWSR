@@ -98,6 +98,13 @@ public sealed partial class MainViewModel : ObservableObject
 
     public ObservableCollection<TiltOption> Tilts { get; } = [];
 
+    /// <summary>
+    /// What is currently threatening home, most urgent first — the source for the side list.
+    /// It lives here for the same reason the mode and tilt do: the list is a fact about the
+    /// session, not a property of whichever container ends up drawing it.
+    /// </summary>
+    public ObservableCollection<Threat> Threats { get; } = [];
+
     [ObservableProperty]
     public partial DataMode Mode { get; set; } = DataMode.Archive;
 

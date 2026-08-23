@@ -868,3 +868,62 @@ in deriving motion from them. Two bugs, in fact.
 
 **Gate:** [PASSED] 355/355 tests, 0 warnings. Verified against live NST from KMTX, KEAX,
 KMLB, KAMX, KTLX and KFWS; the 0.30 ratio is reproducible from that dump.
+
+## Finding the storms that are coming for you
+
+Two halves of one question. Proximity alerting already existed but only ever spoke by
+interrupting — a tray balloon, once an hour, then silence — and arming it meant knowing
+your own latitude.
+
+- [x] **`GeoLocationService`** wraps Windows Location Services: one call, a
+      `LocationFix` with the provider that answered and the accuracy radius it quoted.
+      Verified unpackaged on real hardware — `Allowed`, a Wi-Fi fix, ±141 m. Requires the
+      App TFM at `net10.0-windows10.0.19041.0` for the WinRT projection; the tests project
+      moves with it
+- [x] Failure here is nearly always a privacy switch, and there are two of them in different
+      places, so every failure message names both. An unpackaged desktop app gets no consent
+      prompt when either is off — the call just returns `Denied`, which as a bare status code
+      is indistinguishable from a bug
+- [x] **Settings › MY AREA** gains "Use my location" beside "Pick on map", and the label
+      records where the number came from: "35.2226, -97.4395 (from Wi-Fi, ±463 ft)". A GPS
+      fix and an IP-address guess a state wide are both "your location" and should not read
+      the same
+- [x] Accuracy is formatted by a new `Units.ShortDistance` — metres or feet. `Units.Distance`
+      renders a 141 m fix as "0.1 mi", which throws away the difference between a good fix
+      and a useless one
+- [x] **Home is now edited on a copy** and written back only on Save. Every other control in
+      that dialog was already read on save, so Cancel undid it; home was not, and locating
+      moved the real home the instant it succeeded — Cancel left it moved, waiting for the
+      next unrelated `Save()` to commit it
+- [x] **`ThreatMonitor` gained a second output.** `ThreatDetected` still fires once per hour
+      per source and is what interrupts; `ThreatsChanged` carries the whole current set on
+      every evaluation and is what the side list draws. A threat still present on the next
+      poll has to stay on the list *without* re-alerting, which is why the throttle sits on
+      the notification and not on the set
+- [x] The storm and warning halves refresh on different clocks — the Level III poll and the
+      api.weather.gov one — so each evaluation replaces only its own half
+- [x] **The APPROACHING panel** sits above the layers in the right column, collapsed whenever
+      nothing is threatening. The layers toggle governs only the lower half: tidying the
+      layers away must not take a tornado warning off the screen with it. Clicking a row puts
+      the camera on it
+- [x] `ExpireStale` on the half-second tick drops warnings past their end time. The alerts
+      poll does this too, but once a minute, and an expired warning left on the list reads as
+      a live one
+
+Both of the ordering decisions came from looking at the live panel, not from reasoning.
+
+- [x] **Nearest first, ETA only breaking ties.** Soonest-first was written first and reads
+      wrong: a cell whose closest approach is where it already sits reports an ETA of zero —
+      it is at its nearest now, and may be receding — so on live KMTX data four such cells at
+      18 to 44 miles all sorted above V1, which was closing to 14 miles over the next
+      nineteen minutes. A 49-mile warning with no track at all sorted above it too
+- [x] **Advisories are not threats.** The warnings layer draws statements when they are
+      ticked, and it should. But "Special Weather Statement, 49 miles away" was landing at the
+      top of the threat list — and raising a tray balloon. Warnings always count; anything
+      else has to carry a Severe or Extreme severity
+- [x] Rows carry a short label ("Storm V1") rather than the notification's sentence. The panel
+      heading already says APPROACHING; repeating it down every row of a 248 px column leaves
+      no room for the range, which is the part being scanned for
+
+**Gate:** [PASSED] 367/367 tests, 0 warnings. Location verified against Windows on real
+hardware; the panel verified against live KMTX storms.

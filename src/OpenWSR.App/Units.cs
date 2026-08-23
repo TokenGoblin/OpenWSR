@@ -37,12 +37,19 @@ public static class Units
         _ => $"{kilometresPerHour:F0} km/h",
     };
 
-    /// <summary>Beam or echo height. Metric stays in metres; the others use feet.</summary>
-    public static string Height(double metres) => System switch
+    /// <summary>
+    /// A short distance in metres or feet — a GPS accuracy radius, a beam height. Miles are
+    /// the wrong unit at this scale: a 141 m fix formatted by <see cref="Distance"/> reads
+    /// "0.1 mi", which throws away the difference between a good fix and a useless one.
+    /// </summary>
+    public static string ShortDistance(double metres) => System switch
     {
         UnitSystem.Metric => $"{metres:F0} m",
         _ => $"{metres * 3.28084:F0} ft",
     };
+
+    /// <summary>Beam or echo height. Metric stays in metres; the others use feet.</summary>
+    public static string Height(double metres) => ShortDistance(metres);
 
     public static string HeightKft(double kilofeet) => System switch
     {

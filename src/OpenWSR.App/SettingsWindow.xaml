@@ -56,18 +56,21 @@
         <!-- Home and alert radius live here rather than in the layers panel: they are set
              once and never touched again, and the layers panel is used every session. -->
         <TextBlock Text="MY AREA" Style="{StaticResource Head}" />
-        <Grid>
+        <TextBlock x:Name="HomeLabel" Text="Home: not set" TextWrapping="Wrap" />
+        <Grid Margin="0,6,0,0" HorizontalAlignment="Left">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBlock x:Name="HomeLabel" Text="Home: not set" VerticalAlignment="Center" />
-            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                <Button x:Name="PickHomeButton" Content="📍 Pick on map" Click="PickHome_Click"
-                        ToolTip="Close settings and click the map to place your home location" />
-                <Button x:Name="ClearHomeButton" Content="Clear" Margin="6,0,0,0" Click="ClearHome_Click" />
-            </StackPanel>
+            <Button x:Name="LocateHomeButton" Content="Use my location" Click="LocateHome_Click"
+                    ToolTip="Ask Windows Location Services where this PC is" />
+            <Button x:Name="PickHomeButton" Grid.Column="1" Content="Pick on map" Click="PickHome_Click"
+                    Margin="6,0,0,0"
+                    ToolTip="Close settings and click the map to place your home location" />
+            <Button x:Name="ClearHomeButton" Grid.Column="2" Content="Clear" Margin="6,0,0,0" Click="ClearHome_Click" />
         </Grid>
+        <TextBlock x:Name="LocateStatus" Style="{StaticResource Hint}" Visibility="Collapsed" />
         <TextBlock Text="Alert radius" Margin="0,10,0,0" />
         <ComboBox x:Name="RadiusCombo" Margin="0,4,0,0">
             <ComboBoxItem Content="15 km / 9 mi" />

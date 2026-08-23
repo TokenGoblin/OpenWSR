@@ -52,13 +52,20 @@ reference WPF, Direct3D or the network. `PurityTests` asserts this against assem
 references — if you need imaging or HTTP in one of them, that is a signal the code
 belongs somewhere else. `MiniPng` exists inside `Grib2` precisely because of this rule.
 
-**The shell is arranged around four questions**, each with exactly one place on screen
+**The shell is arranged around five questions**, each with exactly one place on screen
 and never a second: **where** (top bar: search, site) → **what product** (the segmented
 bar above the map) → **when** (the time bar: one `LIVE · ARCHIVE · FORECAST` switcher that
-owns the transport) → **what's on top** (the right panel, which holds layers and nothing
-else). Before adding a control, decide which question it answers and put it there. Set-once
+owns the transport) → **what's on top** (the layers half of the right column, which holds
+layers and nothing else) → **what's coming at me** (the `APPROACHING` panel above it).
+Before adding a control, decide which question it answers and put it there. Set-once
 configuration goes in Settings, not the layers panel; reference material (shortcuts, the
 symbol key, About) goes in `InfoWindow`, not a panel or a MessageBox.
+
+The right column carries the last two, and they behave differently on purpose. The layers
+toggle governs **only** the lower half — tidying the layers away must not take a tornado
+warning off the screen with it — and `APPROACHING` collapses on its own whenever nothing is
+threatening, so the column is unchanged from before on a quiet day. `RightColumn` disappears
+only when both halves are hidden.
 
 `MainViewModel` holds the state the layout is built from — mode, product, tilt, armed map
 tool. Keep it there rather than in control properties, or moving a control between
@@ -123,6 +130,32 @@ metres. Line widths are already pixel-constant in `OverlayRenderer`.
 **Nothing on the UI thread may block on I/O.** `LiveFeed` exposes `StartAsync`/`StopAsync`;
 a blocking `Wait(5s)` in `Stop()` froze the window on every live toggle. Dispose paths
 cancel and let the drain finish on a continuation.
+
+**Alerting has two outputs and they answer different questions.** `ThreatMonitor.ThreatDetected`
+fires once per hour per source and is what *interrupts* — a tray balloon and a sound.
+`ThreatsChanged` carries the whole current set on every evaluation and is what the side list
+*draws*. A threat still present on the next poll has to stay on that list without re-alerting,
+so the throttle sits on the notification and never on the set. The storm and warning halves
+run on different clocks, so each evaluation replaces only its own half.
+
+**The threat list is ordered nearest-first, and this was measured, not reasoned.** Soonest-first
+reads wrong: a cell whose closest approach is where it already sits reports an ETA of zero — it
+is at its nearest *now*, possibly receding — so four such cells at 18–44 miles sorted above one
+closing to 14 miles in nineteen minutes. Also, **advisories are not threats**: the warnings layer
+draws statements when ticked and should, but `IsDangerous` keeps them off the list and out of the
+tray. Warnings always count; anything else needs a Severe or Extreme severity.
+
+**Windows Location Services works unpackaged, but says `Denied` rather than prompting.** The two
+privacy switches that block it live in different places on the same Settings page, and an
+unpackaged desktop app gets no consent dialog when either is off — so `GeoLocationService` names
+both in every failure message. `Geolocator.RequestAccessAsync` needs a message pump, so call it
+from the dispatcher. Ask for `PositionAccuracy.Default`, not `High`: the GPS-grade path can sit
+on a cold radio for a minute and a home location does not need metres.
+
+**A dialog that mutates the live `AppSettings` has no working Cancel.** Every control in
+`SettingsWindow` is read *on save*, which is what makes Cancel work; home was written the instant
+"Use my location" succeeded, so Cancel left it moved and waiting for the next unrelated `Save()`.
+Home is held in pending fields now. Anything else added there must be too.
 
 **Errors need somewhere to live that isn't the status line.** `Report()` is the running
 commentary and is overwritten constantly; `ReportError()` puts a failure in a bar that

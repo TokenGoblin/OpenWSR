@@ -6,11 +6,20 @@ public partial class SettingsWindow : Window
 {
     private readonly AppSettings _settings;
 
+    // Home is edited on a copy and written back only in Save_Click. Every other control here
+    // is read on save, so Cancel undoes it; home was not, and "Use my location" made that
+    // visible — it moved the real home the moment it succeeded, and Cancel left it moved,
+    // waiting for the next unrelated Save() to commit it to disk.
+    private double? _homeLatDeg, _homeLonDeg, _homeAccuracyM;
+    private string? _homeSource;
+
     public SettingsWindow(AppSettings settings)
     {
         InitializeComponent();
         DarkTitleBar.Apply(this);
         _settings = settings;
+        (_homeLatDeg, _homeLonDeg) = (settings.HomeLatDeg, settings.HomeLonDeg);
+        (_homeSource, _homeAccuracyM) = (settings.HomeSource, settings.HomeAccuracyM);
 
         ProviderCombo.SelectedIndex = settings.TileProvider == "maptiler" ? 1 : 0;
         KeyBox.Text = settings.MapTilerKey ?? "";
@@ -45,10 +54,68 @@ public partial class SettingsWindow : Window
 
     private void UpdateHomeLabel()
     {
-        HomeLabel.Text = _settings.HomeLatDeg is { } lat && _settings.HomeLonDeg is { } lon
-            ? $"Home: {lat:F3}, {lon:F3}"
-            : "Home: not set";
-        ClearHomeButton.IsEnabled = _settings.HomeLatDeg is not null;
+        if (_homeLatDeg is { } lat && _homeLonDeg is { } lon)
+        {
+            string provenance = _homeSource switch
+            {
+                null or "" or "map" => "",
+                var source when _homeAccuracyM is { } metres =>
+                    $"  (from {source}, \u00B1{Units.ShortDistance(metres)})",
+                var source => $"  (from {source})",
+            };
+            HomeLabel.Text = $"Home: {lat:F4}, {lon:F4}{provenance}";
+        }
+        else
+        {
+            HomeLabel.Text = "Home: not set";
+        }
+        ClearHomeButton.IsEnabled = _homeLatDeg is not null;
+    }
+
+    /// <summary>
+    /// Ask Windows where we are. The await keeps the dispatcher pumping, which the consent
+    /// dialog needs, and the button is disabled meanwhile so a second click cannot stack a
+    /// second request behind the first one's timeout.
+    /// </summary>
+    private async void LocateHome_Click(object sender, RoutedEventArgs e)
+    {
+        LocateHomeButton.IsEnabled = false;
+        ShowLocateStatus("Asking Windows for your location\u2026", error: false);
+        try
+        {
+            var fix = await GeoLocationService.GetCurrentAsync();
+            _homeLatDeg = fix.LatDeg;
+            _homeLonDeg = fix.LonDeg;
+            _homeSource = fix.Source;
+            _homeAccuracyM = fix.AccuracyM;
+            UpdateHomeLabel();
+            ShowLocateStatus(
+                fix.AccuracyM is { } metres && metres > 5000
+                    ? $"Located to within {Units.Distance(metres / 1000.0)} \u2014 that is a coarse " +
+                      "fix, so check the marker on the map and nudge it with \u201CPick on map\u201D if it is off."
+                    : "Located. Save to arm proximity alerts here.",
+                error: false);
+        }
+        catch (GeoLocationService.LocationUnavailableException ex)
+        {
+            ShowLocateStatus(ex.Message, error: true);
+        }
+        finally
+        {
+            LocateHomeButton.IsEnabled = true;
+        }
+    }
+
+    private void ShowLocateStatus(string text, bool error)
+    {
+        LocateStatus.Text = text;
+        // The Hint style's dim grey, restated: setting Foreground on the element beats the
+        // style setter, so it has to be put back explicitly when a message stops being an error.
+        LocateStatus.Foreground = error
+            ? System.Windows.Media.Brushes.Salmon
+            : new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromRgb(0x8B, 0x93, 0xA3));
+        LocateStatus.Visibility = Visibility.Visible;
     }
 
     private void PickHome_Click(object sender, RoutedEventArgs e)
@@ -59,8 +126,9 @@ public partial class SettingsWindow : Window
 
     private void ClearHome_Click(object sender, RoutedEventArgs e)
     {
-        _settings.HomeLatDeg = null;
-        _settings.HomeLonDeg = null;
+        _homeLatDeg = _homeLonDeg = _homeAccuracyM = null;
+        _homeSource = null;
+        LocateStatus.Visibility = Visibility.Collapsed;
         UpdateHomeLabel();
     }
 
@@ -102,6 +170,10 @@ public partial class SettingsWindow : Window
         {
             0 => 15, 2 => 80, 3 => 160, _ => 40,
         };
+        _settings.HomeLatDeg = _homeLatDeg;
+        _settings.HomeLonDeg = _homeLonDeg;
+        _settings.HomeSource = _homeSource;
+        _settings.HomeAccuracyM = _homeAccuracyM;
         _settings.Save();
         Units.System = _settings.Units;
         DialogResult = true;

@@ -257,11 +257,71 @@
             </Grid>
         </Border>
 
-        <!-- ============ WHAT'S ON TOP — layers, and only layers ============ -->
-        <Border x:Name="LayersPanel" DockPanel.Dock="Right" Background="{StaticResource Chrome}" Width="248"
+        <!-- ============ The right column ============ -->
+        <!-- Two sections, and they answer different questions, so the layers toggle governs
+             only the lower one. "What's on top" is a set-and-forget choice; "what is coming
+             at me" is the thing the app exists to tell you, and tidying the layers away must
+             not take a tornado warning off the screen with it. -->
+        <Border x:Name="RightColumn" DockPanel.Dock="Right" Background="{StaticResource Chrome}" Width="248"
                 BorderBrush="#FF272C35" BorderThickness="1,0,0,0">
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <StackPanel Margin="10,8">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Collapsed whenever nothing is threatening, which is most of the time.
+                     An empty "APPROACHING" heading is a claim that the app is watching; it
+                     is only watching once a home location is set. -->
+                <Border x:Name="ThreatPanel" Visibility="Collapsed" Background="#FF241A1A"
+                        BorderBrush="#FF6B2A2A" BorderThickness="0,0,0,1" Padding="10,8">
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="ThreatHeading" Text="APPROACHING" FontWeight="Bold"
+                                       FontSize="11.5" Foreground="#FFFF9B7A" VerticalAlignment="Center" />
+                            <TextBlock x:Name="ThreatCount" Grid.Column="1" FontSize="11"
+                                       Foreground="{StaticResource TextDim}" VerticalAlignment="Center" />
+                        </Grid>
+                        <ScrollViewer MaxHeight="252" VerticalScrollBarVisibility="Auto" Margin="0,6,0,0">
+                            <ItemsControl x:Name="ThreatList">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <!-- A Border rather than a Button: the row is three
+                                             stacked lines and every WPF button template wants
+                                             to centre one line of content in the middle of it. -->
+                                        <Border Background="#FF2E2020" BorderBrush="#FF5A3030"
+                                                BorderThickness="1" CornerRadius="3"
+                                                Padding="7,5" Margin="0,0,0,5" Cursor="Hand"
+                                                Tag="{Binding}" MouseLeftButtonUp="ThreatRow_Click"
+                                                ToolTip="{Binding Detail}">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Label}" TextWrapping="Wrap"
+                                                           FontSize="11.5" FontWeight="SemiBold"
+                                                           Foreground="{StaticResource Text}" />
+                                                <TextBlock Text="{Binding Range}" FontSize="11"
+                                                           FontFamily="Consolas" Margin="0,2,0,0"
+                                                           Foreground="#FFFFC46B" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                        <Border BorderBrush="#FF5A3030" BorderThickness="0,1,0,0" Margin="0,2,0,0"
+                                Padding="0,5,0,0">
+                            <TextBlock FontSize="10" FontStyle="Italic" TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextDim}"
+                                       Text="Click one to put the camera on it." />
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <ScrollViewer x:Name="LayersPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="10,8">
 
                     <Expander Header="RADAR" Style="{StaticResource PanelSection}">
                         <StackPanel>
@@ -443,6 +503,7 @@
 
                 </StackPanel>
             </ScrollViewer>
+            </Grid>
         </Border>
 
         <!-- ============ WHAT product, then the map ============ -->

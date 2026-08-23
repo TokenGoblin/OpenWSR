@@ -16,6 +16,16 @@ public sealed class AppSettings
     public double? HomeLatDeg { get; set; }
     public double? HomeLonDeg { get; set; }
 
+    /// <summary>
+    /// How home was arrived at — a map click or a named Windows location provider. Kept so the
+    /// settings label can say where the number came from: "39.740, -104.984" is worth trusting
+    /// differently when it is a GPS fix than when it is an IP-address guess a state wide.
+    /// </summary>
+    public string? HomeSource { get; set; }
+
+    /// <summary>Radius Windows quoted for the fix, in metres; null for a hand-placed home.</summary>
+    public double? HomeAccuracyM { get; set; }
+
     /// <summary>Alert when a storm track or warning comes within this range of home.</summary>
     public double AlertRadiusKm { get; set; } = 40;
 
