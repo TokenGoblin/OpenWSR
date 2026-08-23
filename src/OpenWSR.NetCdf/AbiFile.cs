@@ -53,17 +53,55 @@ public static class AbiFile
     {
         var file = MiniHdf5.Open(netCdf);
 
-        if (!file.Datasets.TryGetValue("CMI", out var cmi))
+        if (!file.Datasets.ContainsKey("CMI"))
             throw new Hdf5FormatException(
-                "No CMI variable — this is not an ABI Cloud and Moisture Imagery product.");
+                "No CMI variable — this is not a single-band ABI Cloud and Moisture Imagery product.");
+
+        return DecodeBand(file, "CMI",
+            file.Datasets.ContainsKey("band_id") ? file.ReadInt32("band_id")[0] : 0,
+            file.Datasets.ContainsKey("band_wavelength") ? file.ReadSingle("band_wavelength")[0] : 0);
+    }
+
+    /// <summary>
+    /// Decode selected bands of a <b>multiband</b> (MCMIP) file, which carries all sixteen
+    /// on one shared grid.
+    ///
+    /// Worth having for two reasons beyond convenience. Every band is already resampled to
+    /// the 2 km grid, which is what a display raster wants — asking for band 2 on its own
+    /// gets a 0.5 km array that is four times finer than anything downstream can show, and a
+    /// 65 MB download to a multiband file's 57 MB for all sixteen. And the bands arrive
+    /// co-registered on one set of scan angles, so a composite of several needs no
+    /// reconciliation between grids.
+    /// </summary>
+    /// <param name="bands">ABI channel numbers, 1 to 16.</param>
+    public static IReadOnlyDictionary<int, AbiImage> DecodeMultiband(
+        byte[] netCdf, params int[] bands)
+    {
+        var file = MiniHdf5.Open(netCdf);
+        var decoded = new Dictionary<int, AbiImage>();
+
+        foreach (int band in bands)
+        {
+            string name = $"CMI_C{band:D2}";
+            if (!file.Datasets.ContainsKey(name))
+                throw new Hdf5FormatException(
+                    $"No {name} — this is not a multiband ABI product, or band {band} is absent.");
+            decoded[band] = DecodeBand(file, name, band, 0);
+        }
+        return decoded;
+    }
+
+    private static AbiImage DecodeBand(MiniHdf5 file, string variable, int bandId, double wavelength)
+    {
+        var cmi = file.Datasets[variable];
         if (cmi.Dimensions.Length != 2)
             throw new Hdf5FormatException(
-                $"CMI has rank {cmi.Dimensions.Length}; a single-band CMIP product is two-dimensional.");
+                $"{variable} has rank {cmi.Dimensions.Length}; imagery is two-dimensional.");
 
         int height = (int)cmi.Dimensions[0];
         int width = (int)cmi.Dimensions[1];
 
-        var attributes = file.AttributesOf("CMI");
+        var attributes = file.AttributesOf(variable);
         double scale = Number(attributes, "scale_factor", 1.0);
         double offset = Number(attributes, "add_offset", 0.0);
 
@@ -78,7 +116,7 @@ public static class AbiFile
             validMax = (int)AsStored(range.AsDouble(1), unsigned);
         }
 
-        var raw = file.ReadInt16("CMI");
+        var raw = file.ReadInt16(variable);
         var values = new float[(long)width * height];
         for (int i = 0; i < values.Length; i++)
         {
@@ -94,8 +132,8 @@ public static class AbiFile
             ScanAngles(file, "y", height),
             ReadProjection(file),
             Epoch.AddSeconds(file.ReadDouble("t")[0]),
-            file.Datasets.ContainsKey("band_id") ? file.ReadInt32("band_id")[0] : 0,
-            file.Datasets.ContainsKey("band_wavelength") ? file.ReadSingle("band_wavelength")[0] : 0,
+            bandId,
+            wavelength,
             Text(attributes, "units") ?? "");
     }
 
