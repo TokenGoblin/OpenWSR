@@ -1157,3 +1157,62 @@ show it, and waiting for daylight was not the way to find the desert problem. Cr
 against the Phase 1 raster, whose placement over the basemap was already verified in the app,
 to confirm the sector footprint was unchanged. The night path was verified live in the app:
 `GOES-East IR 05:17Z (2 min old)`, correctly choosing the 3 MB single-band fetch.
+
+## Phase 3 — TDWR
+
+The 45 terminal radars sit beside major airports: C-band, a 0.55° beam against the WSR-88D's
+0.95°, 150 m gates, sited for approach paths rather than regional coverage. Over a metro area
+that is a different picture, not a slightly sharper one. The site table has carried them since
+the beginning with `IsTdwr` set, and every code path excluded them.
+
+### 3a — reaching them
+
+- [x] Their Level II is not in the NEXRAD bucket, but the Level III digital radial products
+      are: `TZ0/TZ1/TZ2` reflectivity and `TV0/TV1/TV2` velocity, three tilts each, in the
+      same `unidata-nexrad-level3` bucket under the same key format. Checked that no WSR-88D
+      and TDWR share a three-letter suffix, so the existing key scheme cannot collide
+- [x] The packet-16 decoder reads them unchanged — a TDWR digital radial is the same container
+      as the WSR-88D ones. What is new is the scaling, which comes from the product's own
+      threshold halfwords rather than a table keyed on product code: reflectivity reads
+      (−320, 5, 254) and velocity (−635, 5, 254), the same half-unit step from very different
+      floors
+- [x] Levels 0 and 1 are flags, not data. Scaling them anyway would put "below threshold" at
+      −33 dBZ in a field whose floor is −32 — a plausible number, which is what makes it worth
+      a test rather than an assumption
+- [x] `ToSweep` converts to a `Sweep`, so the renderer, palettes, inspector, cross-section and
+      colour scale all apply without knowing anything new. That meant pulling the elevation
+      angle out of the product description block, which the decoder had been skipping
+- [x] Verified against **MetPy 1.7.1** over the whole field, not a few gates: 82,596
+      reflectivity gates spanning −22.0 to 57.0 dBZ and 62,311 velocity gates spanning −27.5
+      to +38.5 m/s. MetPy also settled the velocity units, which the ±63.5 halfword range
+      leaves genuinely ambiguous between m/s and knots, and confirmed that level 1 means range
+      folded on velocity and nothing on reflectivity
+
+### 3b/3c — into the app
+
+- [x] `TdwrFeed` assembles a volume from six products fetched together. They are not
+      simultaneous — each publishes as its own scan finishes — so the volume takes the newest
+      as its time and the sweeps keep their own. One missing tilt does not lose the other five
+- [x] `ElevationIndex` is the tilt's position within its moment, not the sweep's position in
+      the list, or the display pairs a reflectivity cut with the wrong velocity cut
+- [x] The site list and marker layer include TDWRs now — 210 entries against 163
+- [x] Selecting one switches to live: there is no Level II archive to scrub and no volume to
+      run a forecast against
+- [x] Polled at a minute rather than streamed. A WSR-88D publishes Level II in chunks as the
+      antenna turns, which is what gives this app sub-scan latency; a TDWR only reaches the
+      public as finished products
+- [x] "Nothing published" is reported as normal rather than as a failure — these run a
+      hazardous-weather strategy and go quiet in clear air
+
+**Two bugs found by looking at the running app rather than at the tests.** Selecting a TDWR
+left the previous site's Level II stream running, so its next volume landed on top of what had
+just been drawn: the site box said TSLC and the picture was still KMTX with twenty cuts. Both
+paths go through `StartLiveAsync` now, which is what stops the stream. And the live handler
+drops a volume whose site no longer matches the selection, which closes the same race for a
+fetch already in flight.
+
+**Gate:** [PASSED] 513/513 tests, 0 warnings. Verified live against TSLC: `TSLC 05:51:55Z,
+6 products`, three tilts, the field correctly georeferenced over the Salt Lake valley at its
+90 km range. The product bar offers reflectivity and velocity, greys out the dual-pol moments
+TDWR Level III does not carry, and offers **azimuthal shear** — which comes free, being derived
+from velocity rather than decoded.

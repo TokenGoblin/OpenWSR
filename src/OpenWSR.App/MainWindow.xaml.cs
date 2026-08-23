@@ -21,6 +21,7 @@ public partial class MainWindow : Window
     private readonly RadarDisplayController _radar;
     private readonly ArchivePlaybackController _playback;
     private readonly LiveFeed _liveFeed = new();
+    private readonly TdwrFeed _tdwr = new(new Level3Client());
     private readonly WarningsController _warnings;
     private readonly InspectorTools _inspector;
     private readonly StormOverlayController _storms;
@@ -69,8 +70,7 @@ public partial class MainWindow : Window
 
         _mapView = new MapView(provider);
         _mapView.Camera.MoveTo(39.0, -98.0, 6000); // continental US
-        _mapView.SetMarkers(RadarSites.All.Where(s => !s.IsTdwr)
-            .Select(s => (s.LatDeg, s.LonDeg, s.Icao)));
+        _mapView.SetMarkers(RadarSites.All.Select(s => (s.LatDeg, s.LonDeg, s.Icao)));
         _mapView.MarkersEnabled = settings.ShowSiteMarkers;
         FilterSites.IsChecked = settings.ShowSiteMarkers;
         MapHost.Child = new D3DHostControl(_mapView);
@@ -131,7 +131,7 @@ public partial class MainWindow : Window
         _playback.PlayingChanged += playing => Dispatcher.BeginInvoke(() =>
             PlayButton.Content = playing ? "⏸" : "▶");
 
-        foreach (var site in RadarSites.All.Where(s => !s.IsTdwr).OrderBy(s => s.Icao))
+        foreach (var site in RadarSites.All.OrderBy(s => s.Icao))
             SiteCombo.Items.Add(site);
 
         _warnings = new WarningsController(_mapView, MapHost, settings.UserAgent);
@@ -265,6 +265,11 @@ public partial class MainWindow : Window
         _liveFeed.VolumeUpdated += (volume, _) => Dispatcher.BeginInvoke(() =>
         {
             if (!_vm.IsLive) return;
+            // A volume already in flight when the site changed belongs to the old radar, and
+            // drawing it would put the previous site's picture under the new site's name.
+            if (SiteCombo.SelectedItem is RadarSite selected &&
+                !selected.Icao.Equals(volume.SiteId, StringComparison.OrdinalIgnoreCase))
+                return;
             _panes.ShowVolume(volume);
             SyncPaneContext();
         });
@@ -285,6 +290,7 @@ public partial class MainWindow : Window
             // The alerts poll drops expired warnings once a minute; the list must not show
             // one that has already run out in the meantime as though it were still in force.
             _threats.ExpireStale(DateTimeOffset.UtcNow);
+            PollTdwrIfDue();
         };
         _statusTimer.Start();
 
@@ -541,9 +547,80 @@ public partial class MainWindow : Window
             ApplyMode(DataMode.Archive);
             return;
         }
-        LiveStateText.Text = $"Connecting to {site.Icao}…";
         FrameSite(site);
+
+        if (site.IsTdwr)
+        {
+            await _liveFeed.StopAsync();   // the Level II chunk stream does not apply here
+            await LoadTdwrAsync(site);
+            return;
+        }
+
+        LiveStateText.Text = $"Connecting to {site.Icao}…";
         await _liveFeed.StartAsync(site.Icao);
+    }
+
+    /// <summary>
+    /// Fetch and show a TDWR volume, assembled from its six Level III products.
+    ///
+    /// Polled rather than streamed: a WSR-88D publishes Level II in chunks as the antenna
+    /// turns, which is what gives this app sub-scan latency, but a TDWR only reaches the
+    /// public as finished Level III products. A minute is about their cadence.
+    /// </summary>
+    private async Task LoadTdwrAsync(RadarSite site)
+    {
+        int generation = ++_tdwrGeneration;
+        _lastTdwrFetchUtc = DateTime.UtcNow;
+        LiveStateText.Text = $"Fetching {site.Icao}…";
+        Report($"{site.Icao}: fetching terminal radar products…");
+        ShowBusy(true);
+        try
+        {
+            var volume = await _tdwr.GetLatestAsync(site);
+            if (generation != _tdwrGeneration) return;
+            if (volume is null)
+            {
+                // Not an error. These run a hazardous-weather strategy and go quiet in clear
+                // air, where a WSR-88D keeps sweeping a clear-air VCP.
+                LiveStateText.Text = $"{site.Icao}: nothing published";
+                Report($"{site.Icao} is not publishing right now — terminal radars go quiet " +
+                       "in clear air. Try a site with weather over it.");
+                return;
+            }
+
+            _panes.ShowVolume(volume);
+            SyncPaneContext();
+            double age = (DateTime.UtcNow - volume.StartTimeUtc).TotalMinutes;
+            LiveStateText.Text =
+                $"{site.Icao} {volume.StartTimeUtc:HH:mm:ss}Z, {volume.Sweeps.Count} products";
+            Report($"{site.Icao}: {volume.Sweeps.Count} products, newest " +
+                   $"{volume.StartTimeUtc:HH:mm:ss}Z ({age:F0} min old)");
+        }
+        catch (Exception ex)
+        {
+            if (generation != _tdwrGeneration) return;
+            ReportError($"{site.Icao} fetch failed: {ex.Message}");
+        }
+        finally
+        {
+            if (generation == _tdwrGeneration) ShowBusy(false);
+        }
+    }
+
+    private int _tdwrGeneration;
+    private DateTime _lastTdwrFetchUtc = DateTime.MinValue;
+
+    /// <summary>
+    /// Keep a live TDWR current. It rides the half-second status tick rather than owning a
+    /// timer, because it is a rate limit rather than a schedule: the products publish about
+    /// once a minute and asking more often only spends requests.
+    /// </summary>
+    private void PollTdwrIfDue()
+    {
+        if (!_vm.IsLive || SiteCombo.SelectedItem is not RadarSite { IsTdwr: true } site) return;
+        if (DateTime.UtcNow - _lastTdwrFetchUtc < TimeSpan.FromSeconds(60)) return;
+        _lastTdwrFetchUtc = DateTime.UtcNow;
+        _ = LoadTdwrAsync(site);
     }
 
     /// <summary>
@@ -740,7 +817,20 @@ public partial class MainWindow : Window
         // sitting over the old one while the data quietly changed underneath.
         FrameSite(site);
 
-        if (_vm.IsLive)
+        if (site.IsTdwr)
+        {
+            // A TDWR publishes only Level III, so there is no archive to scrub and no volume
+            // to run a forecast against. Switching to live is the honest response to picking
+            // one rather than leaving the transport pointed at data that does not exist.
+            //
+            // Both branches end in StartLiveAsync because it is what stops the Level II chunk
+            // stream. Loading the terminal volume without doing that leaves the previous
+            // site's feed running, and its next volume lands on top of what was just drawn —
+            // the site box says one radar and the picture is still the other one.
+            if (!_vm.IsLive) ApplyMode(DataMode.Live);
+            else StartLiveAsync();
+        }
+        else if (_vm.IsLive)
         {
             StartLiveAsync();
         }

@@ -53,7 +53,8 @@ premium tiers elsewhere and two have no commercial equivalent:
 | Watches, SPS, mesoscale discussions | Costs users | **Done** — watch boxes and MCDs from IEM |
 | SPC convective outlooks | Costs users | **Done** — Day 1 categorical |
 | Local storm reports | Costs users | **Done** — last six hours |
-| Satellite imagery | Expected | **Done** — native GOES-East ABI from S3, decoded and reprojected; IEM tiles as fallback |
+| Satellite imagery | Expected | **Done** — native GOES-East ABI from S3, decoded and reprojected, true colour by day and infrared by night; IEM tiles as fallback |
+| TDWR terminal radars | Expected | **Done** — all 47, via their Level III digital radial products |
 | Future radar (nowcast) | Expected | **Done** — HRRR simulated reflectivity, six-hour loop, native GRIB2 |
 | County and state boundaries | Expected | **Partial** — inherited from the basemap, not a controllable layer |
 | Placefile support | Expected | **Done** — full GRLevelX parser, icon sheets included |

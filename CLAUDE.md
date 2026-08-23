@@ -263,6 +263,23 @@ draws under the radar sweep (model output, mosaics) and `Analysis` draws over it
 products read *against* the echo). They are independent, so the HRRR forecast and a
 rotation-track swath no longer fight over one slot.
 
+**TDWR is a Level III radar, and that shapes everything about it.** Terminal Doppler Weather
+Radar Level II is not published to the NEXRAD bucket, so the 45-odd terminal radars are reached
+as `TZ0/TZ1/TZ2` reflectivity and `TV0/TV1/TV2` velocity — three tilts each, in the same
+`unidata-nexrad-level3` bucket and key format as every other Level III product, site prefix
+being the ICAO minus its leading T. No WSR-88D and TDWR share a three-letter suffix, so the
+existing key scheme cannot collide.
+
+Consequences worth knowing before touching it. The scaling lives in the product's own
+threshold halfwords — 31 the first data level in tenths, 32 the increment, 33 the count — and
+differs between products (reflectivity floors at −32 dBZ, velocity at −63.5 m/s), so it cannot
+be hardcoded per code. Levels 0 and 1 are flags, and level 1 means range folded on velocity and
+nothing on reflectivity. `TdwrRadar.ToSweep` converts to a `Sweep` so the renderer, palettes,
+inspector and cross-section all apply unchanged; azimuthal shear then works for free, being
+derived from velocity. There is no archive and no forecast for a TDWR, so selecting one
+switches to live. They also go quiet in clear air, unlike a WSR-88D's continuous clear-air VCP
+— "nothing published" is normal rather than a failure.
+
 **Prefer deriving over decoding, where the maths is honest.** The wind profile is fitted
 from Level II velocity rather than decoded from the Level III NVW product, and azimuthal
 shear likewise. NVW is still distributed, but this project already lost the storm-structure
