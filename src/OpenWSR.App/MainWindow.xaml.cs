@@ -236,7 +236,7 @@ public partial class MainWindow : Window
 
         _mapView.Clicked += RouteMapClick;
 
-        _threats.Configure(settings.HomeLatDeg, settings.HomeLonDeg, settings.AlertRadiusKm, settings.DirectHitRadiusKm);
+        ConfigureThreats();
         RebuildHomeGeometry();
         EnsureStormWatchForHome(); // startup with a saved home arms the storm watch immediately
 
@@ -637,9 +637,9 @@ public partial class MainWindow : Window
     /// </summary>
     private void FrameSite(RadarSite site)
     {
-        if (_settings.HomeLatDeg is { } lat && _settings.HomeLonDeg is { } lon
-            && RadarSites.Nearest(lat, lon).Icao == site.Icao)
-            _mapView.Camera.MoveTo(lat, lon, 250);
+        if (_settings.Primary is { } primary
+            && RadarSites.Nearest(primary.LatDeg, primary.LonDeg).Icao == site.Icao)
+            _mapView.Camera.MoveTo(primary.LatDeg, primary.LonDeg, 250);
         else
             _mapView.Camera.MoveTo(site.LatDeg, site.LonDeg, 250);
     }
@@ -752,9 +752,9 @@ public partial class MainWindow : Window
         // With a home set, open on its radar, live, and centred on the house rather than the
         // tower — see FrameSite. Otherwise stay on the national view with the mosaic on: a
         // first screen that is about the weather now, rather than a hard-coded storm from 2013.
-        if (_settings.HomeLatDeg is { } lat && _settings.HomeLonDeg is { } lon)
+        if (_settings.Primary is { } primary)
         {
-            var site = RadarSites.Nearest(lat, lon);
+            var site = RadarSites.Nearest(primary.LatDeg, primary.LonDeg);
             SiteCombo.SelectedItem = RadarSites.ByIcao(site.Icao);
             FrameSite(site);
             ApplyMode(DataMode.Live);
@@ -927,8 +927,8 @@ public partial class MainWindow : Window
     /// otherwise whatever is selected for browsing.</summary>
     private RadarSite? StormWatchSite()
     {
-        if (_settings.HomeLatDeg is { } lat && _settings.HomeLonDeg is { } lon)
-            return RadarSites.Nearest(lat, lon);
+        if (_settings.Primary is { } primary)
+            return RadarSites.Nearest(primary.LatDeg, primary.LonDeg);
         return SiteCombo.SelectedItem as RadarSite;
     }
 
@@ -936,7 +936,7 @@ public partial class MainWindow : Window
     /// so track alerts work without a manual toggle.</summary>
     private void EnsureStormWatchForHome()
     {
-        if (_settings.HomeLatDeg is null || StormWatchSite() is not { } site) return;
+        if (_settings.Primary is null || StormWatchSite() is not { } site) return;
         if (StormsToggle.IsChecked == true)
             _storms.Enable(site.Icao); // re-point (home may have moved to a new nearest site)
         else
@@ -988,16 +988,25 @@ public partial class MainWindow : Window
         {
             _vm.Tool = MapTool.Inspect;
             SyncToolButtons();
-            _settings.HomeLatDeg = lat;
-            _settings.HomeLonDeg = lon;
-            _settings.HomeSource = "map";
-            _settings.HomeAccuracyM = null;
+            // Moves the primary if there is one, adds the first otherwise. Picking on the map
+            // is how you correct a place, not how you accumulate them — adding a new one every
+            // click would turn a nudge into a list.
+            var place = _settings.Primary;
+            if (place is null)
+            {
+                place = new SavedLocation { Name = "Home", IsPrimary = true };
+                _settings.Locations.Add(place);
+            }
+            place.LatDeg = lat;
+            place.LonDeg = lon;
+            place.Source = "map";
+            place.AccuracyM = null;
             _settings.Save();
-            _threats.Configure(lat, lon, _settings.AlertRadiusKm, _settings.DirectHitRadiusKm);
+            ConfigureThreats();
             EnsureStormWatchForHome();
             RebuildHomeGeometry();
             ComposeOverlay();
-            Report($"Home set to {lat:F3}, {lon:F3} — proximity alerts armed, " +
+            Report($"{place.Name} set to {lat:F3}, {lon:F3} — proximity alerts armed, " +
                    $"storm watch on {StormWatchSite()?.Icao}.");
             return;
         }
@@ -1099,24 +1108,49 @@ public partial class MainWindow : Window
 
     private void RebuildHomeGeometry()
     {
-        if (_settings.HomeLatDeg is not { } lat || _settings.HomeLonDeg is not { } lon)
+        if (_settings.Locations.Count == 0)
         {
             _homeGeometry = null;
             return;
         }
+
         var geometry = new OverlayGeometry();
-        var centre = GeoMath.ToMercator(lat, lon);
-        uint color = OverlayGeometry.Pack(80, 200, 255, 235);
-        // Radius ring drawn in true kilometers; Mercator inflates by 1/cos(lat).
-        double mercatorRadius = _settings.AlertRadiusKm * 1000.0 / Math.Cos(lat * Math.PI / 180.0);
-        StormOverlayController.AddCircle(geometry, (centre.X, centre.Y), mercatorRadius, color, 2f);
-        // The marker itself is a symbol, so it is sized in pixels, not metres.
         _homeBuiltAtMetresPerPixel = _mapView.Camera.Snapshot().MetersPerPixel;
-        double s = 6 * _homeBuiltAtMetresPerPixel;
-        geometry.FillTriangles.Add((centre.X - s, centre.Y - s, color));
-        geometry.FillTriangles.Add((centre.X, centre.Y + s, color));
-        geometry.FillTriangles.Add((centre.X + s, centre.Y - s, color));
+
+        foreach (var place in _settings.Locations)
+        {
+            var centre = GeoMath.ToMercator(place.LatDeg, place.LonDeg);
+            // The primary reads brighter: it is the one the app opens on and watches storms
+            // from, so it is worth being able to pick out at a glance.
+            uint color = place.IsPrimary
+                ? OverlayGeometry.Pack(80, 200, 255, 235)
+                : OverlayGeometry.Pack(80, 200, 255, 150);
+
+            // Radius ring drawn in true kilometres; Mercator inflates by 1/cos(lat).
+            double mercatorRadius = _settings.RadiusFor(place) * 1000.0
+                / Math.Cos(place.LatDeg * Math.PI / 180.0);
+            StormOverlayController.AddCircle(geometry, (centre.X, centre.Y), mercatorRadius, color, 2f);
+
+            // The marker itself is a symbol, so it is sized in pixels, not metres.
+            double s = 6 * _homeBuiltAtMetresPerPixel;
+            geometry.FillTriangles.Add((centre.X - s, centre.Y - s, color));
+            geometry.FillTriangles.Add((centre.X, centre.Y + s, color));
+            geometry.FillTriangles.Add((centre.X + s, centre.Y - s, color));
+        }
         _homeGeometry = geometry;
+    }
+
+    /// <summary>
+    /// Hand the monitor every saved place, primary first. Order matters only in that the
+    /// monitor treats the first as the one the map marker and storm popup measure against.
+    /// </summary>
+    private void ConfigureThreats()
+    {
+        var places = _settings.Locations
+            .OrderByDescending(l => l.IsPrimary)
+            .Select(l => new WatchedPlace(l.Name, l.LatDeg, l.LonDeg, _settings.RadiusFor(l)))
+            .ToList();
+        _threats.Configure(places, _settings.DirectHitRadiusKm);
     }
 
     /// <summary>
@@ -2107,7 +2141,7 @@ public partial class MainWindow : Window
         Units.System = _settings.Units;
         _playback.LoopFrames = _settings.LoopFrames;
         SyncLoopTooltip();
-        _threats.Configure(_settings.HomeLatDeg, _settings.HomeLonDeg, _settings.AlertRadiusKm, _settings.DirectHitRadiusKm);
+        ConfigureThreats();
         // Settings can now set home outright (Use my location), not only arm the map picker,
         // so the storm watch has to be re-pointed here as well as on the map-click path.
         EnsureStormWatchForHome();

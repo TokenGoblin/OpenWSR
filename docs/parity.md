@@ -84,7 +84,7 @@ the whole open-source field — no OSS viewer has it."* It is now done.
 | Location search and GPS | Blocker | **Done** — city, ZIP or lat/lon, resolving to nearest radar |
 | In-app settings | Blocker | **Done** — including the NWS contact string that was out of spec |
 | Notifications when minimized | Costs users | **Done** — tray notifications |
-| Saved locations | Expected | **Partial** — one home point, not a list |
+| Saved locations | Expected | **Done** — a named list, each with its own alert radius, all watched |
 | Per-type alert toggles and audio | Expected | **Done** — warning-type filters |
 | GIF / video export | Expected | **Done** — and now actually verified end-to-end; it could not write a file before (`audit.md` C-01) |
 | Independent site per pane | Expected | **Done** — any pane can be pinned to its own radar, in live or archive; pinned panes leave the camera link |

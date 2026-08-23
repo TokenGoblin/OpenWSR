@@ -3,6 +3,40 @@ using System.Text.Json;
 
 namespace OpenWSR.App;
 
+/// <summary>
+/// A place worth watching: home, work, wherever someone else is.
+///
+/// Each carries its own alert radius, because the question is not the same at each one. Fifty
+/// miles around the house is useful lead time; fifty miles around an office you will leave in
+/// an hour is noise.
+/// </summary>
+public sealed class SavedLocation
+{
+    public string Name { get; set; } = "Home";
+    public double LatDeg { get; set; }
+    public double LonDeg { get; set; }
+
+    /// <summary>
+    /// How the coordinates were arrived at — a map click, or a named Windows location
+    /// provider. A GPS fix and an IP-address guess a state wide are both "your location" and
+    /// should not read the same.
+    /// </summary>
+    public string? Source { get; set; }
+
+    /// <summary>Radius Windows quoted for the fix, in metres; null for a hand-placed point.</summary>
+    public double? AccuracyM { get; set; }
+
+    /// <summary>Alert radius for this place. Null falls back to the global default.</summary>
+    public double? AlertRadiusKm { get; set; }
+
+    /// <summary>
+    /// The one the app opens on and watches storms from. Exactly one location is primary; it
+    /// decides the startup camera and which radar the storm layer follows, both of which need
+    /// a single answer.
+    /// </summary>
+    public bool IsPrimary { get; set; }
+}
+
 /// <summary>User settings persisted at %LOCALAPPDATA%\OpenWSR\settings.json.</summary>
 public sealed class AppSettings
 {
@@ -12,19 +46,86 @@ public sealed class AppSettings
     /// <summary>Contact info appended to the User-Agent — api.weather.gov requires it.</summary>
     public string Contact { get; set; } = "";
 
-    /// <summary>Home location for proximity alerts; null until the user sets one.</summary>
+    /// <summary>Places to watch for approaching storms. Empty until the user sets one.</summary>
+    public List<SavedLocation> Locations { get; set; } = [];
+
+    // ---- the single home this replaced ----
+    //
+    // Still deserialised, and migrated into Locations on load, because a settings file older
+    // than the change carries a home here and nowhere else. Dropping them would silently
+    // un-arm the alerts of everyone who already had one. They are written back as null so a
+    // file saved by this version does not carry both spellings of the same fact.
+
+    /// <summary>Obsolete: the single home location, migrated into <see cref="Locations"/>.</summary>
     public double? HomeLatDeg { get; set; }
+
+    /// <summary>Obsolete: see <see cref="HomeLatDeg"/>.</summary>
     public double? HomeLonDeg { get; set; }
 
-    /// <summary>
-    /// How home was arrived at — a map click or a named Windows location provider. Kept so the
-    /// settings label can say where the number came from: "39.740, -104.984" is worth trusting
-    /// differently when it is a GPS fix than when it is an IP-address guess a state wide.
-    /// </summary>
+    /// <summary>Obsolete: see <see cref="HomeLatDeg"/>.</summary>
     public string? HomeSource { get; set; }
 
-    /// <summary>Radius Windows quoted for the fix, in metres; null for a hand-placed home.</summary>
+    /// <summary>Obsolete: see <see cref="HomeLatDeg"/>.</summary>
     public double? HomeAccuracyM { get; set; }
+
+    /// <summary>The location the app opens on and watches storms from, or null if there are none.</summary>
+    public SavedLocation? Primary =>
+        Locations.FirstOrDefault(l => l.IsPrimary) ?? Locations.FirstOrDefault();
+
+    /// <summary>This location's alert radius, or the global default where it has none.</summary>
+    public double RadiusFor(SavedLocation location) => location.AlertRadiusKm ?? AlertRadiusKm;
+
+    /// <summary>
+    /// Fold a pre-list settings file's single home into <see cref="Locations"/>.
+    ///
+    /// Runs on every load rather than once behind a version flag: a file written by an older
+    /// build can appear at any time — restored from a backup, synced from another machine —
+    /// and the check is cheap. It is a no-op once the list holds anything.
+    /// </summary>
+    internal void MigrateLegacyHome()
+    {
+        if (Locations.Count > 0 || HomeLatDeg is not { } lat || HomeLonDeg is not { } lon)
+        {
+            ClearLegacyHome();
+            return;
+        }
+
+        Locations.Add(new SavedLocation
+        {
+            Name = "Home",
+            LatDeg = lat,
+            LonDeg = lon,
+            Source = HomeSource,
+            AccuracyM = HomeAccuracyM,
+            IsPrimary = true,
+        });
+        ClearLegacyHome();
+    }
+
+    private void ClearLegacyHome()
+    {
+        HomeLatDeg = null;
+        HomeLonDeg = null;
+        HomeSource = null;
+        HomeAccuracyM = null;
+    }
+
+    /// <summary>
+    /// Exactly one primary, always — the startup camera and the storm watch each need a single
+    /// answer, and "none" and "two" are both ways of not having one.
+    /// </summary>
+    public void SetPrimary(SavedLocation location)
+    {
+        foreach (var l in Locations) l.IsPrimary = ReferenceEquals(l, location);
+    }
+
+    /// <summary>Keeps the primary valid after a removal, so the invariant survives editing.</summary>
+    public void Remove(SavedLocation location)
+    {
+        Locations.Remove(location);
+        if (Locations.Count > 0 && !Locations.Any(l => l.IsPrimary))
+            Locations[0].IsPrimary = true;
+    }
 
     /// <summary>Alert when a storm track or warning comes within this range of home.</summary>
     public double AlertRadiusKm { get; set; } = 40;
@@ -78,8 +179,12 @@ public sealed class AppSettings
         try
         {
             if (File.Exists(SettingsPath))
-                return JsonSerializer.Deserialize<AppSettings>(
+            {
+                var loaded = JsonSerializer.Deserialize<AppSettings>(
                     File.ReadAllText(SettingsPath), JsonOptions) ?? new AppSettings();
+                loaded.MigrateLegacyHome();
+                return loaded;
+            }
         }
         catch (Exception)
         {

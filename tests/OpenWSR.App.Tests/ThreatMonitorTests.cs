@@ -186,7 +186,7 @@ public class ThreatMonitorTests
 
         monitor.EvaluateWarnings([]);
         Assert.Single(monitor.Current);
-        Assert.StartsWith("storm:", monitor.Current[0].Key);
+        Assert.StartsWith("storm:", monitor.Current[0].SourceKey);
     }
 
     [Fact]
@@ -204,9 +204,9 @@ public class ThreatMonitorTests
 
         Assert.Equal(3, monitor.Current.Count);
         Assert.Equal(ThreatRank.Tornadic, monitor.Current[0].Rank);
-        Assert.Equal("warn:w2", monitor.Current[0].Key);
+        Assert.Equal("warn:w2", monitor.Current[0].SourceKey);
         Assert.Equal(ThreatRank.Overhead, monitor.Current[1].Rank);
-        Assert.Equal("storm:B2", monitor.Current[2].Key);
+        Assert.Equal("storm:B2", monitor.Current[2].SourceKey);
     }
 
     /// <summary>
@@ -229,7 +229,7 @@ public class ThreatMonitorTests
         monitor.EvaluateStorms([leaving, closing]);
 
         Assert.Single(monitor.Current);
-        Assert.Equal("storm:V1", monitor.Current[0].Key);
+        Assert.Equal("storm:V1", monitor.Current[0].SourceKey);
         Assert.Single(raised);
     }
 
@@ -463,8 +463,8 @@ public class ThreatMonitorTests
         monitor.EvaluateStorms([wide, close]);
 
         Assert.Equal(2, monitor.Current.Count);
-        Assert.Equal("storm:V1", monitor.Current[0].Key);
-        Assert.Equal("storm:W1", monitor.Current[1].Key);
+        Assert.Equal("storm:V1", monitor.Current[0].SourceKey);
+        Assert.Equal("storm:W1", monitor.Current[1].SourceKey);
     }
 
     /// <summary>
@@ -486,7 +486,7 @@ public class ThreatMonitorTests
         ]);
 
         Assert.Single(monitor.Current);
-        Assert.Equal("warn:w3", monitor.Current[0].Key);
+        Assert.Equal("warn:w3", monitor.Current[0].SourceKey);
         Assert.Single(raised);
     }
 
@@ -519,7 +519,7 @@ public class ThreatMonitorTests
 
         monitor.ExpireStale(now);
         Assert.Single(monitor.Current);
-        Assert.Equal("warn:w1", monitor.Current[0].Key);
+        Assert.Equal("warn:w1", monitor.Current[0].SourceKey);
     }
 
     [Fact]
@@ -573,6 +573,207 @@ public class ThreatMonitorTests
         monitor.EvaluateWarnings([Alert("w1", "Tornado Warning", Box(0, 0))]);
 
         Assert.Equal([1, 2], published);
+    }
+
+    // ---- more than one place ----
+
+    /// <summary>
+    /// The point of the list. One storm crossing two watched places is two things worth
+    /// knowing, at two distances and two arrival times, and each is named.
+    /// </summary>
+    [Fact]
+    public void OneStormThreateningTwoPlacesIsTwoEntries()
+    {
+        var monitor = new ThreatMonitor();
+        monitor.Configure(
+        [
+            new WatchedPlace("Home", 0, 0, 60),
+            new WatchedPlace("Work", 0.25, 0, 60),
+        ], directHitRadiusKm: 8);
+
+        // Tracking due east along the equator: overhead at Home, ~28 km south of Work.
+        monitor.EvaluateStorms([Storm(0, -0.35, [(0, -0.15), (0, 0.0)], id: "V1")]);
+
+        Assert.Equal(2, monitor.Current.Count);
+        Assert.Contains(monitor.Current, t => t.PlaceName == "Home");
+        Assert.Contains(monitor.Current, t => t.PlaceName == "Work");
+
+        var home = monitor.Current.First(t => t.PlaceName == "Home");
+        var work = monitor.Current.First(t => t.PlaceName == "Work");
+        Assert.Equal(ThreatRank.Direct, home.Rank);
+        Assert.Equal(ThreatRank.Glancing, work.Rank);
+        Assert.True(work.DistanceKm > home.DistanceKm);
+    }
+
+    /// <summary>
+    /// Each place carries its own alert radius, because the question is not the same at each.
+    /// The same storm is inside the wide one and outside the tight one.
+    /// </summary>
+    [Fact]
+    public void EachPlaceUsesItsOwnRadius()
+    {
+        var monitor = new ThreatMonitor();
+        monitor.Configure(
+        [
+            new WatchedPlace("Home", 0, 0, 60),      // wide
+            new WatchedPlace("Work", 0, 0, 10),      // tight
+        ], directHitRadiusKm: 8);
+
+        // Closest approach ~22 km north of both: inside Home's radius, outside Work's.
+        monitor.EvaluateStorms([Storm(0.2, -0.35, [(0.2, -0.15), (0.2, 0.0)], id: "F0")]);
+
+        var only = Assert.Single(monitor.Current);
+        Assert.Equal("Home", only.PlaceName);
+    }
+
+    /// <summary>
+    /// The throttle is per place. Hearing about a storm at home must not use up the
+    /// notification for the office, which is a different fact about a different building.
+    /// </summary>
+    [Fact]
+    public void TheNotificationThrottleIsPerPlace()
+    {
+        var monitor = new ThreatMonitor();
+        monitor.Configure(
+        [
+            new WatchedPlace("Home", 0, 0, 60),
+            new WatchedPlace("Work", 0.05, 0, 60),
+        ], directHitRadiusKm: 20);
+        var raised = new List<Threat>();
+        monitor.ThreatDetected += raised.Add;
+
+        var storm = Storm(0, -0.35, [(0, -0.15), (0, 0.0)], id: "V1");
+        monitor.EvaluateStorms([storm]);
+
+        Assert.Equal(2, raised.Count);
+        Assert.Equal(["Home", "Work"], raised.Select(t => t.PlaceName).Order());
+
+        // And the same storm on the next refresh re-alerts for neither.
+        monitor.EvaluateStorms([storm]);
+        Assert.Equal(2, raised.Count);
+    }
+
+    /// <summary>
+    /// The source identity stays the storm's, so the same cell is recognisable across places.
+    /// Only the throttle key carries the place.
+    /// </summary>
+    [Fact]
+    public void TheSourceIdentityIsTheStormAndTheThrottleKeyIsThePlace()
+    {
+        var monitor = new ThreatMonitor();
+        monitor.Configure(
+        [
+            new WatchedPlace("Home", 0, 0, 60),
+            new WatchedPlace("Work", 0.05, 0, 60),
+        ], directHitRadiusKm: 20);
+
+        monitor.EvaluateStorms([Storm(0, -0.35, [(0, -0.15), (0, 0.0)], id: "V1")]);
+
+        Assert.All(monitor.Current, t => Assert.Equal("storm:V1", t.SourceKey));
+        Assert.Equal(2, monitor.Current.Select(t => t.Key).Distinct().Count());
+    }
+
+    /// <summary>
+    /// With several places watched the row has to say which one. With one it must not — it is
+    /// the only answer there is, and a narrow panel needs that space for the range.
+    /// </summary>
+    [Fact]
+    public void ThePlaceIsNamedOnlyWhenThereIsMoreThanOne()
+    {
+        var storm = Storm(0, -0.35, [(0, -0.15), (0, 0.0)], id: "V1");
+
+        var single = new ThreatMonitor();
+        single.Configure([new WatchedPlace("Home", 0, 0, 60)], directHitRadiusKm: 8);
+        single.EvaluateStorms([storm]);
+        Assert.DoesNotContain("Home", single.Current[0].Label);
+
+        var several = new ThreatMonitor();
+        several.Configure(
+        [
+            new WatchedPlace("Home", 0, 0, 60),
+            new WatchedPlace("Work", 0.25, 0, 60),
+        ], directHitRadiusKm: 8);
+        several.EvaluateStorms([storm]);
+        Assert.Contains(several.Current, t => t.Label.Contains("Home"));
+        Assert.Contains(several.Current, t => t.Title.Contains("Home"));
+    }
+
+    /// <summary>
+    /// A warning polygon over one place and not another produces one entry, not two — the
+    /// tiering applies per place just as the geometry does.
+    /// </summary>
+    [Fact]
+    public void AWarningIsJudgedAgainstEachPlaceSeparately()
+    {
+        var monitor = new ThreatMonitor();
+        monitor.Configure(
+        [
+            new WatchedPlace("Home", 0, 0, 20),
+            new WatchedPlace("Far", 5, 5, 20),
+        ], directHitRadiusKm: 8);
+
+        monitor.EvaluateWarnings([Alert("w1", "Severe Thunderstorm Warning", Box(0, 0))]);
+
+        var only = Assert.Single(monitor.Current);
+        Assert.Equal("Home", only.PlaceName);
+        Assert.Equal(ThreatRank.Overhead, only.Rank);
+    }
+
+    /// <summary>
+    /// The direct-hit radius is clamped against the *narrowest* alert radius, not the
+    /// primary's. Clamping against the primary would leave a place with a tighter radius
+    /// unable to tell a direct hit from a glancing pass, since everything inside its circle
+    /// would already count as a hit.
+    /// </summary>
+    [Fact]
+    public void TheDirectHitRadiusIsClampedAgainstTheTightestPlace()
+    {
+        var monitor = new ThreatMonitor();
+        monitor.Configure(
+        [
+            new WatchedPlace("Home", 0, 0, 80),
+            new WatchedPlace("Work", 0, 0, 12),
+        ], directHitRadiusKm: 50);
+
+        Assert.Equal(12, monitor.DirectHitRadiusKm);
+    }
+
+    /// <summary>Configuring no places at all disarms the monitor and empties the list.</summary>
+    [Fact]
+    public void NoPlacesMeansNothingIsWatched()
+    {
+        var monitor = new ThreatMonitor();
+        monitor.Configure([new WatchedPlace("Home", 0, 0, 60)], directHitRadiusKm: 8);
+        monitor.EvaluateStorms([Storm(0, -0.35, [(0, -0.15), (0, 0.0)], id: "V1")]);
+        Assert.NotEmpty(monitor.Current);
+
+        monitor.Configure([], directHitRadiusKm: 8);
+
+        Assert.False(monitor.IsArmed);
+        Assert.Empty(monitor.Current);
+    }
+
+    /// <summary>
+    /// Re-configuring with the same places must not clear the throttle, or every settings save
+    /// would re-alert everything already on the list.
+    /// </summary>
+    [Fact]
+    public void ReconfiguringWithTheSamePlacesDoesNotReAlert()
+    {
+        var places = new[] { new WatchedPlace("Home", 0, 0, 60) };
+        var monitor = new ThreatMonitor();
+        monitor.Configure(places, directHitRadiusKm: 8);
+        var raised = new List<Threat>();
+        monitor.ThreatDetected += raised.Add;
+
+        var storm = Storm(0, -0.35, [(0, -0.15), (0, 0.0)], id: "V1");
+        monitor.EvaluateStorms([storm]);
+        Assert.Single(raised);
+
+        monitor.Configure(places, directHitRadiusKm: 8);
+        monitor.EvaluateStorms([storm]);
+
+        Assert.Single(raised);
     }
 
     [Theory]

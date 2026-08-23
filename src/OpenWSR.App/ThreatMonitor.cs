@@ -4,6 +4,12 @@ using OpenWSR.Ingest;
 namespace OpenWSR.App;
 
 /// <summary>
+/// One place being watched, flattened out of the settings so the monitor does not depend on
+/// how they are stored or edited.
+/// </summary>
+public readonly record struct WatchedPlace(string Name, double LatDeg, double LonDeg, double RadiusKm);
+
+/// <summary>
 /// How loudly a threat should read. The tiers are deliberately coarse — a list sorted by a
 /// continuous score reshuffles on every refresh and stops being scannable — and within a tier
 /// the ordering is soonest, then nearest.
@@ -31,8 +37,9 @@ public enum ThreatRank
 
 /// <summary>
 /// One thing worth knowing about, in a form both the tray notification and the side list can
-/// use. <paramref name="Key"/> is stable across refreshes — "storm:A1", "warn:{id}" — so the
-/// list can be replaced wholesale every cycle without the UI losing its place or re-alerting.
+/// use. <paramref name="SourceKey"/> is stable across refreshes — "storm:A1", "warn:{id}" — so
+/// the list can be replaced wholesale every cycle without the UI losing its place or
+/// re-alerting.
 /// </summary>
 /// <param name="Title">
 /// The sentence a tray balloon opens with: "Storm Y5 approaching your area".
@@ -47,7 +54,7 @@ public enum ThreatRank
 /// a footprint, not a track, and reporting "0 min" for one would be inventing an arrival time.
 /// </param>
 public sealed record Threat(
-    string Key,
+    string SourceKey,
     string Title,
     string Label,
     string Detail,
@@ -57,9 +64,17 @@ public sealed record Threat(
     double LatDeg,
     double LonDeg,
     DateTimeOffset? Expires = null,
-    string? PassesSide = null)
+    string? PassesSide = null,
+    string? PlaceName = null)
 {
     public bool IsTornado => Rank == ThreatRank.Tornadic;
+
+    /// <summary>
+    /// What the once-an-hour notification throttle is keyed on. It includes the place,
+    /// because one storm crossing two watched locations is two things worth being told —
+    /// hearing about it at home should not use up the alert for the office.
+    /// </summary>
+    public string Key => PlaceName is null ? SourceKey : $"{SourceKey}@{PlaceName}";
 
     /// <summary>
     /// Whether this is worth taking someone's attention for.
@@ -103,9 +118,20 @@ public sealed class ThreatMonitor
     private IReadOnlyList<Threat> _stormThreats = [];
     private IReadOnlyList<Threat> _warningThreats = [];
 
-    public double? HomeLatDeg { get; private set; }
-    public double? HomeLonDeg { get; private set; }
-    public double RadiusKm { get; private set; } = 40;
+    private IReadOnlyList<WatchedPlace> _places = [];
+
+    /// <summary>The places being watched, in the order they were configured.</summary>
+    public IReadOnlyList<WatchedPlace> Places => _places;
+
+    /// <summary>
+    /// The first watched place, which is the primary. Kept because the storm popup and the
+    /// map marker want a single point to measure against, and the primary is that point.
+    /// </summary>
+    public double? HomeLatDeg => _places.Count > 0 ? _places[0].LatDeg : null;
+
+    public double? HomeLonDeg => _places.Count > 0 ? _places[0].LonDeg : null;
+
+    public double RadiusKm => _places.Count > 0 ? _places[0].RadiusKm : 40;
 
     /// <summary>
     /// How close a track has to pass to count as coming for you rather than going by.
@@ -116,7 +142,7 @@ public sealed class ThreatMonitor
     /// </summary>
     public double DirectHitRadiusKm { get; private set; } = 8;
 
-    public bool IsArmed => HomeLatDeg is not null;
+    public bool IsArmed => _places.Count > 0;
 
     /// <summary>Everything currently threatening home, most urgent first.</summary>
     public IReadOnlyList<Threat> Current { get; private set; } = [];
@@ -127,26 +153,40 @@ public sealed class ThreatMonitor
     /// <summary>Fires whenever the current set changes: the side list.</summary>
     public event Action<IReadOnlyList<Threat>>? ThreatsChanged;
 
-    public void Configure(
-        double? homeLatDeg, double? homeLonDeg, double radiusKm, double directHitRadiusKm = 8)
+    /// <summary>
+    /// Set the places being watched. The first is the primary — the one the map marker and the
+    /// storm popup measure against, both of which need a single point.
+    /// </summary>
+    public void Configure(IReadOnlyList<WatchedPlace> places, double directHitRadiusKm = 8)
     {
-        bool moved = homeLatDeg != HomeLatDeg || homeLonDeg != HomeLonDeg
-            || radiusKm != RadiusKm || directHitRadiusKm != DirectHitRadiusKm;
-        HomeLatDeg = homeLatDeg;
-        HomeLonDeg = homeLonDeg;
-        RadiusKm = radiusKm;
-        // A direct-hit radius wider than the alert radius would make every threat a direct
-        // hit, which is a setting that cannot mean anything. Clamp rather than refuse.
-        DirectHitRadiusKm = Math.Clamp(directHitRadiusKm, 0, radiusKm);
-        if (!moved) return;
+        // A direct-hit radius wider than the tightest alert radius would make every threat at
+        // that place a direct hit, which is a setting that cannot mean anything. Clamped
+        // against the narrowest rather than the primary's, so no place is left unable to
+        // distinguish the two.
+        double tightest = places.Count > 0 ? places.Min(p => p.RadiusKm) : double.MaxValue;
+        double clamped = Math.Clamp(directHitRadiusKm, 0, tightest);
 
-        _alerted.Clear(); // new home/radius: re-evaluate everything fresh
-        // Every distance in the old set was measured against the old home and is now wrong.
+        bool changed = clamped != DirectHitRadiusKm || !places.SequenceEqual(_places);
+        _places = [.. places];
+        DirectHitRadiusKm = clamped;
+        if (!changed) return;
+
+        _alerted.Clear(); // new places or radii: re-evaluate everything fresh
+        // Every distance in the old set was measured against the old places and is now wrong.
         // Blank it rather than leave stale ranges on screen until the next poll lands.
         _stormThreats = [];
         _warningThreats = [];
         Publish();
     }
+
+    /// <summary>Convenience for a single place, which is what most of the app still has.</summary>
+    public void Configure(
+        double? homeLatDeg, double? homeLonDeg, double radiusKm, double directHitRadiusKm = 8) =>
+        Configure(
+            homeLatDeg is { } lat && homeLonDeg is { } lon
+                ? [new WatchedPlace("Home", lat, lon, radiusKm)]
+                : [],
+            directHitRadiusKm);
 
     /// <summary>
     /// Judge each tracked cell against home.
@@ -165,17 +205,19 @@ public sealed class ThreatMonitor
     /// </summary>
     public void EvaluateStorms(IReadOnlyList<TrackedStorm> storms)
     {
-        if (HomeLatDeg is not { } homeLat || HomeLonDeg is not { } homeLon)
+        if (_places.Count == 0)
         {
             ReplaceStorms([]);
             return;
         }
 
         var found = new List<Threat>();
+        foreach (var place in _places)
         foreach (var storm in storms)
         {
+            double homeLat = place.LatDeg, homeLon = place.LonDeg;
             if (ClosestApproach(storm, homeLat, homeLon) is not { } a) continue;
-            if (a.DistanceKm > RadiusKm) continue;
+            if (a.DistanceKm > place.RadiusKm) continue;
 
             // Going away. Nothing about it is approaching, whatever the circle says.
             if (a.IsReceding) continue;
@@ -214,7 +256,8 @@ public sealed class ThreatMonitor
                     rotating ? $"Storm {storm.Id} — rotating" : $"Storm {storm.Id}",
                     $"Passes within {Units.Distance(a.DistanceKm)} of home {when} ({motion}{tail})",
                     rotating ? ThreatRank.Tornadic : ThreatRank.Direct,
-                    a.DistanceKm, a.EtaMinutes, storm.LatDeg, storm.LonDeg)
+                    a.DistanceKm, a.EtaMinutes, storm.LatDeg, storm.LonDeg,
+                    PlaceName: place.Name)
                 : new Threat(
                     $"storm:{storm.Id}",
                     $"Storm {storm.Id} passing {Units.Distance(a.DistanceKm)} to your {side}",
@@ -225,7 +268,8 @@ public sealed class ThreatMonitor
                     // near you is worth knowing about, and the forecast track is the part
                     // of this least worth betting on.
                     rotating ? ThreatRank.Tornadic : ThreatRank.Glancing,
-                    a.DistanceKm, a.EtaMinutes, storm.LatDeg, storm.LonDeg, PassesSide: side));
+                    a.DistanceKm, a.EtaMinutes, storm.LatDeg, storm.LonDeg,
+                    PassesSide: side, PlaceName: place.Name));
         }
 
         ReplaceStorms(found);
@@ -235,16 +279,18 @@ public sealed class ThreatMonitor
 
     public void EvaluateWarnings(IReadOnlyList<ActiveAlert> alerts)
     {
-        if (HomeLatDeg is not { } homeLat || HomeLonDeg is not { } homeLon)
+        if (_places.Count == 0)
         {
             ReplaceWarnings([]);
             return;
         }
 
         var found = new List<Threat>();
+        foreach (var place in _places)
         foreach (var alert in alerts)
         {
             if (!IsDangerous(alert)) continue;
+            double homeLat = place.LatDeg, homeLon = place.LonDeg;
 
             // Distance to the polygon's edges, not its corners: a warning whose nearest
             // side runs 5 km from home can have its nearest vertex 60 km away.
@@ -253,7 +299,7 @@ public sealed class ThreatMonitor
                 .DefaultIfEmpty(double.MaxValue)
                 .Min();
             bool inside = nearestKm <= 0;
-            if (!inside && nearestKm > RadiusKm) continue;
+            if (!inside && nearestKm > place.RadiusKm) continue;
 
             string until = alert.Expires is { } expires
                 ? $" — until {expires.ToLocalTime():HH:mm}"
@@ -274,7 +320,8 @@ public sealed class ThreatMonitor
                 EtaMinutes: null,
                 latDeg,
                 lonDeg,
-                alert.Expires));
+                alert.Expires,
+                PlaceName: place.Name));
         }
 
         ReplaceWarnings(found);
@@ -391,8 +438,19 @@ public sealed class ThreatMonitor
     /// </summary>
     private void Publish()
     {
-        Current = _stormThreats
-            .Concat(_warningThreats)
+        var all = _stormThreats.Concat(_warningThreats);
+
+        // Which place is threatened only needs saying when there is more than one. With a
+        // single location it is the only answer there is, and putting "— Home" on every row
+        // of a narrow panel spends the space that carries the range.
+        if (_places.Count > 1)
+            all = all.Select(t => t.PlaceName is null ? t : t with
+            {
+                Title = $"{t.Title} — {t.PlaceName}",
+                Label = $"{t.Label} → {t.PlaceName}",
+            });
+
+        Current = all
             .OrderBy(t => (int)t.Rank)
             .ThenBy(t => t.DistanceKm)
             .ThenBy(t => t.EtaMinutes ?? 0)

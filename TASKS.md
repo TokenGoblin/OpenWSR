@@ -1233,3 +1233,38 @@ sat on top of the imagery decoded from source at 60 % opacity. It was not obviou
 capping the tiles at z7 had already made them smooth, so the thing covering the good layer
 looked much like the good layer. The tiles now draw only while no native raster is loaded,
 which is what a fallback is, and both comments say so.
+
+## Saved locations
+
+The last **Expected**-tier gap on the parity list. A single home became a named list, every
+entry watched, each with its own alert radius — fifty miles round the house is useful lead
+time, fifty round an office you leave in an hour is noise.
+
+- [x] Exactly one place is primary. It decides the startup camera and which radar the storm
+      layer follows, and both need a single answer, so `SetPrimary`/`Remove` keep the invariant
+      rather than leaving it to the UI
+- [x] `ThreatMonitor` judges every threat against every place, so one storm crossing two is two
+      entries at two distances. That forced a distinction the old code did not need:
+      `SourceKey` identifies the storm or warning, `Key` appends the place, and the
+      once-an-hour throttle uses the latter — hearing about a storm at home must not spend the
+      alert for the office
+- [x] The place is named on a row only when more than one is watched. With a single place it is
+      the only answer there is, and a 248 px panel needs that space for the range
+- [x] The direct-hit radius is clamped against the **narrowest** alert radius rather than the
+      primary's, or a place with a tighter radius could not tell a direct hit from a pass
+- [x] The map draws every place, the primary brighter, each ring at its own radius
+- [x] Settings edits copies and writes back only on Save — the single home it replaced had that
+      bug and it is not being reintroduced. The per-place radius combo is bound rather than
+      driven by `SelectionChanged`, since an event only fires when the control is touched and a
+      loaded row would show a blank box beside a radius it was using
+
+**The migration is the part that had to be right.** A file older than the list carries a home
+in `homeLatDeg` and nowhere else, and dropping it would silently un-arm the alerts of anyone
+who already had one — quietly, at the moment they most want them. `MigrateLegacyHome` runs on
+every load rather than once behind a version flag, because an older file can turn up at any
+time, and nulls the legacy fields so a saved file never carries two spellings of the same fact.
+
+**Gate:** [PASSED] 534/534 tests, 0 warnings. Verified live: the real `settings.json` migrated
+in the running app, showing "Home" with its Wi-Fi provenance intact, and a three-place file drew
+three rings at three radii over three neighbouring towns. The panel's place labelling is
+covered by tests but was not seen live — nothing was threatening any of the three at the time.

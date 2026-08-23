@@ -141,6 +141,25 @@ metres. Line widths are already pixel-constant in `OverlayRenderer`.
 a blocking `Wait(5s)` in `Stop()` froze the window on every live toggle. Dispose paths
 cancel and let the drain finish on a continuation.
 
+**Places are a list, and one of them is primary.** `AppSettings.Locations` replaced a single
+home. Exactly one entry is primary — it decides the startup camera and which radar the storm
+layer follows, and both need a single answer, so `SetPrimary`/`Remove` keep the invariant. Each
+place carries its own alert radius, falling back to the global one when null; `RadiusFor` is
+the only correct way to ask.
+
+`ThreatMonitor` evaluates every threat against every place, so one storm crossing two of them
+is two entries. `Threat.SourceKey` identifies the storm or warning; `Threat.Key` appends the
+place and is what the once-an-hour throttle uses, because hearing about a storm at home must
+not spend the alert for the office. The place is named on the row only when more than one is
+watched — with a single place it is the only answer there is, and a 248 px panel needs that
+space for the range.
+
+**A settings file older than the list still carries `homeLatDeg`.** `MigrateLegacyHome` folds
+it in on every load, not once behind a version flag: an older file can appear at any time,
+restored from a backup or synced from another machine. It is a no-op once the list holds
+anything, and it nulls the legacy fields so a saved file never carries two spellings of the
+same fact.
+
 **A track resolves to one of three things, and "closest approach" alone cannot tell them
 apart.** `DistanceKm` and `EtaMinutes` report the same pair — the current distance, zero
 minutes — whether a storm is arriving right now or is as close as it will ever get and
