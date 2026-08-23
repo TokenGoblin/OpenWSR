@@ -1216,3 +1216,20 @@ fetch already in flight.
 90 km range. The product bar offers reflectivity and velocity, greys out the dual-pol moments
 TDWR Level III does not carry, and offers **azimuthal shear** — which comes free, being derived
 from velocity rather than decoded.
+
+## Documenting how the feeds fit together
+
+- [x] `docs/radar-sources.md` — the map of the whole thing. What each of the eight feeds is,
+      how WSR-88D and TDWR differ and when to reach for which, the layer stack bottom to top,
+      and which layers are exclusive with which and why
+- [x] README picks up TDWR and the satellite day/night work, and three stale facts: the test
+      count said 76 against 513, `OpenWSR.NetCdf` was missing from the layout, and the purity
+      sentence left it out — though `PurityTests` has been enforcing it all along
+
+**Writing it turned up a bug.** The satellite tile layer was described in two places as
+drawing *beneath* the native ABI raster, so that "where both are present the good one wins".
+It draws after it, and therefore over it — so for the whole of phases 1 and 2 the IEM tiles
+sat on top of the imagery decoded from source at 60 % opacity. It was not obvious because
+capping the tiles at z7 had already made them smooth, so the thing covering the good layer
+looked much like the good layer. The tiles now draw only while no native raster is loaded,
+which is what a fallback is, and both comments say so.

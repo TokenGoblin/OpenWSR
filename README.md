@@ -45,13 +45,22 @@ No account, no API key, no subscription. Everything it reads is public data.
 - **Rotation tracks** — the strongest rotation seen at each point over the hour leading up
   to wherever you are in the timeline. A single scan says where rotation is; a swath says
   where it has been, which is the question a damage survey asks.
+- **Terminal radars (TDWR)** — all 47, alongside the 163 WSR-88Ds in the same site list.
+  C-band, a 0.55° beam against the WSR-88D's 0.95° and 150 m gates against 250 m, sited for
+  airport approach paths. Over a metro area that is a different picture, not a slightly
+  sharper one. Reflectivity and velocity at three tilts, from their Level III products —
+  and azimuthal shear works on them too, because this app derives it rather than decoding
+  it. See [how the radar types interact](docs/radar-sources.md).
 
 **National context**
 
 - **National mosaic** — seamless CONUS reflectivity, either from pre-rendered tiles or
   decoded natively from MRMS GRIB2. The tiles are published only to zoom 12 and are
   stretched above it; the native grid is 0.01° and stays sharp all the way in.
-- **Satellite** — GOES-East infrared beneath the radar layers.
+- **Satellite** — GOES-East cloud beneath the radar layers, decoded from ABI on the NOAA
+  bucket rather than fetched as somebody's pre-rendered tiles. True colour where the sun is
+  up and infrared where it is not, cross-faded across the terminator by solar zenith angle,
+  with clear ground left transparent so the basemap still reads through it.
 - **Future radar** — HRRR simulated reflectivity for the next six hours, decoded from
   GRIB2 and resampled from its Lambert grid into Mercator.
 - **Warnings** — live NWS polygons, filtered by type, click for the full text.
@@ -166,8 +175,10 @@ Everything below is public and unauthenticated.
 |---|---|
 | `unidata-nexrad-level2` (AWS) | Level II archive, 1991→now |
 | `unidata-nexrad-level2-chunks` | Level II real-time chunks |
-| `unidata-nexrad-level3` | Level III products (NST, NHI, NMD, NSS, DVL) |
+| `unidata-nexrad-level3` | Level III products (NST, NHI, NMD, NSS, DVL) and the TDWR terminal radars (TZ0–2, TV0–2) |
 | `noaa-hrrr-bdp-pds` (AWS) | HRRR model output for future radar |
+| `noaa-mrms-pds` (AWS) | MRMS national composite, decoded natively from GRIB2 |
+| `noaa-goes19` (AWS) | GOES-East ABI cloud imagery and GLM lightning |
 | `api.weather.gov` | Active warnings |
 | `spc.noaa.gov` | Day 1 convective outlooks |
 | Iowa Environmental Mesonet | National radar mosaic and GOES tiles, SPC watches and discussions, storm reports |
@@ -184,20 +195,21 @@ providers' terms — see `THIRD-PARTY-NOTICES.md`.
 ```
 src/OpenWSR.Nexrad      Level II decoder, live chunk assembler, Level III, cross-section
 src/OpenWSR.Grib2       GRIB2 edition-2 reader (MRMS, HRRR)
-src/OpenWSR.Geo         Beam propagation, geodesy, Mercator, Lambert, tile math
+src/OpenWSR.NetCdf      Minimal HDF5/NetCDF-4 reader (GOES ABI imagery, GLM lightning)
+src/OpenWSR.Geo         Beam propagation, geodesy, Mercator, Lambert, geostationary, solar, tile math
 src/OpenWSR.Placefiles  GRLevelX placefile parser
 src/OpenWSR.Palettes    Colour tables and GR2Analyst .pal import
 src/OpenWSR.Render      D3D11 device, map/radar/overlay renderers, HwndHost
 src/OpenWSR.Ingest      S3 clients, caches, alerts, geocoding, site table
 src/OpenWSR.App         WPF shell
 src/OpenWSR.Harness     Console decoder harness and live soak
-tests/                  76 tests
+tests/                  513 tests
 docs/                   Format notes, verification, endpoints, parity, screenshots
 resources/              Cross-check scripts, sample placefiles, reference tables
 ```
 
-`Nexrad`, `Geo`, `Grib2` and `Placefiles` are pure: no WPF, no Direct3D, no network. A
-test enforces it.
+`Nexrad`, `Geo`, `Grib2`, `NetCdf` and `Placefiles` are pure: no WPF, no Direct3D, no
+network. A test enforces it.
 
 ---
 
@@ -206,6 +218,7 @@ test enforces it.
 | | |
 |---|---|
 | [docs/](docs/) | Index, plus screenshots of every major capability |
+| [docs/radar-sources.md](docs/radar-sources.md) | **What each feed is, how WSR-88D and TDWR differ and when to use which, and which layers are exclusive with which** |
 | [docs/formats.md](docs/formats.md) | Binary format field notes — the parts that cost real debugging time |
 | [docs/verification.md](docs/verification.md) | How the decoders are golden-tested, and how to run a cross-check |
 | [docs/data-sources.md](docs/data-sources.md) | Every endpoint, the specs behind them, and which have already moved |

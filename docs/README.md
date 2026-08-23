@@ -5,6 +5,7 @@ for users) or [CLAUDE.md](../CLAUDE.md) (which is the working brief).
 
 | Document | What's in it |
 |---|---|
+| [radar-sources.md](radar-sources.md) | **Start here.** What each of the eight feeds is, how WSR-88D and TDWR differ and when to use which, and which layers are exclusive with which |
 | [formats.md](formats.md) | Binary format field notes — the parts that cost real debugging time. Level II, Level III, GRIB2, placefiles |
 | [verification.md](verification.md) | How each decoder is golden-tested against MetPy and ecCodes, and how to run a cross-check |
 | [data-sources.md](data-sources.md) | Every endpoint, the specs behind them, and which ones have already moved |

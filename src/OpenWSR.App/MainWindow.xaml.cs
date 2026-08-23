@@ -1275,10 +1275,10 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Native ABI is the layer; the pre-rendered tiles are the fallback. Both are switched
-    /// together so a bucket outage degrades to the tiles rather than to nothing — the tile
-    /// layer draws under the native raster, so where both are present the good one wins and
-    /// where only tiles arrive the map still has clouds on it.
+    /// Native ABI is the layer; the pre-rendered tiles are the fallback. Both are armed
+    /// together so a bucket outage degrades to the tiles rather than to nothing, and the
+    /// renderer draws the tiles only while no native raster is loaded — they are the same
+    /// field, so showing both at once is never right.
     /// </summary>
     private void SatelliteFilter_Changed(object sender, RoutedEventArgs e)
     {

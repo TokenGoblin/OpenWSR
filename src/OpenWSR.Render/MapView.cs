@@ -648,20 +648,24 @@ public sealed class MapView : IDisposable
 
             quads.Begin();
             DrawTiles(cam, textures, quads, _fetcher);
-            // Native ABI when it is loaded, pre-rendered tiles otherwise. Both draw here,
-            // under the radar layers: cloud context, not the subject.
-            DrawImageOverlay(OverlaySlot.Satellite, cam, quads, device);
-            // Satellite sits under the radar layers: cloud context, not the subject.
+            // Cloud, under the radar layers: context, not the subject.
             //
-            // Capped at the sensor's real resolution rather than at what the server will
-            // answer. ABI band 13 is 2 km at nadir and worse at CONUS latitudes, which is
-            // about z6 in Mercator; ask for z10 and IEM does not refuse, it nearest-neighbour
-            // upsamples, and every source pixel arrives as a hard-edged block. That was the
-            // jagged look. Requesting z7 and letting the GPU's linear filter magnify gives
-            // the smooth result, and is also the honest one — the detail past here was never
-            // measured. Clouds going soft as you zoom in is what the data actually supports.
-            if (_satelliteEnabled)
+            // Native ABI when it has loaded, and the pre-rendered tiles only when it has not.
+            // "Only when" is the whole point — the tiles draw *after* the raster and would
+            // otherwise cover the better data with the worse, which is not what a fallback
+            // means. Both are the same field, so drawing both is never right.
+            DrawImageOverlay(OverlaySlot.Satellite, cam, quads, device);
+            if (_satelliteEnabled && _imageOverlays[(int)OverlaySlot.Satellite] is null)
+            {
+                // Capped at the sensor's real resolution rather than at what the server will
+                // answer. ABI band 13 is 2 km at nadir and worse at CONUS latitudes, which is
+                // about z6 in Mercator; ask for z10 and IEM does not refuse, it
+                // nearest-neighbour upsamples, and every source pixel arrives as a hard-edged
+                // block. That was the jagged look. Requesting z7 and letting the GPU's linear
+                // filter magnify gives the smooth result, and is also the honest one — the
+                // detail past here was never measured.
                 DrawTiles(cam, satelliteTextures, quads, _satelliteFetcher, _satelliteOpacity, maxZoom: 7);
+            }
             // The mosaic is only published to zoom 12; above that we stretch its deepest tile.
             if (_mosaicEnabled)
                 DrawTiles(cam, mosaicTextures, quads, _mosaicFetcher, _mosaicOpacity, maxZoom: 12);
