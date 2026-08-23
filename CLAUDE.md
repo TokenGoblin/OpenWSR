@@ -141,6 +141,27 @@ metres. Line widths are already pixel-constant in `OverlayRenderer`.
 a blocking `Wait(5s)` in `Stop()` froze the window on every live toggle. Dispose paths
 cancel and let the drain finish on a continuation.
 
+**A track resolves to one of three things, and "closest approach" alone cannot tell them
+apart.** `DistanceKm` and `EtaMinutes` report the same pair — the current distance, zero
+minutes — whether a storm is arriving right now or is as close as it will ever get and
+leaving, because the search starts at the current position and only improves on it. Reading
+that as "now" turned every departing storm into an alert. `GeoMath.PathApproach` carries
+`CurrentKm` and `FinalKm` so `IsReceding`, `IsClosing` and `IsStationary` can be told apart.
+A receding storm is not on the list at all — the panel is titled APPROACHING.
+
+The other half is miss distance: passing thirty-five miles away inside a fifty-mile radius
+is not the same claim as passing overhead. `DirectHitRadiusKm` splits them. A **glancing**
+pass lists, names the side it goes by, and does **not** interrupt; only `Interrupts` threats
+raise. Warnings are exempt from the tiering — a polygon has no track, so there is nothing to
+judge — and so is a rotating cell, whose forecast track is the part least worth betting on.
+
+**The SCIT forecast is frequently degenerate while the motion is known.** Its forecast points
+sit on the current position for a while after a cell appears, but `SpeedKmh`/`BearingDeg` come
+from the *past* track and are usually good by then. Treating a degenerate forecast as "not
+tracked yet" throws away measured motion and drops storms that are demonstrably coming, so
+`ClosestApproach` extrapolates an hour along the measured heading instead. Only a cell with a
+degenerate forecast **and** null motion is genuinely untracked.
+
 **Alerting has two outputs and they answer different questions.** `ThreatMonitor.ThreatDetected`
 fires once per hour per source and is what *interrupts* — a tray balloon and a sound.
 `ThreatsChanged` carries the whole current set on every evaluation and is what the side list

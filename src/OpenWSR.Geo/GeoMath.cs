@@ -178,17 +178,56 @@ public static class GeoMath
     }
 
     /// <summary>
+    /// What a timed path does relative to a point.
+    ///
+    /// <paramref name="DistanceKm"/> is the closest it ever gets and <paramref name="EtaMinutes"/>
+    /// when — but those two alone cannot tell "arrives overhead in twenty minutes" from
+    /// "is as close as it will ever be, and leaving". Both report the same pair when the
+    /// closest approach is the current position. <paramref name="CurrentKm"/> and
+    /// <paramref name="FinalKm"/> are what separate them.
+    /// </summary>
+    /// <param name="LatDeg">Where on the ground the closest approach happens, for naming the side it passes.</param>
+    public readonly record struct PathApproach(
+        double DistanceKm,
+        double EtaMinutes,
+        double CurrentKm,
+        double FinalKm,
+        double LatDeg,
+        double LonDeg)
+    {
+        /// <summary>
+        /// The track never brings it closer than it already is, and it ends further away.
+        /// Nothing here is coming for the point — it is going.
+        /// </summary>
+        public bool IsReceding => EtaMinutes <= 0 && FinalKm > CurrentKm;
+
+        /// <summary>
+        /// The path is a single point, or every vertex sits on top of the first. SCIT emits
+        /// a cell like this the first time it sees one, so this is "not tracked yet" rather
+        /// than "stationary" — the same distinction <c>SpeedKmh</c> being nullable draws.
+        /// </summary>
+        public bool IsStationary => EtaMinutes <= 0 && Math.Abs(FinalKm - CurrentKm) < 0.25;
+
+        /// <summary>It gets closer than it is now.</summary>
+        public bool IsClosing => EtaMinutes > 0;
+    }
+
+    /// <summary>
     /// Closest approach of a timed path to a point. Path vertices are
     /// <paramref name="minutesPerSegment"/> apart (index 0 = now); segments are sampled
-    /// per minute. Returns distance and the minutes until that closest sample.
+    /// per minute.
     /// </summary>
-    public static (double DistanceKm, double EtaMinutes)? ClosestApproachToPath(
+    public static PathApproach? ClosestApproachToPath(
         IReadOnlyList<(double LatDeg, double LonDeg)> path,
         double latDeg, double lonDeg, double minutesPerSegment = 15)
     {
         if (path.Count == 0) return null;
-        double bestKm = DistanceM(latDeg, lonDeg, path[0].LatDeg, path[0].LonDeg) / 1000.0;
+
+        double currentKm = DistanceM(latDeg, lonDeg, path[0].LatDeg, path[0].LonDeg) / 1000.0;
+        double bestKm = currentKm;
         double bestMinutes = 0;
+        double bestLat = path[0].LatDeg, bestLon = path[0].LonDeg;
+
         int steps = Math.Max(1, (int)Math.Round(minutesPerSegment));
         for (int seg = 1; seg < path.Count; seg++)
         {
@@ -197,16 +236,20 @@ public static class GeoMath
             for (int step = 1; step <= steps; step++)
             {
                 double t = (double)step / steps;
-                double d = DistanceM(latDeg, lonDeg,
-                    aLat + (bLat - aLat) * t, aLon + (bLon - aLon) * t) / 1000.0;
-                if (d < bestKm)
-                {
-                    bestKm = d;
-                    bestMinutes = (seg - 1) * minutesPerSegment + step * minutesPerSegment / steps;
-                }
+                double lat = aLat + (bLat - aLat) * t;
+                double lon = aLon + (bLon - aLon) * t;
+                double d = DistanceM(latDeg, lonDeg, lat, lon) / 1000.0;
+                if (d >= bestKm) continue;
+                bestKm = d;
+                bestMinutes = (seg - 1) * minutesPerSegment + step * minutesPerSegment / steps;
+                bestLat = lat;
+                bestLon = lon;
             }
         }
-        return (bestKm, bestMinutes);
+
+        var last = path[^1];
+        double finalKm = DistanceM(latDeg, lonDeg, last.LatDeg, last.LonDeg) / 1000.0;
+        return new PathApproach(bestKm, bestMinutes, currentKm, finalKm, bestLat, bestLon);
     }
 
     private static double NormalizeLonDeg(double lonDeg)

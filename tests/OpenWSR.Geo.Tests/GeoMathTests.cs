@@ -176,6 +176,64 @@ public class ClosestApproachTests
         Assert.Equal(0, result.Value.EtaMinutes);
     }
 
+    /// <summary>
+    /// The distinction closest-approach alone cannot draw. Both of these report an ETA of
+    /// zero — one because the storm is arriving right now, the other because it is as close
+    /// as it will ever be and leaving. Reading the pair as "now" turned every departing
+    /// storm into an alert.
+    /// </summary>
+    [Fact]
+    public void APathThatOnlyMovesAwayIsReceding()
+    {
+        // Home west of the current position, and the track runs east.
+        var result = GeoMath.ClosestApproachToPath(EastboundPath, 35.5, -98.3);
+
+        Assert.NotNull(result);
+        Assert.True(result.Value.IsReceding);
+        Assert.False(result.Value.IsClosing);
+        Assert.True(result.Value.FinalKm > result.Value.CurrentKm);
+    }
+
+    [Fact]
+    public void APathThatBringsItCloserIsClosing()
+    {
+        var result = GeoMath.ClosestApproachToPath(EastboundPath, 35.5, -97.0);
+
+        Assert.NotNull(result);
+        Assert.True(result.Value.IsClosing);
+        Assert.False(result.Value.IsReceding);
+        Assert.False(result.Value.IsStationary);
+    }
+
+    /// <summary>
+    /// A path whose vertices all sit on the first is "not tracked yet", not "stationary in
+    /// the sense of measured to be still" — SCIT emits exactly this the first time it sees
+    /// a cell, which is why the caller must not read a direction into it.
+    /// </summary>
+    [Fact]
+    public void APathThatDoesNotMoveIsStationaryRatherThanReceding()
+    {
+        var result = GeoMath.ClosestApproachToPath(
+            [(35.5, -98.0), (35.5, -98.0), (35.5, -98.0)], 35.5, -97.5);
+
+        Assert.NotNull(result);
+        Assert.True(result.Value.IsStationary);
+        Assert.False(result.Value.IsReceding);
+        Assert.False(result.Value.IsClosing);
+    }
+
+    /// <summary>The closest approach carries where it happens, so a caller can name the side.</summary>
+    [Fact]
+    public void TheClosestApproachSaysWhereItHappens()
+    {
+        // Home 0.5° south of a track running along 35.5°N: closest is due north of home.
+        var result = GeoMath.ClosestApproachToPath(EastboundPath, 35.0, -97.5);
+
+        Assert.NotNull(result);
+        Assert.Equal(35.5, result.Value.LatDeg, 3);
+        Assert.Equal(-97.5, result.Value.LonDeg, 2);
+    }
+
     [Fact]
     public void EmptyPathReturnsNull() =>
         Assert.Null(GeoMath.ClosestApproachToPath([], 35.5, -98.0));

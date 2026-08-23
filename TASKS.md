@@ -1082,3 +1082,45 @@ headroom once, and leaves the same problem for the next tool.
 - [x] 1109 px → about 840 px. Verified live: everything on screen with headroom, Link appears
       and disappears with the second pane, the help card offers About, and Settings carries
       the importer
+
+## "It says a storm is coming when it is going the other way"
+
+Reported from the app, and two separate defects behind it.
+
+**The receding one was a bug with a one-line proof.** `ClosestApproachToPath` seeds its
+search with the distance at the current position and only improves on it, so a storm that
+never gets closer returns *(current distance, 0 minutes)* — which `ThreatMonitor` rendered as
+"now". The function had no way to say "never gets closer than it already is".
+
+**The other was a design gap.** Any pass inside the alert radius produced the same alert, so
+a thirty-five-mile miss inside a fifty-mile radius read exactly like a direct hit.
+
+- [x] `GeoMath.PathApproach` carries `CurrentKm` and `FinalKm` beside the closest approach,
+      which is what separates `IsReceding` from `IsClosing` from `IsStationary`. It also
+      carries *where* the closest approach happens, so the side can be named
+- [x] Three outcomes: **Direct** (within the direct-hit radius and closing) interrupts;
+      **Glancing** lists, says which side it passes, and stays quiet; **receding** is not on
+      the list at all — the panel is titled APPROACHING
+- [x] `Threat.Interrupts` gates the tray balloon. Warnings are exempt from the tiering — a
+      polygon carries no track, so there is nothing to judge — and so is a rotating cell,
+      whose forecast track is the part of this least worth betting on
+- [x] New `DirectHitRadiusKm` setting, default 8 km / 5 mi, clamped to the alert radius. The
+      last option is "anything inside the alert radius", which restores the old behaviour
+- [x] The panel heading now reads **IN THE AREA** when nothing is actually on course, and the
+      count separates the two claims: "6 · 1 passing wide" rather than "7"
+- [x] The storm popup says the same three things, so clicking a cell answers "is this coming
+      for me" directly
+
+**The over-filter this nearly introduced.** SCIT emits forecast points sitting on the current
+position for a while after a cell appears, but `SpeedKmh`/`BearingDeg` are derived from the
+*past* track and are usually known by then — the projection cone already relies on exactly
+that. Treating a degenerate forecast as "not tracked yet" dropped storms that were
+demonstrably closing. `ClosestApproach` extrapolates an hour along the measured heading
+instead; only a degenerate forecast **and** null motion is genuinely untracked.
+
+**Gate:** [PASSED] 434/434 tests, 0 warnings. Verified against live KMTX with home moved into
+the storm field: six cells in an 80 km radius all classified **passing wide**, heading reading
+`IN THE AREA · 6 passing wide`, none interrupting — where all six would previously have raised
+a tray balloon. Widening the direct-hit radius over the same weather flipped the heading to
+`APPROACHING · 6 · 1 passing wide` with the direct rows carrying no compass letter, because a
+direct hit does not pass to a side. Settings were backed up and restored.

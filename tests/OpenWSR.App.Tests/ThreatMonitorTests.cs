@@ -72,7 +72,7 @@ public class ThreatMonitorTests
         var storm = Storm(0, -0.5, [(0, -0.25), (0, 0.0), (0, 0.25)]);
         monitor.EvaluateStorms([storm]);
         Assert.Single(raised);
-        Assert.Contains("approaching", raised[0].Title);
+        Assert.Contains("heading for you", raised[0].Title);
 
         // The same cell on the next 2-minute refresh must not alert again.
         monitor.EvaluateStorms([storm]);
@@ -210,24 +210,261 @@ public class ThreatMonitorTests
     }
 
     /// <summary>
-    /// The ordering that soonest-first got wrong on live data. Y5's closest approach is where
-    /// it already is, so its ETA is zero; V1 is closing to a third of that distance over the
-    /// next twenty minutes. V1 is the one worth reading first.
+    /// The false alarm that prompted all this. Y5's closest approach is where it already sits
+    /// and every forecast step takes it further away, so nothing about it is approaching —
+    /// but closest-approach alone reports (current distance, 0 minutes), which the old code
+    /// rendered as "now". It is off the list entirely; only the storm actually closing is on it.
     /// </summary>
     [Fact]
-    public void ClosestComesFirstEvenWhenSomethingElseIsAlreadyAtItsNearest()
+    public void AStormMovingAwayIsNotOnTheList()
     {
         var monitor = new ThreatMonitor();
         monitor.Configure(0, 0, radiusKm: 80);
+        var raised = new List<Threat>();
+        monitor.ThreatDetected += raised.Add;
 
-        var alreadyThere = Storm(0, 0.35, [(0, 0.5), (0, 0.7)], id: "Y5");   // ~39 km, receding
-        var closingIn = Storm(0.13, -0.35, [(0.13, -0.15), (0.13, 0.0)], id: "V1"); // ~14 km at pass
+        var leaving = Storm(0, 0.35, [(0, 0.5), (0, 0.7)], id: "Y5");        // ~39 km and receding
+        var closing = Storm(0, -0.35, [(0, -0.15), (0, 0.0)], id: "V1");     // arrives overhead
 
-        monitor.EvaluateStorms([alreadyThere, closingIn]);
+        monitor.EvaluateStorms([leaving, closing]);
 
+        Assert.Single(monitor.Current);
         Assert.Equal("storm:V1", monitor.Current[0].Key);
-        Assert.Equal(0, monitor.Current[1].EtaMinutes);
-        Assert.True(monitor.Current[0].EtaMinutes > 0);
+        Assert.Single(raised);
+    }
+
+    /// <summary>A storm receding on its own is not merely quiet — it is absent.</summary>
+    [Fact]
+    public void AStormMovingAwayRaisesNothingAtAll()
+    {
+        var monitor = new ThreatMonitor();
+        monitor.Configure(0, 0, radiusKm: 80);
+        var raised = new List<Threat>();
+        monitor.ThreatDetected += raised.Add;
+
+        monitor.EvaluateStorms([Storm(0, 0.1, [(0, 0.3), (0, 0.5)], id: "Y5")]);
+
+        Assert.Empty(monitor.Current);
+        Assert.Empty(raised);
+    }
+
+    /// <summary>
+    /// The other half of the complaint: in your area, but not coming to your house. It goes on
+    /// the list — it is real and worth seeing — and it does not interrupt.
+    /// </summary>
+    [Fact]
+    public void AStormPassingWideListsButDoesNotInterrupt()
+    {
+        var monitor = new ThreatMonitor();
+        monitor.Configure(0, 0, radiusKm: 60, directHitRadiusKm: 8);
+        var raised = new List<Threat>();
+        monitor.ThreatDetected += raised.Add;
+
+        // Tracking due east along 0.2°N — about 22 km north of home at its closest.
+        monitor.EvaluateStorms([Storm(0.2, -0.35, [(0.2, -0.15), (0.2, 0.0)], id: "F0")]);
+
+        Assert.Single(monitor.Current);
+        Assert.Equal(ThreatRank.Glancing, monitor.Current[0].Rank);
+        Assert.False(monitor.Current[0].Interrupts);
+        Assert.Empty(raised);
+    }
+
+    /// <summary>Which side it goes by is the thing that answers "will it hit me".</summary>
+    [Fact]
+    public void AGlancingPassNamesTheSideItGoesBy()
+    {
+        var monitor = new ThreatMonitor();
+        monitor.Configure(0, 0, radiusKm: 60, directHitRadiusKm: 8);
+
+        monitor.EvaluateStorms([Storm(0.2, -0.35, [(0.2, -0.15), (0.2, 0.0)], id: "F0")]);
+
+        var threat = monitor.Current[0];
+        Assert.Equal("N", threat.PassesSide);
+        Assert.Contains("to your N", threat.Title);
+        Assert.Contains("not on course for you", threat.Detail);
+        Assert.Contains("N", threat.Range);
+    }
+
+    [Fact]
+    public void AStormOnCourseForYouInterrupts()
+    {
+        var monitor = new ThreatMonitor();
+        monitor.Configure(0, 0, radiusKm: 60, directHitRadiusKm: 8);
+        var raised = new List<Threat>();
+        monitor.ThreatDetected += raised.Add;
+
+        monitor.EvaluateStorms([Storm(0, -0.35, [(0, -0.15), (0, 0.0)], id: "V1")]);
+
+        Assert.Equal(ThreatRank.Direct, monitor.Current[0].Rank);
+        Assert.True(monitor.Current[0].Interrupts);
+        Assert.Null(monitor.Current[0].PassesSide);   // it does not pass to a side, it arrives
+        Assert.Single(raised);
+        Assert.Contains("heading for you", raised[0].Title);
+    }
+
+    /// <summary>
+    /// The same storm, judged twice against different thresholds. This is the setting doing
+    /// what it says: a wider direct-hit radius makes a wider set of passes worth interrupting.
+    /// </summary>
+    [Theory]
+    [InlineData(8, ThreatRank.Glancing)]    // a 22 km miss is a pass
+    [InlineData(30, ThreatRank.Direct)]     // ...unless you asked to hear about those
+    public void TheDirectHitRadiusDecidesWhichItIs(double directHitKm, ThreatRank expected)
+    {
+        var monitor = new ThreatMonitor();
+        monitor.Configure(0, 0, radiusKm: 60, directHitRadiusKm: directHitKm);
+
+        monitor.EvaluateStorms([Storm(0.2, -0.35, [(0.2, -0.15), (0.2, 0.0)], id: "F0")]);
+
+        Assert.Equal(expected, monitor.Current[0].Rank);
+    }
+
+    /// <summary>
+    /// A direct-hit radius wider than the alert radius would make every threat a direct hit,
+    /// which is a setting that cannot mean anything. It clamps rather than refusing.
+    /// </summary>
+    [Fact]
+    public void TheDirectHitRadiusCannotExceedTheAlertRadius()
+    {
+        var monitor = new ThreatMonitor();
+        monitor.Configure(0, 0, radiusKm: 40, directHitRadiusKm: 500);
+
+        Assert.Equal(40, monitor.DirectHitRadiusKm);
+    }
+
+    /// <summary>
+    /// SCIT emits a cell with its forecast sitting on its current position the first time it
+    /// sees one — the same "not tracked yet" state that makes SpeedKmh nullable. Nothing can
+    /// be said about where it is going, so it counts only when it is already on top of you.
+    /// Guessing either way would be inventing a forecast.
+    /// </summary>
+    [Fact]
+    public void ACellWithNoTrackYetCountsOnlyWhenItIsAlreadyOnYou()
+    {
+        var monitor = new ThreatMonitor();
+        monitor.Configure(0, 0, radiusKm: 60, directHitRadiusKm: 8);
+
+        // Genuinely unmeasured: a degenerate forecast AND null speed and bearing. Nulls are
+        // the point — a cell with a degenerate forecast but known motion is a different case
+        // and gets extrapolated, which is what MeasuredMotionIsUsedWhenTheForecastTrackSaysNothing
+        // covers.
+        static TrackedStorm Untracked(string id, double latDeg, double lonDeg) =>
+            new(id, latDeg, lonDeg, [(latDeg, lonDeg)], [], SpeedKmh: null, BearingDeg: null,
+                ProbabilityOfHail: 0, ProbabilityOfSevereHail: 0, MaxHailSizeInches: 0,
+                MesoRadiusKm: null, MaxDbz: null, CellBasedVil: null, EchoTopKft: null);
+
+        // 22 km away and nothing known about its motion: not a claim worth making.
+        monitor.EvaluateStorms([Untracked("N1", 0.2, 0)]);
+        Assert.Empty(monitor.Current);
+
+        // 3 km away with no track is still 3 km away.
+        monitor.EvaluateStorms([Untracked("N2", 0.03, 0)]);
+        Assert.Single(monitor.Current);
+        Assert.Equal(ThreatRank.Direct, monitor.Current[0].Rank);
+    }
+
+    /// <summary>
+    /// A rotating cell interrupts even when the track says it misses. A mesocyclone a few
+    /// miles away is worth knowing about, and its forecast track is the part of this least
+    /// worth betting on.
+    /// </summary>
+    [Fact]
+    public void ARotatingCellStillInterruptsWhenItMisses()
+    {
+        var monitor = new ThreatMonitor();
+        monitor.Configure(0, 0, radiusKm: 60, directHitRadiusKm: 8);
+        var raised = new List<Threat>();
+        monitor.ThreatDetected += raised.Add;
+
+        monitor.EvaluateStorms([
+            Storm(0.2, -0.35, [(0.2, -0.15), (0.2, 0.0)], id: "M1", mesoRadiusKm: 3.5)]);
+
+        Assert.Equal(ThreatRank.Tornadic, monitor.Current[0].Rank);
+        Assert.True(monitor.Current[0].Interrupts);
+        Assert.Single(raised);
+    }
+
+    /// <summary>
+    /// A warning polygon carries no track, so it cannot be judged as closing or going. One
+    /// near home stays a warning near home and keeps interrupting — the tiering applies to
+    /// storm cells, which are the only things here that come with a forecast.
+    /// </summary>
+    [Fact]
+    public void AWarningNearHomeStillInterrupts()
+    {
+        var monitor = new ThreatMonitor();
+        monitor.Configure(0, 0, radiusKm: 60, directHitRadiusKm: 8);
+        var raised = new List<Threat>();
+        monitor.ThreatDetected += raised.Add;
+
+        monitor.EvaluateWarnings([Alert("w1", "Severe Thunderstorm Warning", Box(0.3, 0))]);
+
+        Assert.Equal(ThreatRank.Nearby, monitor.Current[0].Rank);
+        Assert.True(monitor.Current[0].Interrupts);
+        Assert.Single(raised);
+    }
+
+    /// <summary>
+    /// SCIT routinely emits a cell whose forecast points sit on its current position while
+    /// its speed and bearing — derived from the *past* track — are perfectly well known. The
+    /// old fall-through treated that as "not tracked yet" and dropped a storm that is
+    /// measurably heading at you. The measured motion is extrapolated instead.
+    /// </summary>
+    [Fact]
+    public void MeasuredMotionIsUsedWhenTheForecastTrackSaysNothing()
+    {
+        var monitor = new ThreatMonitor();
+        monitor.Configure(0, 0, radiusKm: 60, directHitRadiusKm: 8);
+        var raised = new List<Threat>();
+        monitor.ThreatDetected += raised.Add;
+
+        // 33 km due west, forecast points all on top of it, but measured at 50 km/h due east.
+        var storm = new TrackedStorm(
+            "D1", 0, -0.3, [(0, -0.3), (0, -0.3)], [], SpeedKmh: 50, BearingDeg: 90,
+            ProbabilityOfHail: 0, ProbabilityOfSevereHail: 0, MaxHailSizeInches: 0,
+            MesoRadiusKm: null, MaxDbz: null, CellBasedVil: null, EchoTopKft: null);
+
+        monitor.EvaluateStorms([storm]);
+
+        Assert.Single(monitor.Current);
+        Assert.Equal(ThreatRank.Direct, monitor.Current[0].Rank);
+        Assert.True(monitor.Current[0].EtaMinutes > 0, "it should have an arrival time");
+        Assert.Single(raised);
+    }
+
+    /// <summary>The same fallback must not resurrect a storm that is measurably leaving.</summary>
+    [Fact]
+    public void MeasuredMotionAwayIsStillReceding()
+    {
+        var monitor = new ThreatMonitor();
+        monitor.Configure(0, 0, radiusKm: 60, directHitRadiusKm: 8);
+
+        // 22 km east, forecast degenerate, measured heading further east.
+        var storm = new TrackedStorm(
+            "D2", 0, 0.2, [(0, 0.2)], [], SpeedKmh: 50, BearingDeg: 90,
+            ProbabilityOfHail: 0, ProbabilityOfSevereHail: 0, MaxHailSizeInches: 0,
+            MesoRadiusKm: null, MaxDbz: null, CellBasedVil: null, EchoTopKft: null);
+
+        monitor.EvaluateStorms([storm]);
+
+        Assert.Empty(monitor.Current);
+    }
+
+    /// <summary>Among storms that are genuinely closing, the nearest miss still sorts first.</summary>
+    [Fact]
+    public void NearestMissSortsFirstAmongClosingStorms()
+    {
+        var monitor = new ThreatMonitor();
+        monitor.Configure(0, 0, radiusKm: 80, directHitRadiusKm: 8);
+
+        var wide = Storm(0.35, -0.35, [(0.35, -0.15), (0.35, 0.0)], id: "W1");   // ~39 km N
+        var close = Storm(0.13, -0.35, [(0.13, -0.15), (0.13, 0.0)], id: "V1");  // ~14 km N
+
+        monitor.EvaluateStorms([wide, close]);
+
+        Assert.Equal(2, monitor.Current.Count);
+        Assert.Equal("storm:V1", monitor.Current[0].Key);
+        Assert.Equal("storm:W1", monitor.Current[1].Key);
     }
 
     /// <summary>

@@ -236,7 +236,7 @@ public partial class MainWindow : Window
 
         _mapView.Clicked += RouteMapClick;
 
-        _threats.Configure(settings.HomeLatDeg, settings.HomeLonDeg, settings.AlertRadiusKm);
+        _threats.Configure(settings.HomeLatDeg, settings.HomeLonDeg, settings.AlertRadiusKm, settings.DirectHitRadiusKm);
         RebuildHomeGeometry();
         EnsureStormWatchForHome(); // startup with a saved home arms the storm watch immediately
 
@@ -903,7 +903,7 @@ public partial class MainWindow : Window
             _settings.HomeSource = "map";
             _settings.HomeAccuracyM = null;
             _settings.Save();
-            _threats.Configure(lat, lon, _settings.AlertRadiusKm);
+            _threats.Configure(lat, lon, _settings.AlertRadiusKm, _settings.DirectHitRadiusKm);
             EnsureStormWatchForHome();
             RebuildHomeGeometry();
             ComposeOverlay();
@@ -919,6 +919,30 @@ public partial class MainWindow : Window
         }
 
         _warnings.HandleClick(x, y);
+    }
+
+    /// <summary>
+    /// What this cell's track does relative to home, in one line. Says the same three things
+    /// the notification tiers do — coming for you, going by, or already leaving — because a
+    /// popup that says "passes 22 mi from home" leaves the reader to work out which.
+    /// </summary>
+    private string ApproachLine(GeoMath.PathApproach approach)
+    {
+        if (approach.IsReceding)
+            return $"Moving away — closest it got was {Units.Distance(approach.DistanceKm)}";
+        if (approach.IsStationary)
+            return $"{Units.Distance(approach.CurrentKm)} from home, motion not tracked yet";
+        if (approach.DistanceKm > _threats.RadiusKm)
+            return $"Closest approach to home: {Units.Distance(approach.DistanceKm)}";
+
+        string when = approach.EtaMinutes < 1 ? "now" : $"in ~{approach.EtaMinutes:F0} min";
+        if (approach.DistanceKm <= _threats.DirectHitRadiusKm)
+            return $"⚠ Heading for you — within {Units.Distance(approach.DistanceKm)} {when}";
+
+        string side = ThreatMonitor.CompassPoint(
+            GeoMath.BearingRad(_threats.HomeLatDeg!.Value, _threats.HomeLonDeg!.Value,
+                approach.LatDeg, approach.LonDeg) * 180.0 / Math.PI);
+        return $"Passes {Units.Distance(approach.DistanceKm)} to your {side} {when} — not on course for you";
     }
 
     private void ShowStormPopup(TrackedStorm storm, int x, int y)
@@ -942,9 +966,7 @@ public partial class MainWindow : Window
         if (_threats.IsArmed &&
             ThreatMonitor.ClosestApproach(storm, _threats.HomeLatDeg!.Value, _threats.HomeLonDeg!.Value)
                 is { } approach)
-            lines.Add(approach.DistanceKm <= _threats.RadiusKm
-                ? $"⚠ Passes {Units.Distance(approach.DistanceKm)} from home in ~{approach.EtaMinutes:F0} min"
-                : $"Closest approach to home: {Units.Distance(approach.DistanceKm)}");
+            lines.Add(ApproachLine(approach));
 
         var panel = new StackPanel { MaxWidth = 340, Margin = new Thickness(10) };
         panel.Children.Add(new TextBlock
@@ -1041,14 +1063,28 @@ public partial class MainWindow : Window
         if (threats.Count == 0) return;
 
         int tornadic = threats.Count(t => t.Rank == ThreatRank.Tornadic);
-        ThreatCount.Text = tornadic > 0 ? $"{threats.Count} · {tornadic} tornadic" : $"{threats.Count}";
+        int glancing = threats.Count(t => t.Rank == ThreatRank.Glancing);
+        int coming = threats.Count - glancing;
+
+        // The count separates the two claims rather than adding them up: "4" over a list
+        // where three of the four are passing wide overstates it every time.
+        ThreatCount.Text = tornadic > 0 ? $"{coming} · {tornadic} tornadic"
+            : glancing > 0 && coming > 0 ? $"{coming} · {glancing} passing wide"
+            : glancing > 0 ? $"{glancing} passing wide"
+            : $"{coming}";
+
         // The heading carries the worst of it, because the heading is what gets read at a
-        // glance from across the room.
-        ThreatHeading.Text = tornadic > 0 ? "TORNADIC — APPROACHING" : "APPROACHING";
+        // glance from across the room — and when nothing is actually coming, it says so.
+        ThreatHeading.Text = tornadic > 0 ? "TORNADIC — APPROACHING"
+            : coming > 0 ? "APPROACHING"
+            : "IN THE AREA";
         ThreatHeading.Foreground = tornadic > 0
             ? System.Windows.Media.Brushes.OrangeRed
-            : new System.Windows.Media.SolidColorBrush(
-                System.Windows.Media.Color.FromRgb(0xFF, 0x9B, 0x7A));
+            : coming > 0
+                ? new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(0xFF, 0x9B, 0x7A))
+                : new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(0x9A, 0xA3, 0xB2));
     }
 
     /// <summary>Put the camera on the threat that was clicked, at a single-storm zoom.</summary>
@@ -1981,7 +2017,7 @@ public partial class MainWindow : Window
         Units.System = _settings.Units;
         _playback.LoopFrames = _settings.LoopFrames;
         SyncLoopTooltip();
-        _threats.Configure(_settings.HomeLatDeg, _settings.HomeLonDeg, _settings.AlertRadiusKm);
+        _threats.Configure(_settings.HomeLatDeg, _settings.HomeLonDeg, _settings.AlertRadiusKm, _settings.DirectHitRadiusKm);
         // Settings can now set home outright (Use my location), not only arm the map picker,
         // so the storm watch has to be re-pointed here as well as on the map-click path.
         EnsureStormWatchForHome();

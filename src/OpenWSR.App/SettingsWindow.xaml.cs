@@ -42,6 +42,10 @@ public partial class SettingsWindow : Window
         {
             <= 15 => 0, <= 40 => 1, <= 80 => 2, _ => 3,
         };
+        DirectHitCombo.SelectedIndex = settings.DirectHitRadiusKm switch
+        {
+            <= 2 => 0, <= 8 => 1, <= 16 => 2, _ => 3,
+        };
         UpdateHomeLabel();
 
         ContactBox.TextChanged += (_, _) => UpdatePreview();
@@ -182,6 +186,12 @@ public partial class SettingsWindow : Window
         _settings.AlertRadiusKm = RadiusCombo.SelectedIndex switch
         {
             0 => 15, 2 => 80, 3 => 160, _ => 40,
+        };
+        // The last option means "no distinction": everything inside the alert radius counts
+        // as a direct hit, which is what this did before the tiering existed.
+        _settings.DirectHitRadiusKm = DirectHitCombo.SelectedIndex switch
+        {
+            0 => 2, 2 => 16, 3 => _settings.AlertRadiusKm, _ => 8,
         };
         _settings.HomeLatDeg = _homeLatDeg;
         _settings.HomeLonDeg = _homeLonDeg;

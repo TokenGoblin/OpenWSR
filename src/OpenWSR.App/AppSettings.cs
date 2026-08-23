@@ -29,6 +29,14 @@ public sealed class AppSettings
     /// <summary>Alert when a storm track or warning comes within this range of home.</summary>
     public double AlertRadiusKm { get; set; } = 40;
 
+    /// <summary>
+    /// How close a storm's track has to pass to count as coming for you rather than going by.
+    /// Inside this, it interrupts; outside but still within <see cref="AlertRadiusKm"/>, it
+    /// only appears in the list. A storm is not a point and the track is a forecast, so this
+    /// is a few kilometres rather than zero.
+    /// </summary>
+    public double DirectHitRadiusKm { get; set; } = 8;
+
     /// <summary>Display units for distance, speed and height.</summary>
     public UnitSystem Units { get; set; } = UnitSystem.Imperial;
 

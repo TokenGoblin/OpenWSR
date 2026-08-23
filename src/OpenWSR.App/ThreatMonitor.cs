@@ -16,8 +16,17 @@ public enum ThreatRank
     /// <summary>A warning polygon that contains home. It is happening where you are.</summary>
     Overhead = 1,
 
-    /// <summary>Inside the alert radius and closing.</summary>
-    Approaching = 2,
+    /// <summary>A storm whose track passes within the direct-hit radius, and is still closing.</summary>
+    Direct = 2,
+
+    /// <summary>A warning near home. A polygon has no track, so it cannot be judged further.</summary>
+    Nearby = 3,
+
+    /// <summary>
+    /// A storm that comes inside the alert radius but misses. It is in your area and not
+    /// coming to your house, which is a different sentence and deserves a quieter one.
+    /// </summary>
+    Glancing = 4,
 }
 
 /// <summary>
@@ -47,16 +56,28 @@ public sealed record Threat(
     double? EtaMinutes,
     double LatDeg,
     double LonDeg,
-    DateTimeOffset? Expires = null)
+    DateTimeOffset? Expires = null,
+    string? PassesSide = null)
 {
     public bool IsTornado => Rank == ThreatRank.Tornadic;
 
-    /// <summary>The one-line range readout for the list: "12 mi · ~18 min", or "over you".</summary>
+    /// <summary>
+    /// Whether this is worth taking someone's attention for.
+    ///
+    /// A glancing pass is real and belongs on the list, but it is the answer "no" to the
+    /// question the notification asks. Interrupting for it is what teaches people to ignore
+    /// the notification that matters.
+    /// </summary>
+    public bool Interrupts => Rank != ThreatRank.Glancing;
+
+    /// <summary>The one-line range readout for the list.</summary>
     public string Range =>
         Rank == ThreatRank.Overhead ? "over you"
         : EtaMinutes is { } eta
-            ? $"{Units.Distance(DistanceKm)} · {(eta <= 1 ? "now" : $"~{eta:F0} min")}"
-            : Units.Distance(DistanceKm);
+            ? $"{Units.Distance(DistanceKm)}{Side} · {(eta <= 1 ? "now" : $"~{eta:F0} min")}"
+            : $"{Units.Distance(DistanceKm)}{Side}";
+
+    private string Side => PassesSide is null ? "" : $" {PassesSide}";
 }
 
 /// <summary>
@@ -86,6 +107,15 @@ public sealed class ThreatMonitor
     public double? HomeLonDeg { get; private set; }
     public double RadiusKm { get; private set; } = 40;
 
+    /// <summary>
+    /// How close a track has to pass to count as coming for you rather than going by.
+    ///
+    /// A storm is not a point — a precipitation core is kilometres across and the SCIT
+    /// centroid is its middle — so this is a few kilometres rather than zero. Five miles is
+    /// roughly "the storm is overhead", allowing for the forecast track being a forecast.
+    /// </summary>
+    public double DirectHitRadiusKm { get; private set; } = 8;
+
     public bool IsArmed => HomeLatDeg is not null;
 
     /// <summary>Everything currently threatening home, most urgent first.</summary>
@@ -97,12 +127,17 @@ public sealed class ThreatMonitor
     /// <summary>Fires whenever the current set changes: the side list.</summary>
     public event Action<IReadOnlyList<Threat>>? ThreatsChanged;
 
-    public void Configure(double? homeLatDeg, double? homeLonDeg, double radiusKm)
+    public void Configure(
+        double? homeLatDeg, double? homeLonDeg, double radiusKm, double directHitRadiusKm = 8)
     {
-        bool moved = homeLatDeg != HomeLatDeg || homeLonDeg != HomeLonDeg || radiusKm != RadiusKm;
+        bool moved = homeLatDeg != HomeLatDeg || homeLonDeg != HomeLonDeg
+            || radiusKm != RadiusKm || directHitRadiusKm != DirectHitRadiusKm;
         HomeLatDeg = homeLatDeg;
         HomeLonDeg = homeLonDeg;
         RadiusKm = radiusKm;
+        // A direct-hit radius wider than the alert radius would make every threat a direct
+        // hit, which is a setting that cannot mean anything. Clamp rather than refuse.
+        DirectHitRadiusKm = Math.Clamp(directHitRadiusKm, 0, radiusKm);
         if (!moved) return;
 
         _alerted.Clear(); // new home/radius: re-evaluate everything fresh
@@ -113,6 +148,21 @@ public sealed class ThreatMonitor
         Publish();
     }
 
+    /// <summary>
+    /// Judge each tracked cell against home.
+    ///
+    /// The question a notification answers is "is this coming to my house", and until now
+    /// the code answered a different one: "does this pass anywhere inside a fifty-mile
+    /// circle". Those differ in two ways that both produced false alarms. A storm that
+    /// misses by thirty-five miles read exactly like one passing overhead, and a storm
+    /// already past its closest point reported an ETA of zero — rendered as "now" — because
+    /// closest-approach alone cannot tell arriving from leaving.
+    ///
+    /// So a track now resolves to one of three things. It is closing and will pass within
+    /// the direct-hit radius; it is closing and will miss; or it is going away, in which
+    /// case it is not on the list at all. The panel is titled APPROACHING and a departing
+    /// storm contradicts the title.
+    /// </summary>
     public void EvaluateStorms(IReadOnlyList<TrackedStorm> storms)
     {
         if (HomeLatDeg is not { } homeLat || HomeLonDeg is not { } homeLon)
@@ -124,10 +174,24 @@ public sealed class ThreatMonitor
         var found = new List<Threat>();
         foreach (var storm in storms)
         {
-            var approach = ClosestApproach(storm, homeLat, homeLon);
-            if (approach is not { } a || a.DistanceKm > RadiusKm) continue;
+            if (ClosestApproach(storm, homeLat, homeLon) is not { } a) continue;
+            if (a.DistanceKm > RadiusKm) continue;
 
-            string when = a.EtaMinutes <= 0 ? "now" : $"in ~{a.EtaMinutes:F0} min";
+            // Going away. Nothing about it is approaching, whatever the circle says.
+            if (a.IsReceding) continue;
+
+            // No track yet — SCIT emits a cell with its forecast sitting on its current
+            // position the first time it sees one. Nothing can be said about where it is
+            // headed, so it counts only when it is already on top of you; guessing in
+            // either direction would be inventing a forecast.
+            if (a.IsStationary && a.DistanceKm > DirectHitRadiusKm) continue;
+
+            bool direct = a.DistanceKm <= DirectHitRadiusKm;
+            bool rotating = storm.MesoRadiusKm is not null;
+            string? side = direct || a.IsStationary
+                ? null
+                : CompassPoint(GeoMath.BearingRad(homeLat, homeLon, a.LatDeg, a.LonDeg) * 180.0 / Math.PI);
+
             var extras = new List<string>();
             if (storm.ProbabilityOfSevereHail > 0)
                 extras.Add($"severe hail {storm.ProbabilityOfSevereHail}%");
@@ -135,27 +199,38 @@ public sealed class ThreatMonitor
                 extras.Add($"hail {storm.ProbabilityOfHail}%");
             if (storm.MaxHailSizeInches > 0)
                 extras.Add($"{storm.MaxHailSizeInches}\" max");
-            if (storm.MesoRadiusKm is not null)
-                extras.Add("MESOCYCLONE");
+            if (rotating) extras.Add("MESOCYCLONE");
 
-            found.Add(new Threat(
-                $"storm:{storm.Id}",
-                $"Storm {storm.Id} approaching your area",
-                storm.MesoRadiusKm is not null ? $"Storm {storm.Id} — rotating" : $"Storm {storm.Id}",
-                $"Track passes within {Units.Distance(a.DistanceKm)} of home {when} " +
-                (storm.SpeedKmh is { } kmh && storm.BearingDeg is { } deg
-                    ? $"(moving {CompassPoint(deg)} at {Units.Speed(kmh)}"
-                    : "(motion not tracked yet") +
-                (extras.Count > 0 ? $"; {string.Join(", ", extras)})" : ")"),
-                storm.MesoRadiusKm is not null ? ThreatRank.Tornadic : ThreatRank.Approaching,
-                a.DistanceKm,
-                a.EtaMinutes,
-                storm.LatDeg,
-                storm.LonDeg));
+            string motion = storm.SpeedKmh is { } kmh && storm.BearingDeg is { } deg
+                ? $"moving {CompassPoint(deg)} at {Units.Speed(kmh)}"
+                : "motion not tracked yet";
+            string when = a.EtaMinutes < 1 ? "now" : $"in ~{a.EtaMinutes:F0} min";
+            string tail = extras.Count > 0 ? $"; {string.Join(", ", extras)}" : "";
+
+            found.Add(direct
+                ? new Threat(
+                    $"storm:{storm.Id}",
+                    $"Storm {storm.Id} is heading for you",
+                    rotating ? $"Storm {storm.Id} — rotating" : $"Storm {storm.Id}",
+                    $"Passes within {Units.Distance(a.DistanceKm)} of home {when} ({motion}{tail})",
+                    rotating ? ThreatRank.Tornadic : ThreatRank.Direct,
+                    a.DistanceKm, a.EtaMinutes, storm.LatDeg, storm.LonDeg)
+                : new Threat(
+                    $"storm:{storm.Id}",
+                    $"Storm {storm.Id} passing {Units.Distance(a.DistanceKm)} to your {side}",
+                    rotating ? $"Storm {storm.Id} — rotating" : $"Storm {storm.Id}",
+                    $"Closest approach {Units.Distance(a.DistanceKm)} to your {side} {when} " +
+                    $"({motion}{tail}). It is in your area but not on course for you.",
+                    // A rotating cell still interrupts even when it misses: a mesocyclone
+                    // near you is worth knowing about, and the forecast track is the part
+                    // of this least worth betting on.
+                    rotating ? ThreatRank.Tornadic : ThreatRank.Glancing,
+                    a.DistanceKm, a.EtaMinutes, storm.LatDeg, storm.LonDeg, PassesSide: side));
         }
 
         ReplaceStorms(found);
-        foreach (var threat in found) Raise(threat);
+        foreach (var threat in found)
+            if (threat.Interrupts) Raise(threat);
     }
 
     public void EvaluateWarnings(IReadOnlyList<ActiveAlert> alerts)
@@ -189,9 +264,12 @@ public sealed class ThreatMonitor
                 inside ? $"{alert.Event.ToUpperInvariant()} INCLUDES YOUR AREA" : alert.Event,
                 alert.Event,
                 (inside ? alert.Headline : $"{Units.Distance(nearestKm)} from home: {alert.Headline}") + until,
+                // A polygon has no track, so there is nothing to judge it as closing or
+                // going: a warning near home stays a warning near home. Only storm cells
+                // get the direct/glancing distinction, because only they carry a forecast.
                 alert.Event == "Tornado Warning" ? ThreatRank.Tornadic
                     : inside ? ThreatRank.Overhead
-                    : ThreatRank.Approaching,
+                    : ThreatRank.Nearby,
                 Math.Max(nearestKm, 0),
                 EtaMinutes: null,
                 latDeg,
@@ -200,7 +278,8 @@ public sealed class ThreatMonitor
         }
 
         ReplaceWarnings(found);
-        foreach (var threat in found) Raise(threat);
+        foreach (var threat in found)
+            if (threat.Interrupts) Raise(threat);
     }
 
     /// <summary>
@@ -228,19 +307,49 @@ public sealed class ThreatMonitor
         || alert.Severity.Equals("Extreme", StringComparison.OrdinalIgnoreCase)
         || alert.Severity.Equals("Severe", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Closest approach of the storm path (current → forecast) to a point, with ETA.</summary>
-    internal static (double DistanceKm, double EtaMinutes)? ClosestApproach(
+    /// <summary>
+    /// What the storm's track does relative to a point.
+    ///
+    /// The SCIT forecast is used when it says anything. It frequently does not: the algorithm
+    /// emits a cell with its forecast points sitting on its current position, and that stays
+    /// true for a while. But <c>SpeedKmh</c> and <c>BearingDeg</c> are derived from the
+    /// <em>past</em> track and are often known when the forecast is still degenerate — so
+    /// falling straight through to "not tracked yet" would throw away measured motion and
+    /// drop storms that are demonstrably coming. Extrapolating an hour along a measured
+    /// heading is what a forecast track is; doing it here is not inventing anything the
+    /// cone renderer does not already do for the same reason.
+    /// </summary>
+    internal static GeoMath.PathApproach? ClosestApproach(
         TrackedStorm storm, double latDeg, double lonDeg)
     {
         var path = new List<(double LatDeg, double LonDeg)> { (storm.LatDeg, storm.LonDeg) };
         path.AddRange(storm.ForecastPath);
+
+        bool forecastSaysNothing = path.Skip(1).All(p =>
+            GeoMath.DistanceM(storm.LatDeg, storm.LonDeg, p.LatDeg, p.LonDeg) < 250);
+        if (forecastSaysNothing &&
+            storm.SpeedKmh is { } kmh && kmh > 0 && storm.BearingDeg is { } bearingDeg)
+        {
+            path.RemoveRange(1, path.Count - 1);
+            double bearingRad = bearingDeg * Math.PI / 180.0;
+            for (int quarter = 1; quarter <= 4; quarter++)   // four 15-minute steps
+                path.Add(GeoMath.Offset(
+                    storm.LatDeg, storm.LonDeg, bearingRad, kmh * 1000.0 * quarter / 4.0));
+        }
+
         return GeoMath.ClosestApproachToPath(path, latDeg, lonDeg);
     }
 
+    /// <summary>
+    /// The eight-point compass name for a bearing. Wraps in both directions: a bearing
+    /// straight out of <see cref="GeoMath.BearingRad"/> is an atan2 result and is negative
+    /// for anything west of north, which a bare modulo turns into a negative array index.
+    /// </summary>
     internal static string CompassPoint(double bearingDeg)
     {
         string[] points = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-        return points[(int)Math.Round(bearingDeg / 45.0) % 8];
+        int index = (int)Math.Round(bearingDeg / 45.0) % 8;
+        return points[index < 0 ? index + 8 : index];
     }
 
     /// <summary>

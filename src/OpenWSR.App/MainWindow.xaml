@@ -294,6 +294,20 @@
                                                 Padding="7,5" Margin="0,0,0,5" Cursor="Hand"
                                                 Tag="{Binding}" MouseLeftButtonUp="ThreatRow_Click"
                                                 ToolTip="{Binding Detail}">
+                                            <!-- A glancing pass is real and belongs on the
+                                                 list, but it is the answer "no" to the
+                                                 question the notification asks, so it reads
+                                                 quieter rather than identical. -->
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Interrupts}" Value="False">
+                                                            <Setter Property="Background" Value="#FF24242B" />
+                                                            <Setter Property="BorderBrush" Value="#FF3A3F4A" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
                                             <StackPanel>
                                                 <TextBlock Text="{Binding Label}" TextWrapping="Wrap"
                                                            FontSize="11.5" FontWeight="SemiBold"
