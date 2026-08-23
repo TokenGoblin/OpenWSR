@@ -993,3 +993,33 @@ scaling — lives in attributes and nowhere else.
       band 13 file (3.9 MB) as the second fixture
 - [x] `GlmFile` reads its energy scaling from the file now, keeping the published constants
       only as a fallback for a file that omits them
+
+### Phase 1c — the ABI decoder and the geostationary projection
+
+- [x] `Geostationary` in `OpenWSR.Geo`, beside `LambertConformal`. Not a map projection in the
+      usual sense — it is what a camera 35,786 km up sees, so both directions have to be able
+      to answer "nowhere": most of the planet is over the horizon, and most of a full-disk
+      grid is empty space. Checked against **pyproj 3.7.2** driving PROJ's own `geos`, to 1e-9
+      radians, which is about a metre on the ground
+- [x] The height in the file is above the *ellipsoid*; the equations want distance from the
+      earth's centre. There is a test for it because the failure is a plausible-looking image
+      in the wrong place rather than an exception
+- [x] `AbiFile` in `OpenWSR.NetCdf` decodes CMIP to brightness temperature. It reports the
+      projection as plain numbers rather than building one — `Placefiles → Geo` stays the only
+      edge between the pure libraries
+- [x] `_Unsigned = "true"` on a variable declared signed 16-bit: the fill reads as -1, means
+      65535, and scales to about -3900 K. `valid_range` is written in the declared type too,
+      so its upper bound arrives negative
+- [x] Verified against h5py and NumPy: individual pixels, exactly 3,702,837 valid of 3,750,000
+      — the gaps are the CONUS rectangle's corners, which are off the limb of the earth and
+      were never measured. pyproj agrees they are not on the planet
+- [x] The strongest check is the file's own: ABI stores min, max and mean brightness
+      temperature as plain floats computed by the producer before quantisation. Decoding and
+      re-deriving them reproduces the mean to five decimal places
+
+**A latent bug in the HDF5 reader surfaced here.** Chunked reads placed each chunk with a
+single contiguous copy. In one dimension a chunk *is* a run and that is right — which is why
+lightning never caught it. In two a chunk is a **tile** spanning many rows of the destination
+and has to be scattered a row at a time. The old code laid each whole tile along one row and
+left the rest of the array at zero, which for scaled data decodes as a uniform field of the
+`add_offset` — 89.62 K everywhere — rather than as anything that looks broken.

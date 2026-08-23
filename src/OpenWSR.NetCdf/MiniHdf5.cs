@@ -679,22 +679,63 @@ public sealed class MiniHdf5
         }
 
         // Chunked: each B-tree leaf entry gives a chunk's address, stored size and the
-        // element offset it starts at.
-        long elementsPerChunk = 1;
-        for (int i = 0; i < dataset.ChunkDimensions.Length - 1; i++)
-            elementsPerChunk *= dataset.ChunkDimensions[i];
+        // coordinate its corner sits at.
+        //
+        // A chunk is a *tile*, not a run. In one dimension the two are the same thing and a
+        // single copy places it — which is why this went unnoticed while only lightning was
+        // being read. In two the tile spans many rows of the destination and has to be
+        // scattered a row at a time; copying it contiguously lays the whole tile along one
+        // row and leaves the rest of the array at zero, which for scaled data decodes as a
+        // uniform field of the add_offset rather than as anything obviously broken.
+        int rank = dataset.Dimensions.Length;
+        if (rank == 0) return result;
+        if (dataset.ChunkDimensions.Length != rank + 1)
+            throw new Hdf5FormatException(
+                $"'{dataset.Name}' has rank {rank} but {dataset.ChunkDimensions.Length} chunk dimensions.");
 
+        // Row-major strides, in elements. The last axis is contiguous.
+        var strides = new long[rank];
+        strides[rank - 1] = 1;
+        for (int i = rank - 2; i >= 0; i--) strides[i] = strides[i + 1] * dataset.Dimensions[i + 1];
+
+        int chunkFastest = dataset.ChunkDimensions[rank - 1];
+        long rowsPerChunk = 1;
+        for (int i = 0; i < rank - 1; i++) rowsPerChunk *= dataset.ChunkDimensions[i];
+
+        var indices = new long[rank];
         foreach (var chunk in ReadChunkTree(dataset.ChunkTreeAddress, dataset.ChunkDimensions.Length))
         {
             var bytes = _data.AsSpan(checked((int)chunk.Address), chunk.Size).ToArray();
             if (dataset.Deflate) bytes = Inflate(bytes);
             if (dataset.Shuffle) bytes = Unshuffle(bytes, dataset.ElementSize);
 
-            long startElement = chunk.Offsets.Length > 1 ? chunk.Offsets[0] : 0;
-            long destination = startElement * dataset.ElementSize;
-            long length = Math.Min(bytes.Length, total - destination);
-            if (destination >= 0 && length > 0)
-                Array.Copy(bytes, 0, result, destination, length);
+            // A chunk on the far edge is stored full-size but hangs off the array, so both
+            // the row index and the run length have to be clipped to the real dimensions.
+            long lastOffset = chunk.Offsets[rank - 1];
+            long run = Math.Min(chunkFastest, dataset.Dimensions[rank - 1] - lastOffset);
+            if (run <= 0) continue;
+
+            for (long row = 0; row < rowsPerChunk; row++)
+            {
+                long remainder = row;
+                bool inside = true;
+                for (int axis = rank - 2; axis >= 0; axis--)
+                {
+                    indices[axis] = chunk.Offsets[axis] + remainder % dataset.ChunkDimensions[axis];
+                    remainder /= dataset.ChunkDimensions[axis];
+                    if (indices[axis] >= dataset.Dimensions[axis]) { inside = false; break; }
+                }
+                if (!inside) continue;
+
+                long destination = lastOffset;
+                for (int axis = 0; axis < rank - 1; axis++) destination += indices[axis] * strides[axis];
+
+                long source = row * chunkFastest * dataset.ElementSize;
+                long length = run * dataset.ElementSize;
+                long target = destination * dataset.ElementSize;
+                if (source + length > bytes.Length || target < 0 || target + length > total) continue;
+                Array.Copy(bytes, source, result, target, length);
+            }
         }
         return result;
     }
