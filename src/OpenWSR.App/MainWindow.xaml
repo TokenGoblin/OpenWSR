@@ -60,8 +60,8 @@
                     <Border Height="1" Background="#FF272C35" Margin="10,4" />
                     <Button x:Name="SettingsButton" AutomationProperties.Name="Settings" Style="{StaticResource RailButton}" Content="⚙"
                             Click="SettingsButton_Click" ToolTip="Settings" />
-                    <Button x:Name="HelpButton" AutomationProperties.Name="Keyboard shortcuts and mouse gestures" Style="{StaticResource RailButton}" Content="?"
-                            Click="HelpButton_Click" ToolTip="Keyboard shortcuts, mouse gestures and About  (F1)" />
+                    <Button x:Name="HelpButton" AutomationProperties.Name="How this app works" Style="{StaticResource RailButton}" Content="?"
+                            Click="HelpButton_Click" ToolTip="How this app works — including how the storm alarm decides what to interrupt you for  (F1)" />
                 </StackPanel>
                 <Grid />
             </DockPanel>

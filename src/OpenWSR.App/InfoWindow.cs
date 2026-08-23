@@ -43,22 +43,157 @@ public static class InfoWindow
             "The product buttons above the map carry the same letters, so the shortcuts are "
           + "the buttons — there is nothing extra to remember.");
 
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Margin = new Thickness(0, 18, 0, 0),
+        };
+        var guide = new Button { Content = "How this works", Padding = new Thickness(12, 5, 12, 5) };
         var about = new Button
         {
             Content = $"About OpenWSR {version}",
-            HorizontalAlignment = HorizontalAlignment.Left,
-            Margin = new Thickness(0, 18, 0, 0),
+            Margin = new Thickness(8, 0, 0, 0),
             Padding = new Thickness(12, 5, 12, 5),
         };
-        about.Click += (_, _) =>
-        {
-            var card = Window.GetWindow(about);
-            card?.Close();
-            ShowAbout(owner, version);
-        };
-        panel.Children.Add(about);
+        row.Children.Add(guide);
+        row.Children.Add(about);
+        panel.Children.Add(row);
+
+        guide.Click += (_, _) => { Window.GetWindow(guide)?.Close(); ShowGuide(owner); };
+        about.Click += (_, _) => { Window.GetWindow(about)?.Close(); ShowAbout(owner, version); };
 
         Show(owner, "Keyboard and mouse", panel);
+    }
+
+    /// <summary>
+    /// How the app works, for someone who has just opened it.
+    ///
+    /// Reference material, so it lives here rather than in a panel — but unlike the shortcut
+    /// and symbol cards this one is prose, because the questions it answers are not "what does
+    /// this button do" but "what will this thing do on my behalf, and when". The alerting
+    /// section is the one that earns the window: it decides what interrupts someone, and a
+    /// person who cannot predict that either stops trusting it or stops reading it.
+    /// </summary>
+    public static void ShowGuide(Window owner)
+    {
+        var panel = new StackPanel { Margin = new Thickness(20), MaxWidth = 620 };
+
+        AddHeading(panel, "Start here", first: true);
+        AddParagraph(panel,
+            "Open Settings and add at least one place under MY PLACES — the gear at the bottom "
+          + "of the left rail. “Add my location” asks Windows where this PC is; “Move primary on "
+          + "map” hands you back to the map to click a spot. Everything below follows from "
+          + "having one.");
+        AddRows(panel,
+            ("Primary", "The place the app opens on, and whose nearest radar the storm layer follows. Exactly one, marked by the filled dot."),
+            ("Other places", "Watched for approaching storms just the same — they simply do not move the camera."),
+            ("Per-place radius", "How far out to care, for that place. “Default” uses the global setting below the list."));
+
+        AddHeading(panel, "How the storm alarm works");
+        AddParagraph(panel,
+            "Two circles decide everything, and they answer different questions.");
+        AddRows(panel,
+            ("Alert radius", "What gets watched. A storm whose track never comes inside this is ignored entirely."),
+            ("Interrupt within", "What gets to take your attention. Inside this, a storm raises a tray notification and a sound."));
+        AddParagraph(panel,
+            "Between the two circles a storm is real but not coming for you, and the app says so "
+          + "rather than treating it the same. Every tracked cell resolves to one of three things:");
+        AddRows(panel,
+            ("Direct", "Its forecast track passes within the interrupt radius and it is still closing. Tray notification, sound, and a bright row in the APPROACHING panel."),
+            ("Glancing", "It comes inside the alert radius but misses. A muted row saying which side it passes — “22 mi to your N” — and no interruption."),
+            ("Receding", "Its closest approach is already behind it. Not shown at all: the panel is titled APPROACHING and a departing storm contradicts the title."));
+        AddParagraph(panel,
+            "Two things always interrupt regardless. A warning polygon near or over a place — a "
+          + "polygon carries no track, so there is nothing to judge it as coming or going — and a "
+          + "cell with a detected mesocyclone, because its forecast track is the part of it least "
+          + "worth betting on.");
+        AddParagraph(panel,
+            "Each threat notifies once an hour at most, per place. The same storm crossing two of "
+          + "your places is two separate notifications, at two distances and two arrival times, "
+          + "because hearing about it at home should not use up the alert for the office.");
+
+        AddHeading(panel, "What the panel is telling you");
+        AddRows(panel,
+            ("APPROACHING", "Something is on course. The heading turns orange."),
+            ("IN THE AREA", "Storms are inside a radius but none are on course for you."),
+            ("“6 · 1 passing wide”", "Six coming, one merely going by. The two claims are counted separately rather than added up."),
+            ("A row", "Click it to put the camera on that storm. Hover for the full detail line."),
+            ("Nothing at all", "Nothing is threatening any of your places. The panel hides itself rather than showing an empty heading."));
+        AddParagraph(panel,
+            "Storm tracks come from the radar's own algorithms, not from the picture on screen — "
+          + "the nearest WSR-88D publishes cell positions and 15-minute forecast points. Terminal "
+          + "radars do not publish them, so the storm layer always follows the nearest WSR-88D "
+          + "even while you are looking at a TDWR.");
+
+        AddHeading(panel, "Reading the radar");
+        AddRows(panel,
+            ("Product bar", "REF is how much is falling, VEL is motion toward and away. A greyed-out button means this volume does not carry that product."),
+            ("Tilt", "Which elevation cut. The up and down arrows over the map step through them. A WSR-88D volume has twenty-odd; a TDWR has three."),
+            ("WSR-88D", "The 163-strong national network. The only source carrying dual-pol, so debris and hail size live here."),
+            ("TDWR", "47 terminal radars beside major airports — the four-letter IDs starting with T. Finer beam, lower to the ground, faster, but reflectivity and velocity only, live only, and they go quiet in clear air."));
+
+        AddHeading(panel, "Layers, and what fights what");
+        AddParagraph(panel,
+            "The national mosaic, the MRMS composite and the forecast raster are all the same "
+          + "quantity as the radar — a reflectivity field — so only one may sit under the sweep at "
+          + "a time. Turning one on turns the others off; that is by design, not a bug.");
+        AddParagraph(panel,
+            "Satellite is different. Cloud is a separate measurement from precipitation and the "
+          + "whole point is seeing it underneath, so it coexists with everything. Clear ground is "
+          + "left transparent so the map still reads through it.");
+
+        AddHeading(panel, "When");
+        AddRows(panel,
+            ("LIVE", "Streamed as the antenna turns — a tilt appears about five seconds after the radar sweeps it."),
+            ("ARCHIVE", "Any site, any UTC day back to 1991. Scrub the day or play a loop."),
+            ("FORECAST", "HRRR model reflectivity for the next six hours. A forecast, not a measurement."));
+
+        AddNote(panel,
+            "The tools in the rail arm one gesture at a time, so a right-drag always means "
+          + "exactly one thing — measure, or slice a cross-section. The status bar says which.");
+
+        var buttons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Margin = new Thickness(0, 18, 0, 0),
+        };
+        var shortcuts = new Button { Content = "Keyboard and mouse", Padding = new Thickness(12, 5, 12, 5) };
+        var symbols = new Button
+        {
+            Content = "Storm symbols",
+            Margin = new Thickness(8, 0, 0, 0),
+            Padding = new Thickness(12, 5, 12, 5),
+        };
+        buttons.Children.Add(shortcuts);
+        buttons.Children.Add(symbols);
+        panel.Children.Add(buttons);
+
+        string version = owner.GetType().Assembly.GetName().Version?.ToString(3) ?? "dev";
+        shortcuts.Click += (_, _) =>
+        {
+            Window.GetWindow(shortcuts)?.Close();
+            ShowShortcuts(owner, version);
+        };
+        symbols.Click += (_, _) =>
+        {
+            Window.GetWindow(symbols)?.Close();
+            ShowSymbolKey(owner);
+        };
+
+        Show(owner, "How OpenWSR works", panel);
+    }
+
+    /// <summary>A wrapped paragraph. The other cards are tables; this one has to explain.</summary>
+    private static void AddParagraph(Panel panel, string text)
+    {
+        panel.Children.Add(new TextBlock
+        {
+            Text = text,
+            FontSize = 12.5,
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = Res("TextDim"),
+            Margin = new Thickness(0, 0, 0, 10),
+        });
     }
 
     /// <summary>What the storm overlay's shapes mean. Was a cramped grid in the layers panel.</summary>

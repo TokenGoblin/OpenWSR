@@ -138,6 +138,14 @@ dotnet run --project src/OpenWSR.Harness -- --export-sweep <f> out.js
 
 ---
 
+## Built-in guide
+
+Press **?** in the left rail, or **F1**, for *How OpenWSR works* — what each feature does and,
+in particular, how the storm alarm decides what is worth interrupting you for: the two radii,
+the direct/glancing/receding tiering, what always interrupts regardless, and what the
+APPROACHING panel's headings mean. It is also what a first run opens on. The keyboard card and
+the storm symbol key are one click from there.
+
 ## Controls
 
 The window is arranged around the four questions you ask it, each with one place:

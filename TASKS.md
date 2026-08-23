@@ -1268,3 +1268,23 @@ time, and nulls the legacy fields so a saved file never carries two spellings of
 in the running app, showing "Home" with its Wi-Fi provenance intact, and a three-place file drew
 three rings at three radii over three neighbouring towns. The panel's place labelling is
 covered by tests but was not seen live — nothing was threatening any of the three at the time.
+
+## A guide inside the app
+
+Reported: there was nowhere in the app that explained how a feature works — in particular,
+what the storm alarm will do once someone sets their area.
+
+- [x] `InfoWindow.ShowGuide` — six sections: start here, how the storm alarm works, what the
+      panel is telling you, reading the radar, layers and what fights what, and when. Prose
+      rather than a table, because the questions are "what will this do on my behalf, and
+      when", not "what does this button do"
+- [x] **`?` and F1 open the guide, not the shortcut table.** Someone presses `?` because they
+      do not know how the thing works; the keys are a click away from there, along with the
+      symbol key. The first run opens it too, where it used to open the keyboard card
+- [x] The alerting section leads, because it is the part that decides what interrupts someone
+      — and a person who cannot predict that either stops trusting it or stops reading it. It
+      names the two radii, the three outcomes a track resolves to, the two things that always
+      interrupt regardless, and the once-an-hour-per-place throttle
+
+**Gate:** [PASSED] 534/534 tests, 0 warnings. Verified in the running app: all six headings
+present, both cross-links working.

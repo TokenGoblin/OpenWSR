@@ -21,6 +21,38 @@ disagree. The other reference docs:
 Anything worth keeping goes in `docs/` or `resources/`, not in a scratch directory.
 Scratch directories are session-scoped and get lost.
 
+## Git hosting
+
+This repository is hosted on a **self-hosted Forgejo instance**, not GitHub.
+
+**Do not use the `gh` CLI.** It only speaks to GitHub, so it will either fail against this
+remote or, worse, act against an unrelated GitHub repo. Use plain `git` for everything. For
+pull requests and issues use the Forgejo web UI, or the `tea` CLI — Forgejo/Gitea's equivalent
+of `gh`, and not currently installed here.
+
+| Protocol | URL |
+|---|---|
+| HTTP | `http://forgejo-host:3000/<owner>/<repo>.git` |
+| SSH | `ssh://git@forgejo-host:2222/<owner>/<repo>.git` |
+
+**SSH is on port 2222**, not 22 — the Forgejo container maps host 2222 to container 22, so an
+SSH URL without the port will fail. Web UI: `http://forgejo-host:3000`.
+
+`forgejo-host` resolves only on the home LAN or over the Tailscale tailnet. **A push failing with a
+DNS or connection error is almost certainly that**, not a repo or auth problem — check the
+tailnet before debugging anything else.
+
+Auth is configured on the machine, by SSH key or a stored Forgejo token. If a push prompts for
+credentials or returns 403, **stop and report it** rather than reconfiguring auth or switching
+remotes.
+
+- Never point `origin` at a GitHub URL.
+- Never create a GitHub repo as a fallback when a push fails.
+- No GitHub Actions workflows. Forgejo Actions is similar but distinct — ask before adding CI.
+- Commit and push only when asked.
+
+GitHub is deferred rather than abandoned: revisit it at release time.
+
 ## Commands
 
 ```
@@ -76,6 +108,13 @@ toggle governs **only** the lower half — tidying the layers away must not take
 warning off the screen with it — and `APPROACHING` collapses on its own whenever nothing is
 threatening, so the column is unchanged from before on a quiet day. `RightColumn` disappears
 only when both halves are hidden.
+
+**In-app explanation lives in `InfoWindow`, and `?` opens the guide rather than the shortcut
+table.** Someone presses `?` because they do not know how the thing works, and the first
+question is not which key selects velocity — it is what the app will do on their behalf and
+when. `ShowGuide` answers that in prose, with the alerting rules first, and links on to the
+keyboard card and the symbol key. The first run shows it too. Anything explaining a *feature*
+belongs there; a panel is for operating one, not for describing it.
 
 `MainViewModel` holds the state the layout is built from — mode, product, tilt, armed map
 tool. Keep it there rather than in control properties, or moving a control between

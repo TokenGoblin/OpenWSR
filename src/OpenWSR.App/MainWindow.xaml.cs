@@ -308,7 +308,7 @@ public partial class MainWindow : Window
             {
                 settings.WelcomeShown = true;
                 settings.Save();
-                InfoWindow.ShowShortcuts(this, Version);
+                InfoWindow.ShowGuide(this);
             }
         };
         Closed += (_, _) =>
@@ -384,7 +384,7 @@ public partial class MainWindow : Window
     {
         if (e.Key == Key.F1)
         {
-            InfoWindow.ShowShortcuts(this, Version);
+            InfoWindow.ShowGuide(this);
             e.Handled = true;
             return;
         }
@@ -2163,8 +2163,13 @@ public partial class MainWindow : Window
         Report("Settings saved. Basemap changes take effect next launch.");
     }
 
+    /// <summary>
+    /// The guide, not the shortcut table. "?" is what someone presses when they do not know
+    /// how the thing works, and the first question is what it will do on their behalf — the
+    /// keys and the symbol key are a click away from there.
+    /// </summary>
     private void HelpButton_Click(object sender, RoutedEventArgs e) =>
-        InfoWindow.ShowShortcuts(this, Version);
+        InfoWindow.ShowGuide(this);
 
     private string Version =>
         GetType().Assembly.GetName().Version?.ToString(3) ?? "dev";
