@@ -934,3 +934,16 @@ hardware; the panel verified against live KMTX storms.
       of moves — home wins whenever the site in question is home's own radar, a deliberately
       chosen other site still frames its tower — so whoever moves the camera last computes the
       same answer. A WSR-88D is routinely fifty miles from the ground you care about
+
+- [x] **GOES IR was painting the map with an error message.** Reported from the app: the
+      satellite layer came up solid red with "Invalid TMS Request :( Need help?
+      akrherz@iastate.edu" tiled across it. The layer name had drifted — `goes_east_ch13` is
+      now `goes_east_conus_ch13` — and IEM answers an unknown layer with **HTTP 200 and a
+      valid PNG** of that message, so the fetch path could not tell it from imagery. 253
+      copies of the one image had been written to the disk cache as data
+- [x] Tile cache directories are named for the layer rather than the provider now, so fixing
+      a path abandons what the old one wrote instead of serving it for ever. The stale
+      directory was removed — verified first that all 253 files hashed to a single value
+- [x] Verified by fetching two different tiles and confirming the bytes differ, which is the
+      only check that means anything here; the fresh cache holds 24 tiles with 24 distinct
+      contents. The national mosaic was checked the same way and is unaffected

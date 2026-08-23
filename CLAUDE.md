@@ -253,10 +253,19 @@ anchor with +y upward, not degrees. Polygon contours close on a repeated first p
 the next point starts a new contour. `;` starts a comment except inside quotes. The spec
 at grlevelx.com needs a browser User-Agent — WebFetch gets a 403.
 
-**Endpoints drift.** Two IEM paths verified earlier in development had been retired by
+**Endpoints drift.** Three IEM paths verified earlier in development had been retired by
 the time they were wired up. When something returns HTML instead of data, check
 `https://mesonet.agron.iastate.edu/api/1/openapi.json` for the current path. SPC serves
 GeoJSON with a **UTF-8 BOM**, which `System.Text.Json` rejects outright.
+
+**IEM's tile service fails as a picture, not as a status code.** An unknown *layer name* on
+`tile.py` comes back as **HTTP 200 with a valid PNG** reading "Invalid TMS Request", which
+decodes exactly like imagery — the GOES layer painted the map solid red and cached 253 copies
+of that one image as data. Verify a tile layer by fetching **two different tiles and checking
+the bytes differ**; a status code proves nothing. An unknown path *prefix* does 404 properly,
+so it is only the layer segment that hides. Tile cache directories are named for the layer
+rather than the provider, so correcting a path abandons the old tiles instead of serving them
+for ever. See `docs/data-sources.md`.
 
 ## How to verify work here
 

@@ -43,7 +43,7 @@ satellite layers ship in hours instead of behind a full GRIB2/NetCDF pipeline.
 | Endpoint | Provides |
 |---|---|
 | `mesonet.agron.iastate.edu/cache/tile.py/1.0.0/n0q-{ts}/{z}/{x}/{y}.png` | National reflectivity mosaic (XYZ) |
-| `mesonet.agron.iastate.edu/.../goes-ir/{z}/{x}/{y}.png` | GOES-East infrared |
+| `mesonet.agron.iastate.edu/cache/tile.py/1.0.0/goes_east_conus_ch13/{z}/{x}/{y}.png` | GOES-East infrared (channel 13) |
 | `mesonet.agron.iastate.edu/api/1/spc_watch_outline.geojson` | SPC watch boxes |
 | `mesonet.agron.iastate.edu/api/1/nws/spc_mcd.geojson` | Mesoscale discussions |
 | `mesonet.agron.iastate.edu/geojson/lsr.geojson` | Local storm reports |
@@ -59,9 +59,30 @@ JSON error rather than an obvious network failure:
 |---|---|
 | `/geojson/spcwatch.py` | `/api/1/spc_watch_outline.geojson` |
 | `/geojson/mcd.geojson` | `/api/1/nws/spc_mcd.geojson` |
+| `/c/tile.py/1.0.0/goes_east_ch13/` | `/cache/tile.py/1.0.0/goes_east_conus_ch13/` |
 
 When an IEM feed starts failing, check the current path in
 `mesonet.agron.iastate.edu/api/1/openapi.json` before debugging the parser.
+
+### The tile service fails as a picture, not as a status code
+
+The GOES one is worth its own paragraph because a status check cannot catch it. An unknown
+**layer name** on `tile.py` is answered with **HTTP 200 and a valid 256x256 PNG** reading
+"Invalid TMS Request :( Need help? akrherz@iastate.edu". It decodes cleanly, so the fetch
+path has no way to tell it from imagery: the map went solid red, and 253 copies of that one
+image were written into the disk cache as though they were data.
+
+**Verify a tile layer by fetching two different tiles and confirming the bytes differ.** A
+404 means the *path* is wrong and is easy; a 200 means nothing at all here.
+
+```
+for t in 5/6/11 5/7/11; do curl -s -o - ".../$LAYER/$t.png" | md5sum; done
+# identical hashes  -> placeholder, the layer name is wrong
+```
+
+An unknown *path prefix* does 404 properly — it is only the layer segment that behaves this
+way. Note the cache directory is named for the layer, not for the provider, so correcting a
+path abandons the tiles the old one wrote rather than serving them for ever.
 
 ## Basemap and geocoding
 
