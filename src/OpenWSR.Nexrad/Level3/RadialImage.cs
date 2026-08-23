@@ -11,6 +11,7 @@ public sealed record RadialImageProduct(
     string SiteId,
     double RadarLatDeg, double RadarLonDeg,
     DateTime VolumeTimeUtc, DateTime ProductTimeUtc,
+    float ElevationAngleDeg,
     int FirstBinIndex,
     int GateCount,
     int RadialCount,
@@ -33,6 +34,10 @@ public static class RadialImage
         double lon = Be.I32(msg, 24) / 1000.0;
         var volumeTime = NexradTime.FromJulian(Be.I16(msg, 40), Be.U32(msg, 42) * 1000);
         var productTime = NexradTime.FromJulian(Be.I16(msg, 46), Be.U32(msg, 48) * 1000);
+
+        // Halfword 30, immediately before the thresholds at 31. Tenths of a degree, and
+        // signed because the lowest cuts of some products are reported below the horizon.
+        float elevationDeg = Be.I16(msg, 58) * 0.1f;
 
         var thresholds = new ushort[16];
         for (int i = 0; i < 16; i++)
@@ -71,7 +76,7 @@ public static class RadialImage
         }
 
         return new RadialImageProduct(
-            productCode, siteId, lat, lon, volumeTime, productTime,
+            productCode, siteId, lat, lon, volumeTime, productTime, elevationDeg,
             firstBin, gates, radials, startAngles, deltaAngles, levels, thresholds);
     }
 }
