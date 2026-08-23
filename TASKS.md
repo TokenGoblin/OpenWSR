@@ -965,3 +965,31 @@ work that makes them look like TV is on each layer separately.
 - [x] Capped at z7 — one level of oversample above native — and the GPU's linear filter does
       the magnification. Also the honest answer: the detail past there was never measured, so
       clouds going soft as you zoom in is what the data supports
+
+### Phase 1b — HDF5 attributes
+
+Reading ABI needs attributes, and `MiniHdf5` deliberately did not walk them. GLM had worked
+around it by copying two constants out of the L2 specification; ABI cannot, because its
+whole projection — the perspective height, the earth figure, the sweep axis, the scan-angle
+scaling — lives in attributes and nowhere else.
+
+- [x] `Hdf5Attribute` with `AsDouble`/`AsString`, `MiniHdf5.AttributesOf(name)` for a dataset
+      and `AttributesOf()` for the root group. Parsed on demand: a NetCDF-4 file carries
+      hundreds and a caller wants three
+- [x] **Compact storage is the path that never fires.** Attributes as object-header messages
+      (0x0C) are what the format documentation leads with, but past a handful HDF5 moves them
+      into a fractal heap and leaves an Attribute Info message (0x15) behind. Every netCDF-4
+      variable crosses that threshold — the ABI file has *no* 0x0C messages at all. The first
+      implementation handled only the compact form and reported "no attributes" for
+      everything, which looks exactly like success
+- [x] The heap walk is the one already written for dense links, split so both can scan it.
+      Same byte-at-a-time validation, and the same reason: the offsets live in a B-tree this
+      reader deliberately does not implement
+- [x] **A dataspace can be four bytes.** The validator required eight, which is right for a
+      rank-1 array and wrong for a scalar — and every text attribute is a scalar. It returned
+      all the numbers and silently dropped every string, including `sweep_angle_axis`, which
+      decides the handedness of the projection. That failure looked like a working reader
+- [x] Eleven tests against h5py 3.16.0 reading the same two files. Committed an ABI CONUS
+      band 13 file (3.9 MB) as the second fixture
+- [x] `GlmFile` reads its energy scaling from the file now, keeping the published constants
+      only as a fallback for a file that omits them

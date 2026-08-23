@@ -11,6 +11,45 @@ public enum Hdf5Kind
     SignedInteger,
     UnsignedInteger,
     Float,
+
+    /// <summary>Fixed-length characters. Attributes only — no dataset here stores text.</summary>
+    String,
+}
+
+/// <summary>
+/// One attribute hanging off a dataset or off the root group: the small named values that
+/// say how to interpret the big array beside them.
+///
+/// These matter more than their size suggests. A NetCDF-4 variable of scaled integers is
+/// meaningless without its <c>scale_factor</c> and <c>add_offset</c>, and a projected grid
+/// is unplaceable without the projection constants — all of which are attributes.
+/// </summary>
+public sealed record Hdf5Attribute(
+    string Name,
+    Hdf5Kind Kind,
+    int ElementSize,
+    bool LittleEndian,
+    long[] Dimensions,
+    byte[] Raw)
+{
+    public long Count => Dimensions.Length == 0 ? 1 : Dimensions.Aggregate(1L, (a, b) => a * b);
+
+    /// <summary>The value as a number. Rank-1 attributes of one element read as scalars.</summary>
+    public double AsDouble(int index = 0)
+    {
+        if (Kind == Hdf5Kind.String)
+            throw new Hdf5FormatException($"Attribute '{Name}' is text, not a number.");
+        if (index < 0 || index >= Count)
+            throw new Hdf5FormatException($"Attribute '{Name}' has no element {index}.");
+        return MiniHdf5.ToDoubleAt(Raw, index, ElementSize, LittleEndian, Kind);
+    }
+
+    /// <summary>
+    /// The value as text. HDF5 pads fixed-length strings with NULs or spaces, and neither
+    /// belongs in a comparison against something like "x".
+    /// </summary>
+    public string AsString() =>
+        System.Text.Encoding.UTF8.GetString(Raw).TrimEnd('\0', ' ');
 }
 
 /// <summary>One array in the file, located but not yet read.</summary>
@@ -29,6 +68,9 @@ public sealed record Hdf5Dataset(
     internal int[] ChunkDimensions { get; init; } = [];
     internal bool Shuffle { get; init; }
     internal bool Deflate { get; init; }
+
+    /// <summary>Where this object's header lives, so its attributes can be read on demand.</summary>
+    internal long HeaderAddress { get; init; } = -1;
 }
 
 /// <summary>
@@ -52,6 +94,7 @@ public sealed class MiniHdf5
 
     private readonly byte[] _data;
     private readonly Dictionary<string, Hdf5Dataset> _datasets = new(StringComparer.Ordinal);
+    private long _rootHeader = -1;
 
     public IReadOnlyDictionary<string, Hdf5Dataset> Datasets => _datasets;
 
@@ -81,7 +124,7 @@ public sealed class MiniHdf5
 
         // Superblock v2: signature 0-7, version 8, offset/length sizes 9-10, flags 11,
         // then base address 12, extension 20, end-of-file 28, root group header 36.
-        long rootHeader = (long)U64(36);
+        long rootHeader = _rootHeader = (long)U64(36);
         foreach (var (name, address) in ReadGroupLinks(rootHeader))
         {
             var dataset = TryReadDataset(name, address);
@@ -190,7 +233,8 @@ public sealed class MiniHdf5
         return links;
     }
 
-    private List<(string Name, long Address)> ReadFractalHeapLinks(long heapAddress)
+    /// <summary>The payload ranges of every direct block in a fractal heap.</summary>
+    private List<(int Start, int End)> ReadFractalHeapBlocks(long heapAddress)
     {
         int p = checked((int)heapAddress);
         if (!Match(p, "FRHP"))
@@ -216,13 +260,13 @@ public sealed class MiniHdf5
         int currentRows = U16(p);
 
         int offsetBytes = (maxHeapBits + 7) / 8;
-        var links = new List<(string, long)>();
-        if (rootAddress == Undefined) return links;
+        var blocks = new List<(int Start, int End)>();
+        if (rootAddress == Undefined) return blocks;
 
         if (currentRows == 0)
         {
-            ReadDirectBlock((long)rootAddress, startingBlockSize, offsetBytes, links);
-            return links;
+            AddDirectBlock((long)rootAddress, startingBlockSize, offsetBytes, blocks);
+            return blocks;
         }
 
         int q = checked((int)rootAddress);
@@ -238,14 +282,25 @@ public sealed class MiniHdf5
             {
                 ulong child = U64(q); q += 8;
                 if (child != Undefined)
-                    ReadDirectBlock((long)child, blockSize, offsetBytes, links);
+                    AddDirectBlock((long)child, blockSize, offsetBytes, blocks);
             }
         }
-        return links;
+        return blocks;
+    }
+
+    /// <summary>The payload range of one direct block, past its header.</summary>
+    private void AddDirectBlock(
+        long address, long size, int offsetBytes, List<(int Start, int End)> blocks)
+    {
+        int p = checked((int)address);
+        if (!Match(p, "FHDB")) return;
+        p += 4 + 1 + 8 + offsetBytes + 4;          // signature, version, heap address, offset, checksum
+        int end = (int)Math.Min(address + size, _data.Length);
+        if (p < end) blocks.Add((p, end));
     }
 
     /// <summary>
-    /// Pull every link record out of one direct block.
+    /// Every link record in a heap.
     ///
     /// The heap does not delimit its objects — the B-tree's heap IDs carry the offsets, and
     /// that is exactly what is being skipped. Instead each candidate position is validated
@@ -253,26 +308,54 @@ public sealed class MiniHdf5
     /// inside the file); anything that fails is not a record, so the scan advances a byte
     /// and tries again. Free space between records is skipped this way rather than parsed.
     /// </summary>
-    private void ReadDirectBlock(
-        long address, long size, int offsetBytes, List<(string Name, long Address)> links)
+    private List<(string Name, long Address)> ReadFractalHeapLinks(long heapAddress)
     {
-        int p = checked((int)address);
-        if (!Match(p, "FHDB")) return;
-        p += 4 + 1 + 8 + offsetBytes + 4;          // signature, version, heap address, offset, checksum
-        int end = (int)Math.Min(address + size, _data.Length);
-
-        while (p < end - 12)
+        var links = new List<(string, long)>();
+        foreach (var (start, end) in ReadFractalHeapBlocks(heapAddress))
         {
-            if (TryReadLink(p, end, out var link, out int next))
+            int p = start;
+            while (p < end - 12)
             {
-                links.Add(link);
-                p = next;
-            }
-            else
-            {
-                p++;
+                if (TryReadLink(p, end, out var link, out int next))
+                {
+                    links.Add(link);
+                    p = next;
+                }
+                else
+                {
+                    p++;
+                }
             }
         }
+        return links;
+    }
+
+    /// <summary>
+    /// Every attribute record in a heap, found the same way and for the same reason as the
+    /// links above. Validation has to be strict here because the scan will land mid-record
+    /// constantly: an attribute that does not name itself in printable characters, describe
+    /// a datatype this reader knows, and fit its own data inside the block is not one.
+    /// </summary>
+    private List<Hdf5Attribute> ReadFractalHeapAttributes(long heapAddress)
+    {
+        var attributes = new List<Hdf5Attribute>();
+        foreach (var (start, end) in ReadFractalHeapBlocks(heapAddress))
+        {
+            int p = start;
+            while (p < end - 12)
+            {
+                if (TryReadAttribute(p, end, out var attribute, out int next) && attribute is not null)
+                {
+                    attributes.Add(attribute);
+                    p = next;
+                }
+                else
+                {
+                    p++;
+                }
+            }
+        }
+        return attributes;
     }
 
     private bool TryReadLink(int start, int end, out (string Name, long Address) link, out int next)
@@ -320,6 +403,168 @@ public sealed class MiniHdf5
 
     // ---- datasets ----
 
+    /// <summary>
+    /// A datatype message, shared by datasets and by the copy embedded in every attribute.
+    /// Class 3 is fixed-length text, which only ever turns up on attributes — no array in
+    /// these files stores strings — but <c>sweep_angle_axis</c> is one and it decides the
+    /// geometry of a whole projection, so it cannot be skipped.
+    /// </summary>
+    private (Hdf5Kind Kind, int ElementSize, bool LittleEndian) ParseDatatype(int p, string owner)
+    {
+        int typeClass = _data[p] & 0x0F;
+        byte bits = _data[p + 1];
+        int elementSize = (int)U32(p + 4);
+        var kind = typeClass switch
+        {
+            0 => (bits & 0x08) != 0 ? Hdf5Kind.SignedInteger : Hdf5Kind.UnsignedInteger,
+            1 => Hdf5Kind.Float,
+            3 => Hdf5Kind.String,
+            _ => throw new Hdf5FormatException(
+                $"Datatype class {typeClass} in '{owner}' is not supported."),
+        };
+        // Byte order lives in bit 0 for numbers; a string's bit 0 means something else
+        // entirely (padding), and text has no endianness to get wrong.
+        bool littleEndian = kind == Hdf5Kind.String || (bits & 0x01) == 0;
+        return (kind, elementSize, littleEndian);
+    }
+
+    private long[] ParseDataspace(int p)
+    {
+        byte version = _data[p];
+        int rank = _data[p + 1];
+        int q = p + (version == 1 ? 8 : 4);
+        var dimensions = new long[rank];
+        for (int i = 0; i < rank; i++) { dimensions[i] = (long)U64(q); q += 8; }
+        return dimensions;
+    }
+
+    /// <summary>
+    /// The attributes attached to a dataset, or to the root group when <paramref name="name"/>
+    /// is null. Parsed on demand rather than at open: a NetCDF-4 file carries hundreds of them
+    /// and a caller wants two or three.
+    /// </summary>
+    public IReadOnlyDictionary<string, Hdf5Attribute> AttributesOf(string? name = null)
+    {
+        long header;
+        if (name is null)
+        {
+            header = _rootHeader;
+        }
+        else if (_datasets.TryGetValue(name, out var dataset) && dataset.HeaderAddress >= 0)
+        {
+            header = dataset.HeaderAddress;
+        }
+        else
+        {
+            throw new Hdf5FormatException($"'{name}' is not in this file.");
+        }
+
+        var result = new Dictionary<string, Hdf5Attribute>(StringComparer.Ordinal);
+        foreach (var message in ReadMessages(header))
+        {
+            switch (message.Type)
+            {
+                // Compact storage: the attribute sits in the object header itself.
+                case 0x0C:
+                    if (TryReadAttribute(message.Offset, message.Offset + message.Size,
+                            out var inline, out _) && inline is not null)
+                        result[inline.Name] = inline;
+                    break;
+
+                // Attribute info: past a handful of attributes HDF5 moves them out to a
+                // fractal heap and leaves only this pointer behind. Every netCDF-4 variable
+                // crosses that threshold, so in practice this is the only path that fires.
+                case 0x15:
+                {
+                    int p = message.Offset;
+                    p++;                                  // version
+                    byte infoFlags = _data[p++];
+                    if ((infoFlags & 0x01) != 0) p += 2;  // maximum creation index
+                    ulong heap = U64(p);
+                    if (heap == Undefined) break;
+                    foreach (var dense in ReadFractalHeapAttributes((long)heap))
+                        result[dense.Name] = dense;
+                    break;
+                }
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// One attribute record. The three versions differ only in whether the name and the two
+    /// embedded messages are padded out to eight-byte boundaries — version 1 pads all three,
+    /// 2 and 3 pad none — and version 3 inserts a character-encoding byte before the name.
+    /// Getting the padding wrong lands the data pointer inside the dataspace and the value
+    /// comes back as plausible nonsense, so this is worth being exact about.
+    ///
+    /// Returns false rather than throwing on anything malformed: the dense path calls this at
+    /// every byte offset of a heap block, so "not an attribute here" is the common answer.
+    /// </summary>
+    private bool TryReadAttribute(int offset, int end, out Hdf5Attribute? attribute, out int next)
+    {
+        attribute = null;
+        next = offset;
+        if (offset < 0 || offset + 8 > end) return false;
+
+        byte version = _data[offset];
+        if (version is < 1 or > 3) return false;
+
+        int p = offset + 2;                      // version, then flags (v1: reserved)
+        int nameSize = U16(p); p += 2;
+        int datatypeSize = U16(p); p += 2;
+        int dataspaceSize = U16(p); p += 2;
+        if (version == 3) p++;                   // name character-set encoding
+
+        // A netCDF attribute name is a short identifier and its datatype and dataspace
+        // messages are a few dozen bytes. These bounds are what stop the scan latching on
+        // to arbitrary data that happens to start with a 1, 2 or 3.
+        // A datatype message is at least its 8-byte prefix. A dataspace message can be as
+        // short as 4: that is a *scalar*, version and rank and two flag bytes with no
+        // dimensions after it — which is exactly how every text attribute is stored, so a
+        // floor of 8 here silently drops all of them and keeps only the arrays.
+        if (nameSize is < 2 or > 256) return false;
+        if (datatypeSize is < 8 or > 256) return false;
+        if (dataspaceSize is < 4 or > 256) return false;
+
+        bool padded = version == 1;
+        if (p + nameSize > end) return false;
+        for (int i = 0; i < nameSize - 1; i++)
+            if (_data[p + i] < 0x20 || _data[p + i] > 0x7E) return false;
+        if (_data[p + nameSize - 1] != 0) return false;
+
+        string name = System.Text.Encoding.UTF8.GetString(_data, p, nameSize - 1);
+        p += padded ? Align8(nameSize) : nameSize;
+
+        if (p + datatypeSize > end) return false;
+        int typeClass = _data[p] & 0x0F;
+        if (typeClass is not (0 or 1 or 3)) return false;   // integer, float, fixed-length text
+        int elementSize = (int)U32(p + 4);
+        if (elementSize < 1 || elementSize > 4096) return false;
+        var (kind, _, littleEndian) = ParseDatatype(p, name);
+        p += padded ? Align8(datatypeSize) : datatypeSize;
+
+        if (p + dataspaceSize > end) return false;
+        int rank = _data[p + 1];
+        if (rank > 2) return false;
+        var dimensions = ParseDataspace(p);
+        p += padded ? Align8(dataspaceSize) : dataspaceSize;
+
+        long count = dimensions.Length == 0 ? 1 : dimensions.Aggregate(1L, (a, b) => a * b);
+        if (count is < 1 or > 65536) return false;
+        long bytes = count * elementSize;
+        if (p + bytes > end) return false;
+
+        attribute = new Hdf5Attribute(
+            name, kind, elementSize, littleEndian, dimensions,
+            _data.AsSpan(p, (int)bytes).ToArray());
+        next = (int)(p + bytes);
+        return true;
+    }
+
+    private static int Align8(int n) => (n + 7) & ~7;
+
+
     private Hdf5Dataset? TryReadDataset(string name, long headerAddress)
     {
         long[] dimensions = [];
@@ -338,31 +583,12 @@ public sealed class MiniHdf5
             switch (message.Type)
             {
                 case 0x01: // dataspace
-                {
-                    byte version = _data[p];
-                    int rank = _data[p + 1];
-                    int q = p + (version == 1 ? 8 : 4);
-                    dimensions = new long[rank];
-                    for (int i = 0; i < rank; i++) { dimensions[i] = (long)U64(q); q += 8; }
+                    dimensions = ParseDataspace(p);
                     break;
-                }
                 case 0x03: // datatype
-                {
-                    int classAndVersion = _data[p];
-                    int typeClass = classAndVersion & 0x0F;
-                    byte bits = _data[p + 1];
-                    elementSize = (int)U32(p + 4);
-                    littleEndian = (bits & 0x01) == 0;
-                    kind = typeClass switch
-                    {
-                        0 => (bits & 0x08) != 0 ? Hdf5Kind.SignedInteger : Hdf5Kind.UnsignedInteger,
-                        1 => Hdf5Kind.Float,
-                        _ => throw new Hdf5FormatException(
-                            $"Datatype class {typeClass} in '{name}' is not supported."),
-                    };
+                    (kind, elementSize, littleEndian) = ParseDatatype(p, name);
                     sawType = true;
                     break;
-                }
                 case 0x08: // data layout
                 {
                     byte version = _data[p];
@@ -427,6 +653,7 @@ public sealed class MiniHdf5
 
         return new Hdf5Dataset(name, dimensions, kind, elementSize, littleEndian)
         {
+            HeaderAddress = headerAddress,
             ContiguousAddress = contiguous,
             ChunkTreeAddress = chunkTree,
             ChunkDimensions = chunkDimensions,
@@ -574,6 +801,10 @@ public sealed class MiniHdf5
         kind == Hdf5Kind.Float
             ? size == 8 ? ReadF64(span, little) : ReadF32(span, little)
             : ToInt64(span, little, size, kind);
+
+    /// <summary>One element of a packed buffer as a double. Shared with <see cref="Hdf5Attribute"/>.</summary>
+    internal static double ToDoubleAt(byte[] raw, int index, int size, bool little, Hdf5Kind kind) =>
+        ToDouble(raw.AsSpan(index * size, size), little, size, kind);
 
     private static long ToInt64(ReadOnlySpan<byte> span, bool little, int size, Hdf5Kind kind)
     {

@@ -18,6 +18,11 @@ public readonly record struct LightningFlash(
 /// Every flash in the file falls inside a twenty-second window, which is finer than any
 /// display distinguishes, and the offsets carry a scale and origin that would have to be
 /// right to gain nothing.
+///
+/// The energy scaling is read from the file's attributes. That is worth stating because it
+/// was not always true: attributes were the one part of HDF5 this reader skipped, so the
+/// constants were copied out of the specification instead. Reading them became necessary
+/// for ABI, whose projection lives entirely in attributes, and GLM got the benefit.
 /// </summary>
 public static class GlmFile
 {
@@ -46,11 +51,20 @@ public static class GlmFile
 
         var time = Epoch.AddSeconds(file.ReadDouble("product_time")[0]);
 
-        // Energy is stored as a scaled short. The scale is a file attribute, and attributes
-        // are the one part of the format this reader does not walk, so the published L2
-        // constants are used — they are fixed for the product, not per-file.
-        const float energyScale = 9.99996e-16f;
-        const float energyOffset = 2.8515e-16f;
+        // Energy is stored as a scaled short, and the scale comes from the file's own
+        // attributes. It used to be a pair of literals copied from the L2 specification,
+        // because this reader could not walk attributes; it can now. The published values
+        // are kept as the fallback rather than deleted — an older file that omits them
+        // should still decode rather than raise.
+        var energyAttributes = file.Datasets.ContainsKey("flash_energy")
+            ? file.AttributesOf("flash_energy")
+            : new Dictionary<string, Hdf5Attribute>();
+        float energyScale = energyAttributes.TryGetValue("scale_factor", out var scale)
+            ? (float)scale.AsDouble()
+            : 9.99996e-16f;
+        float energyOffset = energyAttributes.TryGetValue("add_offset", out var offset)
+            ? (float)offset.AsDouble()
+            : 2.8515e-16f;
 
         var flashes = new List<LightningFlash>(latitudes.Length);
         for (int i = 0; i < latitudes.Length; i++)
