@@ -14,8 +14,14 @@ public static class InfoWindow
 {
     private static Brush Res(string key) => (Brush)Application.Current.Resources[key];
 
-    /// <summary>Keyboard shortcuts and mouse gestures. Opened by the rail's ? button and F1.</summary>
-    public static void ShowShortcuts(Window owner)
+    /// <summary>
+    /// Keyboard shortcuts and mouse gestures. Opened by the rail's ? button and F1.
+    ///
+    /// It carries the way through to About as well. About had its own rail slot, which is a
+    /// permanent 44 px of a strip that had run out of room, for a card read once. Both are
+    /// reference material and this is where reference material lives.
+    /// </summary>
+    public static void ShowShortcuts(Window owner, string version)
     {
         var panel = new StackPanel { Margin = new Thickness(20), MaxWidth = 520 };
         AddHeading(panel, "Over the map", first: true);
@@ -36,6 +42,21 @@ public static class InfoWindow
         AddNote(panel,
             "The product buttons above the map carry the same letters, so the shortcuts are "
           + "the buttons — there is nothing extra to remember.");
+
+        var about = new Button
+        {
+            Content = $"About OpenWSR {version}",
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 18, 0, 0),
+            Padding = new Thickness(12, 5, 12, 5),
+        };
+        about.Click += (_, _) =>
+        {
+            var card = Window.GetWindow(about);
+            card?.Close();
+            ShowAbout(owner, version);
+        };
+        panel.Children.Add(about);
 
         Show(owner, "Keyboard and mouse", panel);
     }

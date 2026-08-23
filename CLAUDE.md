@@ -61,6 +61,16 @@ Before adding a control, decide which question it answers and put it there. Set-
 configuration goes in Settings, not the layers panel; reference material (shortcuts, the
 symbol key, About) goes in `InfoWindow`, not a panel or a MessageBox.
 
+**The left rail has a fixed budget and it is already spent.** Sixteen 44 px buttons needed
+1109 px against 1096 available, so `About` sat entirely below the window edge — and because
+the bottom group is docked to the bottom, overflow eats Settings, Help and About first: the
+three you least want to lose. There is no scrollbar and no overflow affordance, so a rail
+that does not fit fails silently. Before adding a button, take one out. What went, and why:
+set-once actions (`Set home`, palette import) belong in Settings, reference material
+(`About`) belongs in `InfoWindow`, and a control that is inert until some state exists
+(`Link panes`) should be **collapsed** rather than merely disabled — a greyed button still
+costs a slot.
+
 The right column carries the last two, and they behave differently on purpose. The layers
 toggle governs **only** the lower half — tidying the layers away must not take a tornado
 warning off the screen with it — and `APPROACHING` collapses on its own whenever nothing is

@@ -81,6 +81,12 @@
         <TextBlock Style="{StaticResource Hint}"
                    Text="With a home set, OpenWSR raises a tray notification when a tracked storm's forecast path or a warning polygon comes within this range — and arms the storm layer on the nearest radar." />
 
+        <TextBlock Text="COLOUR TABLES" Style="{StaticResource Head}" />
+        <Button x:Name="PaletteButton" Content="Import a .pal file…" Click="Palette_Click"
+                HorizontalAlignment="Left" />
+        <TextBlock Style="{StaticResource Hint}"
+                   Text="A GR2Analyst colour table, applied to whichever product is showing when you import it. Saving closes this window and opens the file picker." />
+
         <TextBlock Text="CONTACT FOR WEATHER.GOV" Style="{StaticResource Head}" />
         <TextBox x:Name="ContactBox" Margin="0,4,0,0" Background="#22252B" Foreground="#C8CCD4"
                  BorderBrush="#3A3F4A" Padding="4,3" />

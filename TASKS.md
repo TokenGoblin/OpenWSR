@@ -1055,3 +1055,30 @@ left the rest of the array at zero, which for scaled data decodes as a uniform f
 
 **Still open in this phase group:** Phase 2 (GeoColor-style day/night blend) and Phase 3
 (TDWR).
+
+## The left rail had run out of room
+
+Reported from the app: not everything fits. Measured through the automation tree rather
+than by eye — sixteen buttons at 44 px needed **1109 px** against **1096** available, so
+`About` was entirely below the window edge and unreachable. Worse, the bottom group is
+docked to the bottom, so overflow eats Settings, Help and About first: the three least
+worth losing. There is no scrollbar and no overflow affordance, so it fails silently.
+
+Condensing the buttons was the other option and was rejected: it shrinks the targets, buys
+headroom once, and leaves the same problem for the next tool.
+
+- [x] **Set home** → Settings › MY AREA, which already had "Pick on map" arming the identical
+      tool and "Use my location" beside it. The `SetHome` tool itself is unchanged; only its
+      rail button is gone, so no rail toggle is lit while it is armed — correct, because
+      lighting Inspect would name a different tool than the one that is armed
+- [x] **Palette import** → Settings. Set-once configuration, which is the line the shell
+      already draws. It still applies to whichever product is showing, so Settings raises
+      `WantsPaletteImport` and hands back rather than opening the picker itself — the same
+      pattern `WantsHomePicker` established
+- [x] **About** → folded into the card the `?` button already opens. Both are reference
+      material and `InfoWindow` is where reference material lives
+- [x] **Link panes** → collapsed at one pane instead of merely disabled. A greyed button
+      still costs a permanent 44 px for something that cannot act until a second pane exists
+- [x] 1109 px → about 840 px. Verified live: everything on screen with headroom, Link appears
+      and disappears with the second pane, the help card offers About, and Settings carries
+      the importer

@@ -52,6 +52,13 @@ public partial class SettingsWindow : Window
     /// <summary>Set when the user asked to place home by clicking the map.</summary>
     public bool WantsHomePicker { get; private set; }
 
+    /// <summary>
+    /// Set when the user asked to import a colour table. The file picker is opened by the
+    /// main window rather than here, because the table applies to whichever product is
+    /// showing and this dialog has no business knowing which that is.
+    /// </summary>
+    public bool WantsPaletteImport { get; private set; }
+
     private void UpdateHomeLabel()
     {
         if (_homeLatDeg is { } lat && _homeLonDeg is { } lon)
@@ -121,6 +128,12 @@ public partial class SettingsWindow : Window
     private void PickHome_Click(object sender, RoutedEventArgs e)
     {
         WantsHomePicker = true;
+        Save_Click(sender, e); // save the rest, then hand back to the map
+    }
+
+    private void Palette_Click(object sender, RoutedEventArgs e)
+    {
+        WantsPaletteImport = true;
         Save_Click(sender, e); // save the rest, then hand back to the map
     }
 

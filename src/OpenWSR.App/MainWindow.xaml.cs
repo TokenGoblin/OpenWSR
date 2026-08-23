@@ -55,7 +55,7 @@ public partial class MainWindow : Window
         MomentBar.ItemsSource = _vm.Moments;
         TiltCombo.ItemsSource = _vm.Tilts;
         ThreatList.ItemsSource = _vm.Threats;
-        LinkToggle.IsEnabled = false; // only meaningful once a second pane exists
+        LinkToggle.Visibility = Visibility.Collapsed; // appears with the second pane
 
         var settings = _settings = AppSettings.Load();
         Units.System = settings.Units;
@@ -302,7 +302,7 @@ public partial class MainWindow : Window
             {
                 settings.WelcomeShown = true;
                 settings.Save();
-                InfoWindow.ShowShortcuts(this);
+                InfoWindow.ShowShortcuts(this, Version);
             }
         };
         Closed += (_, _) =>
@@ -378,7 +378,7 @@ public partial class MainWindow : Window
     {
         if (e.Key == Key.F1)
         {
-            InfoWindow.ShowShortcuts(this);
+            InfoWindow.ShowShortcuts(this, Version);
             e.Handled = true;
             return;
         }
@@ -596,8 +596,11 @@ public partial class MainWindow : Window
         InspectTool.IsChecked = _vm.Tool == MapTool.Inspect;
         MeasureTool.IsChecked = _vm.Tool == MapTool.Measure;
         CrossSectionTool.IsChecked = _vm.Tool == MapTool.CrossSection;
-        SetHomeTool.IsChecked = _vm.Tool == MapTool.SetHome;
         DrawTool.IsChecked = _vm.Tool == MapTool.Draw;
+        // SetHome has no rail button — it is armed from Settings and disarms itself on the
+        // next click — so every rail toggle is unchecked while it is the armed tool. That is
+        // correct rather than a gap: the status line carries the hint, and leaving Inspect
+        // lit would say a different tool was armed than the one that is.
         _suppressToolEvents = false;
 
         CrossSectionPanel.Visibility = _vm.Tool == MapTool.CrossSection
@@ -1895,10 +1898,18 @@ public partial class MainWindow : Window
         _panes.SetPaneCount(_paneCount);
         PaneButton.Content = _paneCount switch { 1 => "◱", 2 => "◫", _ => "⊞" };
         PaneButton.ToolTip = $"Map panes: {_paneCount}";
+        // Shown rather than merely enabled: a permanently greyed button is a slot the rail
+        // cannot spare for something that does nothing until a second pane exists.
+        LinkToggle.Visibility = _paneCount > 1 ? Visibility.Visible : Visibility.Collapsed;
         LinkToggle.IsEnabled = _paneCount > 1;
     }
 
-    private void PaletteButton_Click(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// Import a GR2Analyst colour table for whichever product is showing. Reached from
+    /// Settings rather than the rail: it is set once per product and then never touched,
+    /// which is the line this shell draws between the two places.
+    /// </summary>
+    private void ImportPalette()
     {
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
@@ -1984,13 +1995,19 @@ public partial class MainWindow : Window
             SyncToolButtons();
             return;
         }
+        if (dialog.WantsPaletteImport)
+        {
+            ImportPalette();
+            return;
+        }
         Report("Settings saved. Basemap changes take effect next launch.");
     }
 
-    private void HelpButton_Click(object sender, RoutedEventArgs e) => InfoWindow.ShowShortcuts(this);
+    private void HelpButton_Click(object sender, RoutedEventArgs e) =>
+        InfoWindow.ShowShortcuts(this, Version);
 
-    private void AboutButton_Click(object sender, RoutedEventArgs e) =>
-        InfoWindow.ShowAbout(this, GetType().Assembly.GetName().Version?.ToString(3) ?? "dev");
+    private string Version =>
+        GetType().Assembly.GetName().Version?.ToString(3) ?? "dev";
 
     // ---- location search ----
 

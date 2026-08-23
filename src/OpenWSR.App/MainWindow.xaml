@@ -27,8 +27,12 @@
                             ToolTip="Go to the heaviest precipitation in the USA right now" />
                     <Button x:Name="PaneButton" AutomationProperties.Name="Map panes" Style="{StaticResource RailButton}" Content="◱"
                             Click="PaneButton_Click" ToolTip="Map panes: 1" />
+                    <!-- Collapsed at one pane rather than merely disabled: it held a
+                         permanent slot in a rail that does not have one to spare, for a
+                         control that cannot do anything until a second pane exists. -->
                     <ToggleButton x:Name="LinkToggle" AutomationProperties.Name="Link pan and zoom across panes" Style="{StaticResource RailToggle}" Content="⛓"
-                                  IsChecked="True" Checked="LinkToggle_Changed" Unchecked="LinkToggle_Changed"
+                                  IsChecked="True" Visibility="Collapsed"
+                                  Checked="LinkToggle_Changed" Unchecked="LinkToggle_Changed"
                                   ToolTip="Link pan and zoom across panes" />
 
                     <!-- Map tools are one armed mode at a time, so a right-drag always means
@@ -46,26 +50,18 @@
                     <ToggleButton x:Name="DrawTool" AutomationProperties.Name="Drawing tool" Style="{StaticResource RailToggle}" Content="✎"
                                   Tag="Draw" Checked="ToolButton_Checked" Unchecked="ToolButton_Unchecked"
                                   ToolTip="Draw — annotate the map with lines, areas, circles and labels" />
-                    <ToggleButton x:Name="SetHomeTool" AutomationProperties.Name="Set home location" Style="{StaticResource RailToggle}" Content="📍"
-                                  Tag="SetHome" Checked="ToolButton_Checked" Unchecked="ToolButton_Unchecked"
-                                  ToolTip="Set home — click the map to place your alert location" />
 
                     <Border Height="1" Background="#FF272C35" Margin="10,6" />
                     <Button x:Name="CaptureButton" AutomationProperties.Name="Save image or animated GIF" Style="{StaticResource RailButton}" Content="📷"
                             Click="CaptureButton_Click"
                             ToolTip="Save the map as a PNG, or the loop as an animated GIF" />
-                    <Button x:Name="PaletteButton" AutomationProperties.Name="Import a colour table" Style="{StaticResource RailButton}" Content="🎨"
-                            Click="PaletteButton_Click"
-                            ToolTip="Import a GR2Analyst .pal colour table for the current product" />
                 </StackPanel>
                 <StackPanel DockPanel.Dock="Bottom" Margin="0,0,0,6">
                     <Border Height="1" Background="#FF272C35" Margin="10,4" />
                     <Button x:Name="SettingsButton" AutomationProperties.Name="Settings" Style="{StaticResource RailButton}" Content="⚙"
                             Click="SettingsButton_Click" ToolTip="Settings" />
                     <Button x:Name="HelpButton" AutomationProperties.Name="Keyboard shortcuts and mouse gestures" Style="{StaticResource RailButton}" Content="?"
-                            Click="HelpButton_Click" ToolTip="Keyboard shortcuts and mouse gestures  (F1)" />
-                    <Button x:Name="AboutButton" AutomationProperties.Name="About OpenWSR" Style="{StaticResource RailButton}" Content="ⓘ"
-                            Click="AboutButton_Click" ToolTip="About OpenWSR" />
+                            Click="HelpButton_Click" ToolTip="Keyboard shortcuts, mouse gestures and About  (F1)" />
                 </StackPanel>
                 <Grid />
             </DockPanel>
