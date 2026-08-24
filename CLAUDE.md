@@ -134,6 +134,15 @@ looking at the right data over the wrong ground. Pane state (including the link 
 lives on the `Pane` object rather than in arrays indexed by position, because that position
 shifts whenever panes are added, removed or pinned.
 
+**Place names are their own layer, drawn above the weather.** The dark basemap uses CARTO's
+`dark_nolabels` with `dark_only_labels` as a separate tile layer drawn *after* the radar sweep.
+Baked into the basemap they are the first thing an echo covers, and the name of the town a
+storm is over is exactly what wants reading at that moment. They are also boosted: CARTO draws
+them mid-grey — brightest pixel (161,161,161), mean (103,103,103) — so `DrawTiles` takes a
+`boost` that the quad shader applies as its tint, and values above 1 lift toward white and
+clamp. Only the dark style splits its labels out; the other providers bake them in, so drawing
+a second copy would double every name.
+
 **Airspace.** The D3D child HWND always draws above WPF content inside its rectangle.
 WPF controls cannot overlay the map. Anything that must appear *over* the map is either
 drawn in the D3D scene (the colour scale, storm labels — see `GlyphAtlas` and

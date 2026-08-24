@@ -26,7 +26,24 @@ public sealed record TileProvider(string Name, string UrlTemplate, string UserAg
     /// contrast. Attribution is required and names CARTO as well as OpenStreetMap.
     /// </summary>
     public static TileProvider CartoDark(string userAgent) => new(
-        "carto-dark", "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png", userAgent);
+        "carto-dark", "https://basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png", userAgent);
+
+    /// <summary>
+    /// The place names from the same style, as a transparent layer of their own.
+    ///
+    /// Split out because labels belong <em>above</em> the weather, not under it. Baked into
+    /// the basemap they are the first thing an echo covers, and the name of the town a storm
+    /// is over is exactly what you want to read at that moment.
+    ///
+    /// They also need brightening. CARTO draws them mid-grey — the brightest pixel in a tile
+    /// measures (161, 161, 161) and the mean (103, 103, 103) — which reads as dim against the
+    /// near-black ground and is unreadable over a bright echo. The quad shader multiplies by
+    /// its tint, so a tint above one lifts them toward white and clamps there.
+    /// </summary>
+    public static TileProvider CartoDarkLabels(string userAgent) => new(
+        "carto-dark-labels",
+        "https://basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png",
+        userAgent);
 
     public static TileProvider MapTiler(string apiKey, string userAgent) => new(
         "maptiler",

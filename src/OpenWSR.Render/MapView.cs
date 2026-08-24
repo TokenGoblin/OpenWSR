@@ -434,7 +434,22 @@ public sealed class MapView : IDisposable
         _fetcher = new TileFetcher(provider);
         _mosaicFetcher = new TileFetcher(TileProvider.NexradMosaic(provider.UserAgent));
         _satelliteFetcher = new TileFetcher(TileProvider.GoesInfrared(provider.UserAgent));
+
+        // Only the dark style splits its labels out. The others bake them in, and drawing a
+        // second copy over the radar would double every name.
+        if (provider.Name == "carto-dark")
+            _labelFetcher = new TileFetcher(TileProvider.CartoDarkLabels(provider.UserAgent));
     }
+
+    private readonly TileFetcher? _labelFetcher;
+
+    /// <summary>
+    /// How hard the place names are lifted. CARTO draws them mid-grey, which is dim against
+    /// the near-black ground and invisible over a bright echo; 2.2 takes the brightest pixel
+    /// of a label from 161 to white and leaves the anti-aliased edges as a soft falloff
+    /// rather than a hard outline.
+    /// </summary>
+    private const float LabelBoost = 2.2f;
 
     public void Start(IntPtr hwnd, int width, int height)
     {
@@ -564,6 +579,7 @@ public sealed class MapView : IDisposable
         using var textures = new TileTextureCache(device.Device);
         using var mosaicTextures = new TileTextureCache(device.Device, capacity: 600);
         using var satelliteTextures = new TileTextureCache(device.Device, capacity: 600);
+        using var labelTextures = new TileTextureCache(device.Device, capacity: 600);
         using var quads = new QuadRenderer(device.Device, device.Context);
         using var radar = new RadarSweepRenderer(device.Device, device.Context);
         using var overlay = new OverlayRenderer(device.Device, device.Context);
@@ -591,6 +607,8 @@ public sealed class MapView : IDisposable
                 mosaicTextures.Add(mosaicDone.Key, mosaicDone.Bgra);
             while (_satelliteFetcher.TryDequeueCompleted(out var satelliteDone))
                 satelliteTextures.Add(satelliteDone.Key, satelliteDone.Bgra);
+            while (_labelFetcher is not null && _labelFetcher.TryDequeueCompleted(out var labelDone))
+                labelTextures.Add(labelDone.Key, labelDone.Bgra);
 
             var cam = Camera.Snapshot();
             var ctx = device.Context;
@@ -598,6 +616,7 @@ public sealed class MapView : IDisposable
             textures.BeginFrame();
             mosaicTextures.BeginFrame();
             satelliteTextures.BeginFrame();
+            labelTextures.BeginFrame();
 
             ctx.OMSetRenderTargets(device.BackBufferView!);
             ctx.RSSetViewport(0, 0, device.Width, device.Height);
@@ -695,6 +714,13 @@ public sealed class MapView : IDisposable
             quads.Begin();
             DrawImageOverlay(OverlaySlot.Analysis, cam, quads, device);
 
+            // Place names last of the map layers, so they sit over the weather rather than
+            // under it. The name of the town a storm is on top of is exactly what wants
+            // reading at that moment, and baked into the basemap it is the first thing an
+            // echo covers. Boosted, because the style draws them mid-grey.
+            if (_labelFetcher is not null)
+                DrawTiles(cam, labelTextures, quads, _labelFetcher, boost: LabelBoost);
+
             OverlayGeometry? overlayGeometry;
             lock (_overlayLock)
             {
@@ -750,7 +776,7 @@ public sealed class MapView : IDisposable
 
     private void DrawTiles(
         CameraSnapshot cam, TileTextureCache textures, QuadRenderer quads,
-        TileFetcher fetcher, float opacity = 1f, int maxZoom = 19)
+        TileFetcher fetcher, float opacity = 1f, int maxZoom = 19, float boost = 1f)
     {
         int zoom = Math.Min(TileMath.ZoomForMetersPerPixel(cam.MetersPerPixel), maxZoom);
         var (minX, minY, maxX, maxY) = cam.WorldBounds();
@@ -762,7 +788,7 @@ public sealed class MapView : IDisposable
 
             if (textures.TryGet(key, out var view))
             {
-                quads.DrawTextured(clip, (0, 0, 1, 1), view, opacity);
+                quads.DrawTextured(clip, (0, 0, 1, 1), view, opacity, boost, boost, boost);
                 continue;
             }
 
@@ -779,7 +805,8 @@ public sealed class MapView : IDisposable
                 float size = 1f / (1 << levels);
                 float u0 = (key.X - (ancestor.X << levels)) * size;
                 float v0 = (key.Y - (ancestor.Y << levels)) * size;
-                quads.DrawTextured(clip, (u0, v0, u0 + size, v0 + size), ancestorView, opacity);
+                quads.DrawTextured(
+                    clip, (u0, v0, u0 + size, v0 + size), ancestorView, opacity, boost, boost, boost);
                 break;
             }
         }
@@ -1147,5 +1174,6 @@ public sealed class MapView : IDisposable
         _fetcher.Dispose();
         _mosaicFetcher.Dispose();
         _satelliteFetcher.Dispose();
+        _labelFetcher?.Dispose();
     }
 }

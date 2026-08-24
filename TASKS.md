@@ -1306,3 +1306,11 @@ present, both cross-links working.
       MapTiler both want an API key, and Esri's dark canvas is a mid-grey that gives up most
       of the contrast. Attribution names CARTO alongside OpenStreetMap, in the app and in
       `THIRD-PARTY-NOTICES.md`
+
+- [x] **Brighter place names, and above the weather.** Reported: the labels were too dim. Two
+      problems, not one. CARTO draws them mid-grey — measured from a real tile, the brightest
+      pixel is (161,161,161) and the mean (103,103,103) — and they were baked into the
+      basemap, so an echo covered them. The base is `dark_nolabels` now with
+      `dark_only_labels` as its own layer drawn *after* the radar, boosted through the quad
+      shader's existing tint (values above 1 lift toward white and clamp). The name of the
+      town a storm is over is exactly what wants reading at that moment
