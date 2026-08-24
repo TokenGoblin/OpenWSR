@@ -302,8 +302,8 @@ public sealed class PlacefileController : IDisposable
                         {
                             // No sheet: a plain marker still says something is here.
                             double r = 5 * metresPerPixel;
-                            geometry.Lines.Add((point.X - r, point.Y, point.X + r, point.Y, colour, 2f));
-                            geometry.Lines.Add((point.X, point.Y - r, point.X, point.Y + r, colour, 2f));
+                            geometry.Lines.Add(new OverlayLine(point.X - r, point.Y, point.X + r, point.Y, colour, 2f, LineCaps.Both));
+                            geometry.Lines.Add(new OverlayLine(point.X, point.Y - r, point.X, point.Y + r, colour, 2f, LineCaps.Both));
                         }
                         break;
                     }

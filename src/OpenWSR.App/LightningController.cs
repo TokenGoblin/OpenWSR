@@ -118,8 +118,8 @@ public sealed class LightningController : IDisposable
             uint colour = OverlayGeometry.Pack(255, 240, blue, alpha);
 
             var (x, y) = GeoMath.ToMercator(flash.LatDeg, flash.LonDeg);
-            geometry.Lines.Add((x - arm, y, x + arm, y, colour, 1.6f));
-            geometry.Lines.Add((x, y - arm, x, y + arm, colour, 1.6f));
+            geometry.Lines.Add(new OverlayLine(x - arm, y, x + arm, y, colour, 1.6f, LineCaps.Both));
+            geometry.Lines.Add(new OverlayLine(x, y - arm, x, y + arm, colour, 1.6f, LineCaps.Both));
         }
         Geometry = geometry;
     }

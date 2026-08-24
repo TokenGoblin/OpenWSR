@@ -6,11 +6,45 @@ using Vortice.DXGI;
 
 namespace OpenWSR.Render;
 
+/// <summary>Which ends of a segment get a round cap.</summary>
+public enum LineCaps
+{
+    /// <summary>
+    /// Flat at A, round at B. The default, because nearly every line here is one link of a
+    /// chain — a polygon outline, a circle, a storm's past track. The round end sits on the
+    /// shared vertex and covers the wedge the next segment's flat start leaves open, so a
+    /// chain gets proper round joins with each cap drawn <em>once</em>. Rounding both ends
+    /// instead would stack two half-discs on every shared vertex, and at any alpha below
+    /// opaque that reads as a string of beads along the line.
+    /// </summary>
+    Joined,
+
+    /// <summary>Round at both ends — for a segment that stands alone, such as a dash.</summary>
+    Both,
+}
+
+/// <summary>
+/// One straight segment in Mercator metres, stroked <see cref="WidthPx"/> screen pixels wide.
+/// </summary>
+/// <remarks>
+/// A record struct rather than the tuple this used to be, so that <see cref="Caps"/> has
+/// somewhere to live. The conversion keeps the tuple form working at the call sites that do
+/// not care.
+/// </remarks>
+public readonly record struct OverlayLine(
+    double Ax, double Ay, double Bx, double By, uint Rgba, float WidthPx,
+    LineCaps Caps = LineCaps.Joined)
+{
+    public static implicit operator OverlayLine(
+        (double Ax, double Ay, double Bx, double By, uint Rgba, float WidthPx) t) =>
+        new(t.Ax, t.Ay, t.Bx, t.By, t.Rgba, t.WidthPx);
+}
+
 /// <summary>Overlay geometry kept in double-precision Mercator; transformed per frame.</summary>
 public sealed class OverlayGeometry
 {
     public List<(double X, double Y, uint Rgba)> FillTriangles { get; } = [];         // 3 entries per tri
-    public List<(double Ax, double Ay, double Bx, double By, uint Rgba, float WidthPx)> Lines { get; } = [];
+    public List<OverlayLine> Lines { get; } = [];
 
     public static uint Pack(byte r, byte g, byte b, byte a) =>
         (uint)(r | (g << 8) | (b << 16) | (a << 24));
@@ -105,19 +139,60 @@ public sealed class OverlayGeometry
 /// <summary>Draws overlay geometry (warning polygons, measure lines) above the radar layer.</summary>
 public sealed class OverlayRenderer : IDisposable
 {
+    /// <remarks>
+    /// Lines are drawn as a signed distance field rather than as a bare quad. Each vertex
+    /// carries where it sits relative to its own segment — <c>local</c> is (along, across) in
+    /// pixels with the segment running from 0 to <c>shape.x</c> — so the pixel shader can
+    /// measure its true distance to the centreline and feather the last pixel of it.
+    ///
+    /// That distance is to the <em>segment</em>, not to the infinite line, which is what makes
+    /// the ends round: past either endpoint the nearest point on the segment is the endpoint
+    /// itself, so the contour closes as a semicircle for free. The quad is grown by the half
+    /// width at each capped end to leave room for it.
+    ///
+    /// The alternative — a multisampled render target — costs bandwidth on every layer under
+    /// this one to fix the jaggedness of the thinnest.
+    /// </remarks>
     private const string ShaderSource = """
-        struct VSIn { float2 pos : POSITION; float4 color : COLOR0; };
-        struct VSOut { float4 pos : SV_Position; float4 color : COLOR0; };
+        struct VSIn
+        {
+            float2 pos   : POSITION;
+            float4 color : COLOR0;
+            float2 local : TEXCOORD0;   // (along, across) from this segment's A, in pixels
+            float3 shape : TEXCOORD1;   // (length px, half width px, 1 if A is round)
+        };
+        struct VSOut
+        {
+            float4 pos   : SV_Position;
+            float4 color : COLOR0;
+            float2 local : TEXCOORD0;
+            float3 shape : TEXCOORD1;
+        };
         VSOut VSMain(VSIn i)
         {
             VSOut o;
             o.pos = float4(i.pos, 0.0, 1.0);
             o.color = i.color;
+            o.local = i.local;
+            o.shape = i.shape;
             return o;
         }
         float4 PSMain(VSOut i) : SV_Target
         {
-            return float4(i.color.rgb * i.color.a, i.color.a); // premultiplied
+            float alpha = i.color.a;
+            if (i.shape.y > 0.0)  // a stroked segment; fills carry a zero half width
+            {
+                float pastB = max(0.0, i.local.x - i.shape.x);
+                float pastA = max(0.0, -i.local.x) * i.shape.z;   // zero unless A is round
+                float body = i.shape.y + 0.5 - length(float2(max(pastA, pastB), i.local.y));
+                // A square end still wants a soft edge, so cut it with its own ramp rather
+                // than by where the quad happens to stop.
+                float squareA = i.shape.z > 0.5 ? 1e6 : i.local.x + 0.5;
+                // A one-pixel ramp straddling the nominal edge: solid half a pixel inside,
+                // clear half a pixel outside.
+                alpha *= saturate(min(body, squareA));
+            }
+            return float4(i.color.rgb * alpha, alpha); // premultiplied
         }
         """;
 
@@ -126,6 +201,8 @@ public sealed class OverlayRenderer : IDisposable
     {
         public float X, Y;
         public uint Rgba;
+        public float AlongPx, AcrossPx;
+        public float LengthPx, HalfWidthPx, RoundStart;
     }
 
     private readonly ID3D11Device _device;
@@ -138,6 +215,33 @@ public sealed class OverlayRenderer : IDisposable
     private ID3D11Buffer? _vertexBuffer;
     private int _vertexCapacity;
     private Vertex[] _staging = new Vertex[1024];
+
+    /// <summary>
+    /// Physical pixels per device-independent unit, so that a width reads the same thickness
+    /// on any display. The swap chain is sized in physical pixels, so on a 150 % screen every
+    /// stroke was two thirds of its intended weight — which is most of why they looked like
+    /// hairlines.
+    /// </summary>
+    public float DipScale { get; set; } = 1f;
+
+    /// <summary>
+    /// Compile both entry points and throw if either fails. Shader compilation happens at run
+    /// time, on the render thread, where an exception becomes a black window rather than a
+    /// message — so this exists to be called from a test instead.
+    /// </summary>
+    public static void ValidateShaders()
+    {
+        foreach (var (entry, profile) in new[] { ("VSMain", "vs_5_0"), ("PSMain", "ps_5_0") })
+        {
+            Compiler.Compile(ShaderSource, entry, "OverlayRenderer", profile,
+                out var blob, out var errors);
+            if (blob is null)
+                throw new InvalidOperationException(
+                    $"Shader compile failed ({entry}): {errors?.AsString()}");
+            errors?.Dispose();
+            blob.Dispose();
+        }
+    }
 
     public OverlayRenderer(ID3D11Device device, ID3D11DeviceContext context)
     {
@@ -156,6 +260,8 @@ public sealed class OverlayRenderer : IDisposable
         [
             new InputElementDescription("POSITION", 0, Format.R32G32_Float, 0, 0),
             new InputElementDescription("COLOR", 0, Format.R8G8B8A8_UNorm, 8, 0),
+            new InputElementDescription("TEXCOORD", 0, Format.R32G32_Float, 12, 0),
+            new InputElementDescription("TEXCOORD", 1, Format.R32G32B32_Float, 20, 0),
         ], vsBlob.AsSpan());
         vsBlob.Dispose();
         psBlob.Dispose();
@@ -197,26 +303,38 @@ public sealed class OverlayRenderer : IDisposable
             };
         }
 
-        foreach (var (ax, ay, bx, by, rgba, widthPx) in geometry.Lines)
+        foreach (var (ax, ay, bx, by, rgba, widthPx, caps) in geometry.Lines)
         {
-            // Expand each segment to a screen-space quad of the requested pixel width.
+            // Expand each segment to a screen-space quad, oversized so the shader's distance
+            // field has room to draw the round ends and the antialiasing ramp inside it.
             double dxPx = (bx - ax) / cam.MetersPerPixel;
             double dyPx = (by - ay) / cam.MetersPerPixel;
-            double length = Math.Sqrt(dxPx * dxPx + dyPx * dyPx);
-            if (length < 1e-6) continue;
-            double px = -dyPx / length * widthPx / 2.0 * cam.MetersPerPixel;
-            double py = dxPx / length * widthPx / 2.0 * cam.MetersPerPixel;
+            double lengthPx = Math.Sqrt(dxPx * dxPx + dyPx * dyPx);
+            if (lengthPx < 1e-6) continue;
 
-            Vertex V(double wx, double wy) => new()
+            double halfWidthPx = widthPx * DipScale / 2.0;
+            double bleed = halfWidthPx + 1.0;                 // cap radius plus the AA ramp
+            double ux = dxPx / lengthPx, uy = dyPx / lengthPx;
+
+            // Local axes in world units: along the segment, and 90 degrees off it.
+            double alongX = ux * cam.MetersPerPixel, alongY = uy * cam.MetersPerPixel;
+            double acrossX = -alongY, acrossY = alongX;
+
+            Vertex V(double along, double across) => new()
             {
-                X = (float)((wx - cam.CenterX) / halfW),
-                Y = (float)((wy - cam.CenterY) / halfH),
+                X = (float)((ax + alongX * along + acrossX * across - cam.CenterX) / halfW),
+                Y = (float)((ay + alongY * along + acrossY * across - cam.CenterY) / halfH),
                 Rgba = rgba,
+                AlongPx = (float)along,
+                AcrossPx = (float)across,
+                LengthPx = (float)lengthPx,
+                HalfWidthPx = (float)halfWidthPx,
+                RoundStart = caps == LineCaps.Both ? 1f : 0f,
             };
-            var v0 = V(ax + px, ay + py);
-            var v1 = V(bx + px, by + py);
-            var v2 = V(ax - px, ay - py);
-            var v3 = V(bx - px, by - py);
+            var v0 = V(-bleed, bleed);
+            var v1 = V(lengthPx + bleed, bleed);
+            var v2 = V(-bleed, -bleed);
+            var v3 = V(lengthPx + bleed, -bleed);
             _staging[n++] = v0;
             _staging[n++] = v1;
             _staging[n++] = v2;

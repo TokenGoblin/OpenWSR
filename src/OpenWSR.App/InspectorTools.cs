@@ -107,7 +107,7 @@ public sealed class InspectorTools
         var a = GeoMath.ToMercator(lat1, lon1);
         var b = GeoMath.ToMercator(lat2, lon2);
         uint color = OverlayGeometry.Pack(255, 255, 255, 220);
-        geometry.Lines.Add((a.X, a.Y, b.X, b.Y, color, 2f));
+        geometry.Lines.Add(new OverlayLine(a.X, a.Y, b.X, b.Y, color, 2.5f, LineCaps.Both));
         MeasureChanged?.Invoke(geometry);
     }
 }

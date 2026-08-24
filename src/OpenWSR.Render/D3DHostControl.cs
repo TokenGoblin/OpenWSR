@@ -43,7 +43,8 @@ public sealed class D3DHostControl : HwndHost
         var dpi = VisualTreeHelper.GetDpi(this);
         _mapView.Start(_hwnd,
             (int)(ActualWidth * dpi.DpiScaleX),
-            (int)(ActualHeight * dpi.DpiScaleY));
+            (int)(ActualHeight * dpi.DpiScaleY),
+            dpi.DpiScaleX);
         return new HandleRef(this, _hwnd);
     }
 

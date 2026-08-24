@@ -269,7 +269,7 @@ public sealed class StormOverlayController : IDisposable
                     foreach (var past in cell.PastPositions)
                     {
                         var point = ToMercator(nst, past);
-                        geometry.Lines.Add((previous.X, previous.Y, point.X, point.Y, TrackColor, 1.5f));
+                        geometry.Lines.Add((previous.X, previous.Y, point.X, point.Y, TrackColor, 2.5f));
                         AddDiamond(geometry, point, 2.5 * mpp, TrackColor);
                         previous = point;
                     }
@@ -280,7 +280,7 @@ public sealed class StormOverlayController : IDisposable
                     for (int i = 0; i < cell.ForecastPositions.Count; i++)
                     {
                         var point = ToMercator(nst, cell.ForecastPositions[i]);
-                        AddDottedLine(geometry, previous, point, ForecastColor, 1.5f);
+                        AddDottedLine(geometry, previous, point, ForecastColor, 2.5f, mpp);
                         // Time markers shrink with lead time: +15/+30/+45/+60 min.
                         AddDiamond(geometry, point, Math.Max(1.5, 4.0 - i * 0.7) * mpp, ForecastColor);
                         previous = point;
@@ -310,12 +310,12 @@ public sealed class StormOverlayController : IDisposable
                 var centre = ToMercator(nmd, m.Position);
                 // A real radius, so metres — but never smaller than a legible ring.
                 double radius = Math.Max(Math.Max(m.RadiusKm, 1.0) * 1000.0, 6 * mpp);
-                AddCircle(geometry, centre, radius, MesoColor, 2f);
+                AddCircle(geometry, centre, radius, MesoColor, 3f);
                 var previous = centre;
                 foreach (var past in m.PastPositions)
                 {
                     var point = ToMercator(nmd, past);
-                    geometry.Lines.Add((previous.X, previous.Y, point.X, point.Y, MesoColor, 1f));
+                    geometry.Lines.Add((previous.X, previous.Y, point.X, point.Y, MesoColor, 2f));
                     previous = point;
                 }
             }
@@ -363,10 +363,10 @@ public sealed class StormOverlayController : IDisposable
             g.FillTriangles.Add((apex.X, apex.Y, fill));
             g.FillTriangles.Add((arc[i].X, arc[i].Y, fill));
             g.FillTriangles.Add((arc[i + 1].X, arc[i + 1].Y, fill));
-            g.Lines.Add((arc[i].X, arc[i].Y, arc[i + 1].X, arc[i + 1].Y, edge, 1.5f));
+            g.Lines.Add((arc[i].X, arc[i].Y, arc[i + 1].X, arc[i + 1].Y, edge, 2f));
         }
-        g.Lines.Add((apex.X, apex.Y, arc[0].X, arc[0].Y, edge, 1.5f));
-        g.Lines.Add((apex.X, apex.Y, arc[^1].X, arc[^1].Y, edge, 1.5f));
+        g.Lines.Add((apex.X, apex.Y, arc[0].X, arc[0].Y, edge, 2f));
+        g.Lines.Add((apex.X, apex.Y, arc[^1].X, arc[^1].Y, edge, 2f));
 
         // The motion vector: solid centerline to the cone's midpoint range.
         var (vLat, vLon) = GeoMath.Offset(storm.LatDeg, storm.LonDeg, bearingRad, lengthM);
@@ -415,9 +415,19 @@ public sealed class StormOverlayController : IDisposable
         g.Lines.Add((right.X, right.Y, top.X, top.Y, color, 2f));
     }
 
+    /// <summary>
+    /// A ring, as a closed chain of segments.
+    /// </summary>
+    /// <remarks>
+    /// 96 sides rather than the 28 this used to have, because 28 is visibly a polygon once the
+    /// ring is more than a few hundred pixels across — which is exactly what a proximity ring
+    /// is at any useful zoom. The error is the sagitta, <c>r(1 - cos(pi / n))</c>: on a ring
+    /// 500 px in radius that is 3.1 px at 28 sides and 0.27 px at 96 — under the pixel the
+    /// shader feathers over. 96 sides is 576 vertices, which costs nothing worth measuring.
+    /// </remarks>
     internal static void AddCircle(OverlayGeometry g, (double X, double Y) c, double r, uint color, float width)
     {
-        const int segments = 28;
+        const int segments = 96;
         for (int i = 0; i < segments; i++)
         {
             double a0 = 2 * Math.PI * i / segments;
@@ -428,17 +438,32 @@ public sealed class StormOverlayController : IDisposable
         }
     }
 
+    /// <summary>
+    /// A dashed line. The dash is a screen measure, like every other symbol here — at the
+    /// fixed 2.5 km it used to be, the forecast track was a solid line at national zoom and
+    /// three long strokes at street zoom.
+    /// </summary>
     private static void AddDottedLine(
-        OverlayGeometry g, (double X, double Y) a, (double X, double Y) b, uint color, float width)
+        OverlayGeometry g, (double X, double Y) a, (double X, double Y) b,
+        uint color, float width, double mpp)
     {
+        const double DashPx = 10, GapPx = 7;
         double dx = b.X - a.X, dy = b.Y - a.Y;
-        double length = Math.Sqrt(dx * dx + dy * dy);
-        int dashes = Math.Max(1, (int)(length / 2500));
+        double lengthPx = Math.Sqrt(dx * dx + dy * dy) / mpp;
+        if (lengthPx < 1) return;
+
+        int dashes = Math.Max(1, (int)Math.Round(lengthPx / (DashPx + GapPx)));
+        double on = DashPx / (DashPx + GapPx) / dashes;
         for (int i = 0; i < dashes; i++)
         {
             double t0 = (double)i / dashes;
-            double t1 = t0 + 0.5 / dashes;
-            g.Lines.Add((a.X + dx * t0, a.Y + dy * t0, a.X + dx * t1, a.Y + dy * t1, color, width));
+            double t1 = t0 + on;
+            // Standalone, so both ends are round — nothing abuts them to hide a square one,
+            // and a rounded dash is what makes a dashed line read as drawn rather than as
+            // sampled.
+            g.Lines.Add(new OverlayLine(
+                a.X + dx * t0, a.Y + dy * t0, a.X + dx * t1, a.Y + dy * t1,
+                color, width, LineCaps.Both));
         }
     }
 

@@ -125,7 +125,7 @@ public sealed class WarningsController : IDisposable
                     .Select(m => (m.X, m.Y))
                     .ToList();
                 geometry.AddPolygonFill(mercator, fill);
-                geometry.AddPolygonOutline(mercator, stroke, 2f);
+                geometry.AddPolygonOutline(mercator, stroke, 2.5f);
             }
         }
         Geometry = geometry;

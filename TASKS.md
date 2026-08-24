@@ -1314,3 +1314,48 @@ present, both cross-links working.
       `dark_only_labels` as its own layer drawn *after* the radar, boosted through the quad
       shader's existing tint (values above 1 lift toward white and clamp). The name of the
       town a storm is over is exactly what wants reading at that moment
+
+## Strokes that look drawn rather than plotted
+
+Requested: thicker, smoother storm tracks and proximity ring, closer to how an iPhone app
+draws. Three separate causes, all in the overlay stroke path.
+
+- [x] **Overlay lines had no antialiasing at all.** Every segment was a bare screen-space
+      quad and the pixel shader returned flat colour, so every diagonal was a staircase.
+      They are drawn as a signed distance field now: each vertex carries where it sits
+      relative to its own segment — (along, across) in pixels — and the shader measures the
+      true distance to the centreline and feathers the last pixel. Distance to the
+      *segment* rather than to the infinite line, so past an endpoint the nearest point is
+      the endpoint itself and the contour closes as a semicircle: round caps for free.
+      Cheaper than multisampling the target, which would have cost bandwidth on every layer
+      underneath to fix the thinnest one
+- [x] **A segment rounds its far end only.** Rounding both would stack two half-discs on
+      every shared vertex of a chain, and at any alpha below opaque that reads as a string
+      of beads — the secondary place ring at alpha 150 would go from 0.59 to 0.83 at each of
+      96 joints. Flat-at-A, round-at-B means the round end lands on the shared vertex and
+      covers the square start the next segment puts there: proper round joins, each disc
+      drawn once. The square end still gets its own antialiasing ramp in the shader rather
+      than being cut off by wherever the quad stops. `LineCaps.Both` is opt-in for segments
+      that genuinely stand alone — dashes, crosshairs, the measure line
+- [x] **Widths were quoted in physical pixels, on a 150 % display.** The swap chain is sized
+      in physical pixels, so every stroke was drawing at two thirds of its intended weight —
+      most of why they read as hairlines. Widths are device-independent units now, scaled by
+      the display's DPI at the one place that already knew it. Verified against the running
+      app: the place ring measures 5.2 px for 3.5 DIU at 1.5x, with both edges blended
+- [x] **A ring was 28 sides.** Visibly a polygon once it is more than a few hundred pixels
+      across, which is what a proximity ring is at any useful zoom. 96 sides: the sagitta
+      `r(1 - cos(pi/n))` on a 500 px ring falls from 3.1 px to 0.27 px, under the pixel the
+      shader feathers over. 576 vertices, which costs nothing worth measuring
+- [x] **Dash length was 2.5 km of Mercator, not a screen measure.** So the forecast track
+      was a solid line at national zoom and three long strokes at street zoom — the same
+      mistake the symbol sizes had already been corrected for. 10 px on, 7 px off
+- [x] **Weights lifted:** place ring 2 → 3.5, storm past track and forecast dashes 1.5 → 2.5,
+      mesocyclone ring 2 → 3 and its track 1 → 2, projection cone 1.5 → 2, warning polygons
+      2 → 2.5, measure line 2 → 2.5
+- [x] **The overlay shader is covered by `ValidateShaders` now**, like the volume and sweep
+      ones. It compiles on the render thread, where a syntax error is a black window and an
+      exception nobody sees; the new one is far too involved to leave to that
+
+**Gate:** [PASSED] 539/539 tests, 0 warnings. Verified in the running app against live
+storms over Salt Lake City: the ring is round and evenly weighted with no facets and no
+beading, track bends join cleanly, cone edges and the arc are smooth.

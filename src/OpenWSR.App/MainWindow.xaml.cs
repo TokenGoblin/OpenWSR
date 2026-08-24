@@ -1153,7 +1153,7 @@ public partial class MainWindow : Window
             // Radius ring drawn in true kilometres; Mercator inflates by 1/cos(lat).
             double mercatorRadius = _settings.RadiusFor(place) * 1000.0
                 / Math.Cos(place.LatDeg * Math.PI / 180.0);
-            StormOverlayController.AddCircle(geometry, (centre.X, centre.Y), mercatorRadius, color, 2f);
+            StormOverlayController.AddCircle(geometry, (centre.X, centre.Y), mercatorRadius, color, 3.5f);
 
             // The marker itself is a symbol, so it is sized in pixels, not metres.
             double s = 6 * _homeBuiltAtMetresPerPixel;

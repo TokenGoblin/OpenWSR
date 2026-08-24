@@ -451,9 +451,17 @@ public sealed class MapView : IDisposable
     /// </summary>
     private const float LabelBoost = 2.2f;
 
-    public void Start(IntPtr hwnd, int width, int height)
+    /// <summary>
+    /// Physical pixels per device-independent unit, from the display this window is on.
+    /// Overlay stroke widths are quoted in DIUs and scaled by this, so a 3 pt line is 3 pt
+    /// whether the screen is at 100 % or 200 %.
+    /// </summary>
+    public double DipScale { get; private set; } = 1.0;
+
+    public void Start(IntPtr hwnd, int width, int height, double dipScale = 1.0)
     {
         _hwnd = hwnd;
+        DipScale = dipScale;
         _pendingWidth = Math.Max(1, width);
         _pendingHeight = Math.Max(1, height);
         Camera.SetViewport(_pendingWidth, _pendingHeight);
@@ -727,7 +735,10 @@ public sealed class MapView : IDisposable
                 overlayGeometry = _overlay;
             }
             if (overlayGeometry is not null)
+            {
+                overlay.DipScale = (float)DipScale;
                 overlay.Draw(overlayGeometry, cam); // warnings sit above radar by z-order
+            }
 
             quads.Begin();
             DrawMarkers(cam, quads, device);

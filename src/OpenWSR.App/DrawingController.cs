@@ -327,7 +327,7 @@ public sealed class DrawingController(MapView mapView)
         var (x, y) = GeoMath.ToMercator(point.LatDeg, point.LonDeg);
         double r = 6 * mapView.Camera.Snapshot().MetersPerPixel;
         uint rgba = OverlayGeometry.Pack(Color.R, Color.G, Color.B, Color.A);
-        geometry.Lines.Add((x - r, y, x + r, y, rgba, WidthPx));
-        geometry.Lines.Add((x, y - r, x, y + r, rgba, WidthPx));
+        geometry.Lines.Add(new OverlayLine(x - r, y, x + r, y, rgba, WidthPx, LineCaps.Both));
+        geometry.Lines.Add(new OverlayLine(x, y - r, x, y + r, rgba, WidthPx, LineCaps.Both));
     }
 }

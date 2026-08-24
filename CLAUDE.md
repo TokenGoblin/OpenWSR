@@ -183,7 +183,24 @@ text-entry control or the map host.
 across is sub-pixel at national zoom and screen-filling at street zoom. Multiply by
 `cam.MetersPerPixel` and rebuild when the zoom moves materially (`NotifyViewChanged`).
 Only things that *are* a physical extent — a mesocyclone radius, an alert ring — stay in
-metres. Line widths are already pixel-constant in `OverlayRenderer`.
+metres. Line widths are already pixel-constant in `OverlayRenderer`. So are dash lengths —
+the forecast track's dashes were 2.5 km of Mercator and went solid at national zoom.
+
+**Overlay strokes are a distance field, and a segment rounds its far end only.** Each vertex
+carries its (along, across) position within its own segment, and the shader measures distance
+to the *segment* — so the ends round themselves and the last pixel feathers, with no
+multisampled target. The cap rule is the part to not undo: `LineCaps.Joined` is flat at A and
+round at B, so in a chain the round end lands on the shared vertex and covers the next
+segment's square start. One disc per joint. Rounding both ends instead stacks two half-discs
+on every shared vertex, which at any alpha below opaque reads as a string of beads along the
+line — the 96-sided place ring is the worst case. `LineCaps.Both` is for segments that
+genuinely stand alone: dashes, crosshairs, the measure line. Chains must actually chain, and
+`OverlayStrokeTests` asserts that they do.
+
+**Stroke widths are device-independent units, scaled by `MapView.DipScale`.** The swap chain
+is sized in physical pixels, so a width taken literally draws at two thirds of its weight on a
+150 % display — which looks like nothing more than a design choice, and was most of why every
+overlay line read as a hairline.
 
 **Nothing on the UI thread may block on I/O.** `LiveFeed` exposes `StartAsync`/`StopAsync`;
 a blocking `Wait(5s)` in `Stop()` froze the window on every live toggle. Dispose paths

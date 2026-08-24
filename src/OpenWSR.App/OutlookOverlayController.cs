@@ -167,8 +167,8 @@ public sealed class OutlookOverlayController : IDisposable
     /// <summary>Storm reports read as an X so they stay distinct from storm-cell diamonds.</summary>
     private static void AddCross(OverlayGeometry g, (double X, double Y) c, double r, uint colour)
     {
-        g.Lines.Add((c.X - r, c.Y - r, c.X + r, c.Y + r, colour, 2f));
-        g.Lines.Add((c.X - r, c.Y + r, c.X + r, c.Y - r, colour, 2f));
+        g.Lines.Add(new OverlayLine(c.X - r, c.Y - r, c.X + r, c.Y + r, colour, 2f, LineCaps.Both));
+        g.Lines.Add(new OverlayLine(c.X - r, c.Y + r, c.X + r, c.Y - r, colour, 2f, LineCaps.Both));
     }
 
     public void Dispose()
