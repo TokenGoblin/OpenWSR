@@ -13,6 +13,21 @@ public sealed record TileProvider(string Name, string UrlTemplate, string UserAg
     public static TileProvider Osm(string userAgent) => new(
         "osm", "https://tile.openstreetmap.org/{z}/{x}/{y}.png", userAgent);
 
+    /// <summary>
+    /// CARTO's "Dark Matter" — OpenStreetMap data rendered near-black.
+    ///
+    /// The point is contrast. Reflectivity is a bright, saturated palette, and on the standard
+    /// OSM style it competes with green landcover, blue water and orange roads for the same
+    /// part of the eye. Against a near-black ground the weather is the only bright thing on
+    /// screen, which is why every broadcast and consumer radar app looks like this.
+    ///
+    /// Free and keyless, unlike the other dark styles worth having — Stadia and MapTiler both
+    /// want an API key, and Esri's dark canvas is a mid-grey that gives up most of the
+    /// contrast. Attribution is required and names CARTO as well as OpenStreetMap.
+    /// </summary>
+    public static TileProvider CartoDark(string userAgent) => new(
+        "carto-dark", "https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png", userAgent);
+
     public static TileProvider MapTiler(string apiKey, string userAgent) => new(
         "maptiler",
         $"https://api.maptiler.com/maps/streets-v2/256/{{z}}/{{x}}/{{y}}.png?key={apiKey}",

@@ -1,7 +1,10 @@
 <Window x:Class="OpenWSR.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="OpenWSR" Width="1360" Height="860" Background="{StaticResource Chrome}">
+        Title="OpenWSR" Width="1360" Height="860"
+        MinWidth="900" MinHeight="600"
+        WindowStartupLocation="CenterScreen" WindowState="Maximized"
+        Background="{StaticResource Chrome}">
     <!-- The shell is arranged around the four questions this app answers, in the order it
          answers them: WHERE (top bar) → WHAT product (bar above the map) → WHEN (time bar)
          → WHAT'S ON TOP (right panel). Each question has exactly one place and no second. -->

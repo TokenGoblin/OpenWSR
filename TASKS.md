@@ -1288,3 +1288,21 @@ what the storm alarm will do once someone sets their area.
 
 **Gate:** [PASSED] 534/534 tests, 0 warnings. Verified in the running app: all six headings
 present, both cross-links working.
+
+## The window opened bigger than the screen, and the map is dark now
+
+- [x] **The window opened larger than the display.** `Width="1360" Height="860"` are
+      device-independent units, so at 150 % scaling that is 2040x1290 real pixels against a
+      1920x1200 screen. WPF does not clamp it, so it opened at 1946x1226 offset to (266, 266)
+      with about 290 px hanging off the bottom and right — which is also where the bottom of
+      the left rail had been disappearing to. Now maximised on launch, `CenterScreen` when
+      restored, and the restore size is clamped to the work area at construction so
+      un-maximising can never put it off screen again. Verified: client area exactly
+      (0, 34)–(1920, 1128), filling the work area with the taskbar clear
+- [x] **Dark basemap, and it is the default.** Reflectivity is a bright, saturated palette,
+      and on the standard OSM style it competes with green landcover, blue water and orange
+      roads for the same part of the eye. CARTO's "Dark Matter" was picked over the
+      alternatives by fetching real tiles over the Great Salt Lake and comparing: Stadia and
+      MapTiler both want an API key, and Esri's dark canvas is a mid-grey that gives up most
+      of the contrast. Attribution names CARTO alongside OpenStreetMap, in the app and in
+      `THIRD-PARTY-NOTICES.md`

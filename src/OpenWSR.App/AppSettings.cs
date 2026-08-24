@@ -40,7 +40,12 @@ public sealed class SavedLocation
 /// <summary>User settings persisted at %LOCALAPPDATA%\OpenWSR\settings.json.</summary>
 public sealed class AppSettings
 {
-    public string TileProvider { get; set; } = "osm";
+    /// <summary>
+    /// Basemap style: <c>carto-dark</c>, <c>osm</c> or <c>maptiler</c>. Dark by default —
+    /// reflectivity is a bright saturated palette and on the standard OSM style it competes
+    /// with green landcover, blue water and orange roads for the same part of the eye.
+    /// </summary>
+    public string TileProvider { get; set; } = "carto-dark";
     public string? MapTilerKey { get; set; }
 
     /// <summary>Contact info appended to the User-Agent — api.weather.gov requires it.</summary>

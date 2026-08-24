@@ -190,7 +190,7 @@ Everything below is public and unauthenticated.
 | `api.weather.gov` | Active warnings |
 | `spc.noaa.gov` | Day 1 convective outlooks |
 | Iowa Environmental Mesonet | National radar mosaic and GOES tiles, SPC watches and discussions, storm reports |
-| OpenStreetMap / MapTiler | Basemap tiles |
+| CARTO / OpenStreetMap / MapTiler | Basemap tiles — dark by default, so the radar palette is the only bright thing on screen |
 | NCEI HOMR | Radar site table (embedded) |
 
 NEXRAD data carries no use restrictions. Basemap and tile imagery are subject to their

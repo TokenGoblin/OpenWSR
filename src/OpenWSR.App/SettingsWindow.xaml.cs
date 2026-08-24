@@ -96,7 +96,12 @@ public partial class SettingsWindow : Window
         PlaceList.ItemsSource = _places;
         _places.CollectionChanged += (_, _) => SyncPlaceList();
 
-        ProviderCombo.SelectedIndex = settings.TileProvider == "maptiler" ? 1 : 0;
+        ProviderCombo.SelectedIndex = settings.TileProvider switch
+        {
+            "carto-dark" => 0,
+            "maptiler" => 2,
+            _ => 1,
+        };
         KeyBox.Text = settings.MapTilerKey ?? "";
         ContactBox.Text = settings.Contact;
         UnitsCombo.SelectedIndex = settings.Units switch
@@ -235,7 +240,7 @@ public partial class SettingsWindow : Window
 
     private void UpdateKeyEnabled()
     {
-        bool mapTiler = ProviderCombo.SelectedIndex == 1;
+        bool mapTiler = ProviderCombo.SelectedIndex == 2;
         if (KeyBox is not null) KeyBox.IsEnabled = mapTiler;
         if (KeyLabel is not null) KeyLabel.Opacity = mapTiler ? 1.0 : 0.5;
     }
@@ -245,7 +250,12 @@ public partial class SettingsWindow : Window
 
     private void Save_Click(object sender, RoutedEventArgs e)
     {
-        _settings.TileProvider = ProviderCombo.SelectedIndex == 1 ? "maptiler" : "osm";
+        _settings.TileProvider = ProviderCombo.SelectedIndex switch
+        {
+            0 => "carto-dark",
+            2 => "maptiler",
+            _ => "osm",
+        };
         _settings.MapTilerKey = string.IsNullOrWhiteSpace(KeyBox.Text) ? null : KeyBox.Text.Trim();
         _settings.Contact = ContactBox.Text.Trim();
         _settings.Units = UnitsCombo.SelectedIndex switch

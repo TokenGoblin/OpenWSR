@@ -25,6 +25,7 @@
         <TextBlock Text="MAP" Style="{StaticResource Head}" Margin="0,0,0,6" />
         <TextBlock Text="Basemap tiles" />
         <ComboBox x:Name="ProviderCombo" Margin="0,4,0,0" SelectionChanged="ProviderCombo_SelectionChanged">
+            <ComboBoxItem Content="Dark — CARTO (no key needed)" />
             <ComboBoxItem Content="OpenStreetMap (no key needed)" />
             <ComboBoxItem Content="MapTiler (needs a free key)" />
         </ComboBox>
@@ -32,7 +33,7 @@
         <TextBox x:Name="KeyBox" Margin="0,4,0,0" Background="#22252B" Foreground="#C8CCD4"
                  BorderBrush="#3A3F4A" Padding="4,3" />
         <TextBlock Style="{StaticResource Hint}"
-                   Text="Get a free key at maptiler.com — no card required. Changing the provider takes effect next launch." />
+                   Text="Dark is the default: reflectivity is a bright, saturated palette, and on a light street map it competes with the landcover and roads for the same part of the eye. Get a free MapTiler key at maptiler.com — no card required. Changing the provider takes effect next launch." />
 
         <TextBlock Text="UNITS" Style="{StaticResource Head}" />
         <ComboBox x:Name="UnitsCombo">

@@ -53,6 +53,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DarkTitleBar.Apply(this);
+        FitRestoreBoundsToScreen();
         MomentBar.ItemsSource = _vm.Moments;
         TiltCombo.ItemsSource = _vm.Tilts;
         ThreatList.ItemsSource = _vm.Threats;
@@ -61,12 +62,19 @@ public partial class MainWindow : Window
         var settings = _settings = AppSettings.Load();
         Units.System = settings.Units;
         _geocoder = new Geocoder(settings.UserAgent);
-        var provider = settings.TileProvider == "maptiler" && !string.IsNullOrEmpty(settings.MapTilerKey)
-            ? TileProvider.MapTiler(settings.MapTilerKey, settings.UserAgent)
-            : TileProvider.Osm(settings.UserAgent);
-        AttributionText.Text = provider.Name == "maptiler"
-            ? "© MapTiler © OpenStreetMap contributors"
-            : "© OpenStreetMap contributors";
+        var provider = settings.TileProvider switch
+        {
+            "maptiler" when !string.IsNullOrEmpty(settings.MapTilerKey) =>
+                TileProvider.MapTiler(settings.MapTilerKey, settings.UserAgent),
+            "carto-dark" => TileProvider.CartoDark(settings.UserAgent),
+            _ => TileProvider.Osm(settings.UserAgent),
+        };
+        AttributionText.Text = provider.Name switch
+        {
+            "maptiler" => "© MapTiler © OpenStreetMap contributors",
+            "carto-dark" => "© OpenStreetMap contributors © CARTO",
+            _ => "© OpenStreetMap contributors",
+        };
 
         _mapView = new MapView(provider);
         _mapView.Camera.MoveTo(39.0, -98.0, 6000); // continental US
@@ -921,6 +929,22 @@ public partial class MainWindow : Window
             merged.Lines.AddRange(source.Lines);
         }
         _mapView.SetOverlay(merged);
+    }
+
+    /// <summary>
+    /// Keep the restored (un-maximised) size inside the screen's working area.
+    ///
+    /// <c>Width</c> and <c>Height</c> in XAML are device-independent units, so the declared
+    /// 1360x860 is 2040x1290 real pixels on a 150 % display — larger than a 1920x1200 screen.
+    /// WPF does not clamp that, so the window opened bigger than the monitor with its bottom
+    /// and right edges off it, which is where the bottom of the left rail was disappearing to.
+    /// The work area rather than the full bounds, so the taskbar is not sat under either.
+    /// </summary>
+    private void FitRestoreBoundsToScreen()
+    {
+        var work = SystemParameters.WorkArea;
+        Width = Math.Min(Width, work.Width);
+        Height = Math.Min(Height, work.Height);
     }
 
     /// <summary>The site the storm layer should watch: nearest to home when home is set,
