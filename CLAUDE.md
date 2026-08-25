@@ -186,6 +186,15 @@ Only things that *are* a physical extent — a mesocyclone radius, an alert ring
 metres. Line widths are already pixel-constant in `OverlayRenderer`. So are dash lengths —
 the forecast track's dashes were 2.5 km of Mercator and went solid at national zoom.
 
+**Boundary data has to be thinned per zoom, not drawn.** The Census 1:500,000 county file
+is 1.03 million points — at national zoom about two hundred points to the pixel, and over six
+million vertices a frame if handed straight to `OverlayRenderer`. `BoundariesController`
+projects and bounds every ring once at load, then per view change culls to the viewport and
+runs `Polyline.Simplify` at 1.2 px. Simplify in the plane you draw in (Mercator metres), not
+in degrees, or the north of a shape thins harder than the south. And measure distance to the
+*chord*, not between consecutive points: a coastline has no point far from its neighbour while
+the run of them bends a long way, so neighbour-distance thinning flattens it.
+
 **Overlay strokes are a distance field, and a segment rounds its far end only.** Each vertex
 carries its (along, across) position within its own segment, and the shader measures distance
 to the *segment* — so the ends round themselves and the last pixel feathers, with no

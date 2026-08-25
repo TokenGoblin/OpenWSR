@@ -56,7 +56,7 @@ premium tiers elsewhere and two have no commercial equivalent:
 | Satellite imagery | Expected | **Done** — native GOES-East ABI from S3, decoded and reprojected, true colour by day and infrared by night; IEM tiles as fallback |
 | TDWR terminal radars | Expected | **Done** — all 47, via their Level III digital radial products |
 | Future radar (nowcast) | Expected | **Done** — HRRR simulated reflectivity, six-hour loop, native GRIB2 |
-| County and state boundaries | Expected | **Partial** — inherited from the basemap, not a controllable layer |
+| County and state boundaries | Expected | **Done** — US Census 1:500,000 state and county outlines as a layer of their own, fetched once and cached |
 | Placefile support | Expected | **Done** — full GRLevelX parser, icon sheets included |
 | Shapefile / GeoJSON / KML import | Nice | **Open** |
 | Terrain / topography | Cosmetic | **Open** — mostly a basemap style swap |

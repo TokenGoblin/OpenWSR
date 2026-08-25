@@ -156,6 +156,15 @@ public sealed class AppSettings
     public bool ShowSiteMarkers { get; set; } = true;
 
     /// <summary>
+    /// Political boundaries as their own layer. Off by default: the first time either is
+    /// switched on it downloads from the US Census, and a startup that reaches for the
+    /// network before the user has asked for anything is the wrong default.
+    /// </summary>
+    public bool ShowStateLines { get; set; }
+
+    public bool ShowCountyLines { get; set; }
+
+    /// <summary>
     /// How many volumes an archive loop spans. This is a real cost, not a preference: every
     /// frame is a decoded sweep held in memory — about 5 MB for a super-res reflectivity cut
     /// — and each one has to be downloaded and decoded before the loop can play. Thirty is

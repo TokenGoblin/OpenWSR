@@ -1402,3 +1402,45 @@ a low-CC target.
 **Gate:** [PASSED] 546/546 tests, 0 warnings. `ClutterMaskTests` pins both ends — the Moore
 peak bit-identical with all 89 debris gates kept, KBOX down to 3 gates and 0.0226 — and keeps
 the bare-CC dead end ruled out as an executable test rather than a comment.
+
+## Boundaries as a layer of their own
+
+First of the two Expected-tier Partials in `docs/parity.md`. The basemap already draws
+boundaries, but baked into the tile: they cannot be turned off when they clutter a velocity
+field, cannot be brightened when an echo covers them, and vanish if the provider is switched
+to one that omits them. A county line is how a warning is described — "northern Cleveland
+County until 7:15" — so it has to be something the app controls rather than inherits.
+
+- [x] **`Shapefile` reader in `OpenWSR.Geo`.** Every public boundary dataset ships as one.
+      Geometry in the .shp, attributes in a .dbf beside it, matched by position with no key
+      linking them — that is the whole relational model. Byte order is mixed *within the same
+      header*: file code and record headers big-endian, everything else little-endian, which
+      read backwards produces plausible garbage rather than an error
+- [x] **Verified against pyshp 3.1.6** on the committed 1:20,000,000 state file — record
+      count, total points, per-record part and point counts, and the coordinate order. That
+      last one earns its own test: x is longitude, and swapping them does not throw, it just
+      silently puts the United States in Somalia. Alaska is the awkward case at 47 parts, and
+      flattening those into one ring would draw a line from each island to the next
+- [x] **FIPS codes stay strings.** `GEOID` "06" read as a number becomes 6, and a code that
+      has lost its leading zero no longer joins to anything. Everything from the .dbf comes
+      back as a trimmed string; it is stored as ASCII anyway
+- [x] **`Polyline.Simplify` — Ramer-Douglas-Peucker.** The 1:500,000 county file is 1.03
+      million points, which at national zoom is about two hundred points per pixel and over
+      six million vertices a frame. Distance is measured perpendicular to the chord, not
+      between consecutive points: a long shallow curve has no point far from its neighbour
+      even though the run of them bends a long way, and thinning by neighbour distance
+      flattens a coastline
+- [x] **`BoundariesController` projects once and thins per view.** Projection and bounds do
+      not depend on the camera, so they are computed at load; each rebuild culls to the
+      viewport and simplifies the survivors to 1.2 px. Rebuilds are triggered by a zoom or a
+      quarter-viewport pan, and a build the camera has already overtaken is discarded
+- [x] **`BoundaryClient` fetches once and never again.** Boundaries do not change, so unlike
+      every other client here it does not poll. Cached under `%LOCALAPPDATA%\OpenWSR\boundaries`
+      rather than in the LRU volume cache, because these must not be evicted: someone who
+      turned the layer on and then went offline should still have it. 22 MB for both sets
+- [x] **Off by default.** The first tick downloads, and a startup that reaches for the network
+      before the user has asked for anything is the wrong default
+
+**Gate:** [PASSED] 569/569 tests, 0 warnings. Verified in the running app: both sets drawn
+over Utah, `Boundaries "Counties": 3235 shapes, 1033837 points` in the log, restored from
+settings across a restart, 60 fps with both on.

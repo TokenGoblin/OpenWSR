@@ -31,6 +31,7 @@ public partial class MainWindow : Window
     private readonly FutureRadarController _future;
     private readonly PlacefileController _placefiles;
     private readonly RotationTracksController _tracks;
+    private readonly BoundariesController _boundaries;
     private readonly LightningController _lightning;
     private readonly MrmsController _mrms;
     private readonly TrayNotifier _tray;
@@ -81,6 +82,8 @@ public partial class MainWindow : Window
         _mapView.SetMarkers(RadarSites.All.Select(s => (s.LatDeg, s.LonDeg, s.Icao)));
         _mapView.MarkersEnabled = settings.ShowSiteMarkers;
         FilterSites.IsChecked = settings.ShowSiteMarkers;
+        FilterStates.IsChecked = settings.ShowStateLines;
+        FilterCounties.IsChecked = settings.ShowCountyLines;
         MapHost.Child = new D3DHostControl(_mapView);
 
         _radar = new RadarDisplayController(_mapView);
@@ -177,6 +180,19 @@ public partial class MainWindow : Window
             foreach (var b in new[] { FuturePrevButton, FuturePlayButton, FutureNextButton, FutureClearButton })
                 b.IsEnabled = true;
         });
+
+        _boundaries = new BoundariesController(_mapView, settings.UserAgent);
+        _boundaries.GeometryChanged += () => Dispatcher.BeginInvoke(ComposeOverlay);
+        _boundaries.StatusChanged += text => Dispatcher.BeginInvoke(() =>
+        {
+            Report(text);
+            BoundariesStatusText.Text = text;
+        });
+        _boundaries.ErrorRaised += text => Dispatcher.BeginInvoke(() => ReportError(text));
+
+        // The checkboxes were restored above, before this existed, so their handler no-opped.
+        _boundaries.SetVisible(BoundarySet.States, settings.ShowStateLines);
+        _boundaries.SetVisible(BoundarySet.Counties, settings.ShowCountyLines);
 
         _tracks = new RotationTracksController(_mapView);
         _tracks.StatusChanged += text => Dispatcher.BeginInvoke(() =>
@@ -292,6 +308,7 @@ public partial class MainWindow : Window
             UpdateAgeIndicator();
             // Storm symbols are sized in screen pixels, so a zoom change means new geometry.
             _storms.NotifyViewChanged();
+            _boundaries.NotifyViewChanged();
             _lightning.NotifyViewChanged();
             _mrms.NotifyViewChanged();
             NotifyHomeViewChanged();
@@ -325,6 +342,7 @@ public partial class MainWindow : Window
             _tray.Dispose();
             _placefiles.Dispose();
             _tracks.Dispose();
+            _boundaries.Dispose();
             _lightning.Dispose();
             _mrms.Dispose();
             _satellite?.Dispose();
@@ -908,6 +926,7 @@ public partial class MainWindow : Window
 
         OverlayGeometry?[] sources =
         [
+            _boundaries.Geometry,
             _outlooks.Geometry, _warnings.Geometry, _placefiles.Geometry,
             _storms.Geometry, _lightning.Geometry, _homeGeometry, _measureGeometry,
             _drawing.Geometry,
@@ -1352,6 +1371,18 @@ public partial class MainWindow : Window
         if (_mapView is not null)
             _mapView.SatelliteOpacity = (float)(e.NewValue / 100.0);
         _satellite?.SetOpacity((float)(e.NewValue / 100.0));
+    }
+
+    private void Boundaries_Changed(object sender, RoutedEventArgs e)
+    {
+        // Fires during InitializeComponent, before the controller exists.
+        if (_boundaries is null || _settings is null) return;
+
+        _settings.ShowStateLines = FilterStates.IsChecked == true;
+        _settings.ShowCountyLines = FilterCounties.IsChecked == true;
+        _boundaries.SetVisible(BoundarySet.States, _settings.ShowStateLines);
+        _boundaries.SetVisible(BoundarySet.Counties, _settings.ShowCountyLines);
+        _settings.Save();
     }
 
     private void SiteMarkers_Changed(object sender, RoutedEventArgs e)

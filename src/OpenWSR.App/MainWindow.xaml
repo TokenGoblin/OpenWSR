@@ -414,6 +414,22 @@
                                 </StackPanel>
                             </Expander>
 
+                            <Expander Header="BOUNDARIES" Style="{StaticResource PanelSection}" IsExpanded="False">
+                                <StackPanel>
+                                    <CheckBox x:Name="FilterStates" AutomationProperties.Name="State lines" Content="State lines"
+                                              ToolTip="US Census 1:500,000 state outlines, drawn over the basemap"
+                                              Checked="Boundaries_Changed" Unchecked="Boundaries_Changed" />
+                                    <CheckBox x:Name="FilterCounties" AutomationProperties.Name="County lines" Content="County lines"
+                                              Margin="0,4,0,0"
+                                              ToolTip="US Census 1:500,000 county outlines — how a warning names its area"
+                                              Checked="Boundaries_Changed" Unchecked="Boundaries_Changed" />
+                                    <TextBlock x:Name="BoundariesStatusText" FontSize="10.5" FontStyle="Italic"
+                                               TextWrapping="Wrap" Foreground="{StaticResource TextDim}"
+                                               Margin="0,2,0,0"
+                                               Text="Downloaded once from the US Census, then kept on disk." />
+                                </StackPanel>
+                            </Expander>
+
                             <CheckBox x:Name="FilterSites" AutomationProperties.Name="Radar sites" Content="Radar sites" IsChecked="True"
                                       ToolTip="All 210 WSR-88D locations — hidden at national zoom, labelled up close"
                                       Checked="SiteMarkers_Changed" Unchecked="SiteMarkers_Changed" />
