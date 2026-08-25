@@ -25,6 +25,7 @@ committed volume and print numbers, which is a slow way to assert nothing.
 |---|---|
 | `DealiasRateMeasurement.cs` | The walk-vs-merge-vs-Py-ART correction-rate table in `docs/verification.md`, and the peak/largest-shift figures in `VelocityDealiasing`'s summary |
 | `ShearQualityMeasurement.cs` | The reflectivity-threshold sweep behind `GateQuality.DefaultMinReflectivityDbz`, the 88.8 % figure, and the correlation-coefficient numbers that argue *against* a CC mask |
+| `ClutterDiscriminationMeasurement.cs` | The stage table behind `GateQuality.MaskClutter` — what the echo mask and then the clutter mask do to a tornado volume and to a clear-air coastal one |
 | `SmoothingMeasurement.cs` | The mean-vs-median comparison in `RotationTracks.Smooth` |
 
 ## A note on comparing against an old implementation

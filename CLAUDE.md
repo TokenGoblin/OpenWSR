@@ -57,7 +57,7 @@ GitHub is deferred rather than abandoned: revisit it at release time.
 
 ```
 dotnet build OpenWSR.slnx                    # NOTE: .slnx, not .sln
-dotnet test OpenWSR.slnx                     # 229 tests
+dotnet test OpenWSR.slnx                     # 546 tests
 dotnet run --project src/OpenWSR.App
 dotnet publish src/OpenWSR.App -c Release    # single-file self-contained exe
 ```
@@ -452,30 +452,45 @@ screen. `--soak` runs the live pipeline headless.
 
 Every **Blocker** and **Expected** gap in `docs/parity.md` is closed. What is left there is
 the Nice/Cosmetic tier — GeoJSON/shapefile import, terrain basemap, soundings, Spotter
-Network — plus three Partials: boundaries come from the basemap rather than a controllable
-layer, hail is per-cell markers rather than contours, and there is one home location rather
-than a list of saved ones.
+Network — plus two Partials: boundaries come from the basemap rather than a controllable
+layer, and hail is per-cell markers rather than contours.
 
-The two notes below are the real quality gaps, and both have had a wrong answer ruled out
-already.
+The two notes below record the quality work that has the most measurement behind it, and
+each had at least one plausible wrong answer ruled out by measuring it.
 
-**Rotation-track speckle is mostly fixed, and the old note here was wrong about why.** It
-said the low Doppler cuts have no correlation coefficient to filter on. True of that sweep
-— but on a split-cut VCP the Doppler cut carries **reflectivity** alongside velocity, index
-for index, and that is the field that matters: 88.8 % of strong-shear gates on the Moore
-volume sat under less than 20 dBZ. Shear computed where nothing reflected is the phase of
-receiver noise. `GateQuality.MaskByReflectivity` blanks those; it removes 89 % of the
-strong-shear gates and leaves the peak bit-identical at 0.1297 1/s over the tornado.
+**Rotation-track speckle takes two masks, because noise and clutter are different
+problems.** The first note here was wrong about why: it said the low Doppler cuts have no
+correlation coefficient to filter on. True of that sweep — but on a split-cut VCP the Doppler
+cut carries **reflectivity** alongside velocity, index for index, and that is the field that
+matters for *noise*: 88.8 % of strong-shear gates on the Moore volume sat under less than
+20 dBZ. Shear computed where nothing reflected is the phase of receiver noise.
+`GateQuality.MaskByReflectivity` blanks those; it removes 89 % of the strong-shear gates and
+leaves the peak bit-identical at 0.1297 1/s over the tornado. Clutter is the other half and
+is below.
 
-**Do not add a CC mask without reading this.** The paired surveillance cut does carry CC,
-and it is tempting. But a tornado debris signature *is* a low-CC, high-Z target: 34.6 % of
-strong shear under 40+ dBZ on the Moore volume has CC below 0.85, so a CC threshold would
-delete a third of the signature the product exists to find.
+**Clutter is handled, and a bare CC threshold is still the wrong way to do it.** Clutter
+reflects strongly and passes the reflectivity mask intact, so it needed a second test, and
+correlation coefficient is the only field that identifies it. It is also the most dangerous
+thing to threshold here: a debris signature *is* a low-CC target, and masking the Moore
+volume on `CC < 0.85` alone removes **all 89** debris gates and then reports a confident peak
+on an unrelated feature 20 km east — 0.1000 1/s at 35.276,−97.282 instead of 0.1297 at
+35.323,−97.527. Every summary statistic improves while the product answers a different
+question.
 
-What is left is **clutter**, which is a different problem wearing the same clothes. Sea and
-ground clutter return strongly, so a reflectivity mask keeps them — visible as radial
-spikes at coastal sites. CC is the right discriminator for it and carries the debris risk
-above, so it needs a design that separates the two cases rather than one threshold.
+`GateQuality.MaskClutter` gates it on the echo instead: **low CC only condemns a gate when
+the reflectivity is also below 40 dBZ.** Debris is the low-CC target that is *strong* — that
+is what makes a TDS detectable — while clutter and biologicals are low-CC and weak. On Moore
+that keeps all 89 debris gates with the peak bit-identical; on a clear-air coastal volume
+(KBOX) it takes the swath from 23 strong-shear gates peaking at 0.0995 1/s of pure sea
+clutter down to 3 gates at 0.0226. 40 dBZ is the knee, not a tuned number: the benefit has
+saturated there while the cost is still exactly zero, and above it debris dies for nothing.
+
+Two plausible discriminators were measured and rejected. **Radial velocity** does not
+separate them at all — the RDA's own clutter filter has already notched out the genuinely
+stationary returns, so what survives is not at zero Doppler. **Spectrum width** separates
+them physically (debris tumbles, median 5.5 m/s against 1.0) but is a weak instrument:
+`sw < 2` buys 6–24 % of the speckle and costs debris gates, against 61–87 % for nothing.
+Correct physics, poor discrimination — see `docs/verification.md`.
 
 Velocity dealiasing now reaches 85–92 % of Py-ART's correction rate, up from about two
 thirds. The fix was structural, and both obvious diagnoses were wrong: a signal-quality

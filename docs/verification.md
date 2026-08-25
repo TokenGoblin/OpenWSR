@@ -194,15 +194,65 @@ would not be the same thing.
 Left is the raw swath, right the masked one, both one scan of the Moore volume. The
 diffuse halo is noise; what survives is the track.
 
-**Why there is no correlation-coefficient mask.** The paired surveillance cut does carry CC
-and it would catch a further 49 % of the strong-shear gates, so it looks like an easy win.
-It is not: a tornado debris signature *is* a low-CC, high-Z target. On this volume 34.6 %
-of the strong shear under 40+ dBZ has CC below 0.85 — a CC threshold would delete a third
-of the debris signature, which is the single thing a rotation track exists to find.
+### The clutter mask — measured on two volumes, because one cannot show both halves
 
-**What is still open.** Ground and sea clutter return strongly, so reflectivity keeps them;
-they show as radial spikes at coastal sites. That is a different problem from noise and
-needs a discriminator that separates clutter from debris rather than one threshold.
+Reflectivity removes *noise*, where nothing reflected. It cannot remove **clutter**, which
+reflects strongly and passes the 20 dBZ test intact. Correlation coefficient is the field
+that identifies clutter, and it is also the single most dangerous thing to threshold here,
+because a tornadic debris signature *is* a low-CC target.
+
+How dangerous is worth stating exactly. Masking the Moore volume on `CC < 0.85` alone:
+
+| | debris gates | peak | location |
+|---|---|---|---|
+| unmasked | 89 | 0.1297 1/s | 35.323, −97.527 |
+| `CC < 0.85` | **0** | 0.1000 | 35.276, −97.282 |
+
+Not "it degrades the signature" — it removes all of it, and then reports a confident peak
+on an unrelated feature 20 km east. A mask that silently answers a different question is
+worse than no mask, and every summary statistic would have looked *better*.
+
+What separates the two cases is that debris is a **strong** echo with low CC — that is what
+makes a TDS detectable at all — while clutter and biological scatterers are low-CC and
+weak. So low CC only condemns a gate when the echo is also weak. Sweeping that ceiling, with
+the cost on Moore and the benefit on four clear-air coastal volumes:
+
+| dBZ ceiling | debris kept | peak | speckle removed (KAMX / KBOX / KBYX / KTBW) |
+|---|---|---|---|
+| 30 | 89 | 0.1297 | 60 / 78 / 67 / 60 % |
+| **40** | **89** | **0.1297** | **63 / 87 / 67 / 61 %** |
+| 45 | 72 | 0.1297 | 63 / 87 / 67 / 61 % |
+| 50 | 55 | 0.1297 | 63 / 87 / 67 / 61 % |
+| none | 0 | 0.1000 | 63 / 87 / 67 / 61 % |
+
+40 dBZ is the knee, and the shape of the curve is what makes it defensible rather than
+tuned: the benefit has already saturated there while the cost is still exactly zero. Above
+it debris starts dying for nothing in return.
+
+End to end, through the same API the app calls:
+
+| stage | gates | strong shear | debris | peak |
+|---|---|---|---|---|
+| KTLX Moore, raw | 137 813 | 7 397 | 89 | 0.1297 @ 35.323, −97.527 |
+| + echo ≥ 20 dBZ | 57 580 | 826 | 89 | 0.1297 @ 35.323, −97.527 |
+| + clutter mask | 55 799 | **681** | **89** | **0.1297 @ 35.323, −97.527** |
+| KBOX clear air, raw | 8 143 | 1 813 | 0 | 0.2511 |
+| + echo ≥ 20 dBZ | 284 | 23 | 0 | 0.0995 |
+| + clutter mask | 17 | **3** | 0 | **0.0226** |
+
+KBOX 2026-07-20 09:00Z is a clear July night over New England with no convection anywhere
+near the radar, and 96 % of what survived the echo mask had CC below 0.85 — median 0.43.
+The 0.0995 1/s peak is squarely in the range a real mesocyclone produces and was entirely
+sea clutter. `ClutterMaskTests` pins both ends: the Moore peak bit-identical and all 89
+debris gates kept, KBOX down to 3 gates and 0.0226.
+
+**Two dead ends, both measured.** *Radial velocity* does not separate them — clutter's
+median |v| is 6.0 m/s against debris' 10.5, heavily overlapping, because the RDA's own
+clutter filter has already notched out the genuinely stationary returns, so what survives is
+not sitting at zero Doppler. *Spectrum width* does separate them physically — debris tumbles
+chaotically at a median 5.5 m/s against 1.0 for clutter — but it is a much weaker instrument:
+`sw < 2` removes only 6–24 % of the speckle and costs 4 debris gates doing it, against
+61–87 % for nothing. The physics was right and the discrimination was still poor.
 
 ### Azimuthal shear — physics, because there is no reference
 

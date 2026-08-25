@@ -275,7 +275,15 @@ public sealed class RadarDisplayController(MapView mapView)
         // the rotation-track swath showing the same field.
         if (_volume is not null &&
             GateQuality.ReflectivityFor(_volume.Sweeps, basis) is { } reflectivity)
+        {
             shear = GateQuality.MaskByReflectivity(shear, reflectivity);
+
+            // Clutter returns strongly enough to pass that, so it needs the second test:
+            // low correlation coefficient, but only where the echo is weak. Debris is the
+            // low-CC target that must survive, and it is a strong echo.
+            if (GateQuality.CorrelationFor(_volume.Sweeps, basis) is { } correlation)
+                shear = GateQuality.MaskClutter(shear, reflectivity, correlation);
+        }
 
         if (_shearCache.Count > 32) _shearCache.Clear(); // one volume's worth is plenty
         _shearCache[key] = shear;

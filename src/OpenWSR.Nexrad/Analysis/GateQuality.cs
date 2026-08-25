@@ -29,6 +29,15 @@ public static class GateQuality
     public const float DefaultMinReflectivityDbz = 20f;
 
     /// <summary>
+    /// A low-CC gate is only condemned as clutter when its echo is below this. Debris sits
+    /// above it; clutter and biologicals sit below. See <see cref="MaskClutter"/>.
+    /// </summary>
+    public const float ClutterMaxReflectivityDbz = 40f;
+
+    /// <summary>Below this, a gate is not a meteorological target.</summary>
+    public const float ClutterMaxCorrelation = 0.85f;
+
+    /// <summary>
     /// Blank every gate of <paramref name="field"/> whose co-located reflectivity is missing
     /// or below <paramref name="minDbz"/>.
     ///
@@ -41,44 +50,107 @@ public static class GateQuality
     public static Sweep MaskByReflectivity(
         Sweep field, Sweep reflectivity, float minDbz = DefaultMinReflectivityDbz)
     {
-        var index = AzimuthIndex.Build(reflectivity);
+        var dbz = Resample(reflectivity, field);
         var masked = new float[field.Data.Length];
+
+        Parallel.For(0, field.Data.Length, i =>
+            masked[i] = float.IsNaN(dbz[i]) || dbz[i] < minDbz ? float.NaN : field.Data[i]);
+
+        return field with { Data = masked };
+    }
+
+    /// <summary>
+    /// A gate whose echo is weak <em>and</em> whose correlation coefficient is low is not
+    /// weather. Blank it.
+    /// </summary>
+    /// <remarks>
+    /// Ground and sea clutter return strongly enough to pass the reflectivity mask above, so
+    /// they survive it as radial spikes. Correlation coefficient is the field that identifies
+    /// them — but on its own it is the worst possible thing to threshold here, because a
+    /// tornadic debris signature <em>is</em> a low-CC target. Measured on the Moore volume, a
+    /// bare CC &lt; 0.85 mask removes all 89 debris gates and moves the shear peak off the
+    /// tornado entirely, from 0.1297 1/s at 35.323,-97.527 to 0.1000 at 35.276,-97.282. It
+    /// finds the wrong storm feature.
+    ///
+    /// What separates them is that debris is a <em>strong</em> echo with low CC — that is what
+    /// makes a TDS detectable — while clutter and biological scatterers are low-CC and weak.
+    /// So low CC only condemns a gate when the echo is also weak, and 40 dBZ is where the
+    /// curve turns: the speckle removed has already saturated there while the cost is still
+    /// exactly zero.
+    ///
+    ///   dBZ ceiling   debris kept   peak       speckle removed (KAMX/KBOX/KBYX/KTBW)
+    ///   30                     89   0.1297     60 / 78 / 67 / 60 %
+    ///   40                     89   0.1297     63 / 87 / 67 / 61 %
+    ///   45                     72   0.1297     63 / 87 / 67 / 61 %
+    ///   50                     55   0.1297     63 / 87 / 67 / 61 %
+    ///   no ceiling              0   0.1000     63 / 87 / 67 / 61 %
+    ///
+    /// Spectrum width was the other candidate and is much weaker: debris is spectrally wide
+    /// (median 5.5 m/s against 1.0 for clutter), but thresholding on it removes only 6-24 % of
+    /// the speckle and costs debris gates doing it. Radial velocity does not separate them at
+    /// all — the RDA's own clutter filter has already notched out the truly stationary
+    /// returns, so what survives is not sitting at zero Doppler.
+    /// </remarks>
+    public static Sweep MaskClutter(
+        Sweep field, Sweep reflectivity, Sweep correlation,
+        float maxDbz = ClutterMaxReflectivityDbz, float maxCc = ClutterMaxCorrelation)
+    {
+        var dbz = Resample(reflectivity, field);
+        var rho = Resample(correlation, field);
+        var masked = new float[field.Data.Length];
+
+        // A gate with nothing to judge it by is left alone: absent CC is not evidence.
+        Parallel.For(0, field.Data.Length, i =>
+            masked[i] = !float.IsNaN(rho[i]) && rho[i] < maxCc
+                     && !float.IsNaN(dbz[i]) && dbz[i] < maxDbz
+                ? float.NaN
+                : field.Data[i]);
+
+        return field with { Data = masked };
+    }
+
+    /// <summary>
+    /// <paramref name="source"/> sampled onto <paramref name="field"/>'s geometry, NaN where
+    /// there is no matching beam or gate.
+    /// </summary>
+    /// <remarks>
+    /// Matched by azimuth and slant range rather than by index. On a split-cut VCP the two
+    /// usually do share a geometry — the Doppler cut carries reflectivity alongside velocity —
+    /// but the surveillance cut that carries CC has a different gate count, and a product that
+    /// quietly indexed one with the other's numbers would be wrong by a few kilometres without
+    /// ever looking wrong.
+    /// </remarks>
+    private static float[] Resample(Sweep source, Sweep field)
+    {
+        var index = AzimuthIndex.Build(source);
+        var values = new float[field.Data.Length];
 
         Parallel.For(0, field.RadialCount, radial =>
         {
             int rowStart = radial * field.GateCount;
-            int source = AzimuthIndex.RadialFor(index, field.AzimuthsDeg[radial]);
-            if (source < 0)
+            int match = AzimuthIndex.RadialFor(index, field.AzimuthsDeg[radial]);
+            if (match < 0)
             {
                 // No matching beam at all: nothing vouches for these gates.
                 for (int gate = 0; gate < field.GateCount; gate++)
-                    masked[rowStart + gate] = float.NaN;
+                    values[rowStart + gate] = float.NaN;
                 return;
             }
 
-            int sourceRow = source * reflectivity.GateCount;
+            int sourceRow = match * source.GateCount;
             for (int gate = 0; gate < field.GateCount; gate++)
             {
-                float value = field.Data[rowStart + gate];
-                if (float.IsNaN(value))
-                {
-                    masked[rowStart + gate] = float.NaN;
-                    continue;
-                }
-
                 double slantM = field.FirstGateM + gate * field.GateSpacingM;
                 int sourceGate = (int)Math.Round(
-                    (slantM - reflectivity.FirstGateM) / reflectivity.GateSpacingM);
+                    (slantM - source.FirstGateM) / source.GateSpacingM);
 
-                float dbz = sourceGate >= 0 && sourceGate < reflectivity.GateCount
-                    ? reflectivity.Data[sourceRow + sourceGate]
+                values[rowStart + gate] = sourceGate >= 0 && sourceGate < source.GateCount
+                    ? source.Data[sourceRow + sourceGate]
                     : float.NaN;
-
-                masked[rowStart + gate] = float.IsNaN(dbz) || dbz < minDbz ? float.NaN : value;
             }
         });
 
-        return field with { Data = masked };
+        return values;
     }
 
     /// <summary>
@@ -97,5 +169,31 @@ public static class GateQuality
 
         return candidates.FirstOrDefault(s => s.ElevationIndex == dopplerCut.ElevationIndex)
                ?? candidates.MinBy(s => Math.Abs(s.ElevationAngleDeg - dopplerCut.ElevationAngleDeg));
+    }
+
+    /// <summary>
+    /// The correlation-coefficient sweep that goes with a Doppler cut, or null when the VCP
+    /// has none near it.
+    /// </summary>
+    /// <remarks>
+    /// On a split-cut VCP, CC lives on the surveillance half — a different elevation index at
+    /// a slightly different angle (0.60 deg against the Doppler cut's 0.53 deg on VCP 12), so
+    /// it has to be matched by angle. The half-degree guard is what keeps a volume with no
+    /// low-level dual-pol from silently borrowing a cut several degrees up and masking against
+    /// the wrong altitude; returning null there leaves the field unmasked, which is the safe
+    /// way to be wrong.
+    /// </remarks>
+    public static Sweep? CorrelationFor(IReadOnlyList<Sweep> volumeSweeps, Sweep dopplerCut)
+    {
+        var candidates = volumeSweeps
+            .Where(s => s.Moment == Moment.CorrelationCoefficient)
+            .ToList();
+        if (candidates.Count == 0) return null;
+
+        var nearest = candidates.MinBy(
+            s => Math.Abs(s.ElevationAngleDeg - dopplerCut.ElevationAngleDeg))!;
+        return Math.Abs(nearest.ElevationAngleDeg - dopplerCut.ElevationAngleDeg) <= 0.5
+            ? nearest
+            : null;
     }
 }

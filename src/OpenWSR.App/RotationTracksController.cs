@@ -104,9 +104,16 @@ public sealed class RotationTracksController(MapView mapView) : IDisposable
                     // Without this the swath fills with speckle: a maximum taken over a
                     // dozen scans keeps every spurious gate any of them produced, and 89 %
                     // of strong-shear gates sit where there is no echo to have reflected.
-                    return GateQuality.ReflectivityFor(volume.Sweeps, velocity) is { } reflectivity
-                        ? GateQuality.MaskByReflectivity(computed, reflectivity)
-                        : computed;
+                    if (GateQuality.ReflectivityFor(volume.Sweeps, velocity) is not { } reflectivity)
+                        return computed;
+                    var masked = GateQuality.MaskByReflectivity(computed, reflectivity);
+
+                    // Clutter passes the echo test -- it returns strongly. On a quiet coastal
+                    // night at KBOX the swath's peak was 0.0995 1/s of pure sea clutter, which
+                    // reads as rotation; the CC test drops it to 0.0226.
+                    return GateQuality.CorrelationFor(volume.Sweeps, velocity) is { } correlation
+                        ? GateQuality.MaskClutter(masked, reflectivity, correlation)
+                        : masked;
                 }, cts.Token);
 
                 if (sweep is not null) shear.Add(sweep);

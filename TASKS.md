@@ -1359,3 +1359,46 @@ draws. Three separate causes, all in the overlay stroke path.
 **Gate:** [PASSED] 539/539 tests, 0 warnings. Verified in the running app against live
 storms over Salt Lake City: the ring is round and evenly weighted with no facets and no
 beading, track bends join cleanly, cone edges and the arc are smooth.
+
+## Clutter: the other half of the rotation-track mask
+
+The one quality gap `CLAUDE.md` still listed as open. Reflectivity removes *noise* — gates
+where nothing reflected — but clutter reflects strongly and passes that test intact, showing
+as radial spikes at coastal sites. Correlation coefficient is the only field that identifies
+it, and is also the most dangerous thing to threshold, because a debris signature is itself
+a low-CC target.
+
+- [x] **Measured how dangerous, and it is worse than the old note said.** That note claimed a
+      CC threshold would delete "a third of the signature". Masking the Moore volume on
+      `CC < 0.85` alone deletes **all 89** debris gates and then reports a confident peak on an
+      unrelated feature 20 km east — 0.1000 1/s at 35.276,−97.282 in place of 0.1297 at
+      35.323,−97.527. Every summary statistic improves while the product answers a different
+      question, which is the failure mode worth naming
+- [x] **`GateQuality.MaskClutter` gates CC on the echo.** Low CC only condemns a gate whose
+      reflectivity is also below 40 dBZ. Debris is the low-CC target that is *strong* — that is
+      what makes a TDS detectable — while clutter and biologicals are low-CC and weak. Keeps
+      all 89 debris gates on Moore with the peak bit-identical; takes KBOX from 23 strong-shear
+      gates peaking at 0.0995 1/s of pure sea clutter down to 3 gates at 0.0226
+- [x] **40 dBZ is the knee, not a tuned number.** The benefit has saturated by 40 (63/87/67/61 %
+      of speckle removed across four coastal volumes, identical at 45, 50 and no ceiling) while
+      the cost is still exactly zero; at 45 debris starts dying for nothing in return
+- [x] **Two plausible discriminators measured and rejected.** *Radial velocity* does not
+      separate them at all — clutter's median |v| is 6.0 m/s against debris' 10.5 — because the
+      RDA's own clutter filter has already notched out the genuinely stationary returns, so what
+      survives is not at zero Doppler. *Spectrum width* separates them physically (debris tumbles,
+      median 5.5 m/s against 1.0) but is a weak instrument: `sw < 2` buys 6–24 % of the speckle
+      and costs 4 debris gates, against 61–87 % for nothing. Correct physics, poor discrimination
+- [x] **A second committed volume, because one cannot show both halves.** Moore can show a mask
+      spares the debris signature but contains no clutter to remove, so it cannot show the mask
+      does anything at all. `assets/testdata/clutter/KBOX20260720_090022_V06` is a clear July
+      night over New England — 96 % of what survived the echo mask had CC below 0.85, median 0.43
+- [x] **Applied at both seams**, so the live product and the rotation-track swath show the same
+      field: `RadarDisplayController.Materialise` and `RotationTracksController`
+- [x] **`CorrelationFor` matches by angle, not index, with a half-degree guard.** On VCP 12 the
+      split cut puts velocity at 0.53° and CC at 0.60° under different elevation indices;
+      matching by index would pair the wrong altitude. A volume with no low-level dual-pol
+      returns null and goes unmasked, which is the safe way to be wrong
+
+**Gate:** [PASSED] 546/546 tests, 0 warnings. `ClutterMaskTests` pins both ends — the Moore
+peak bit-identical with all 89 debris gates kept, KBOX down to 3 gates and 0.0226 — and keeps
+the bare-CC dead end ruled out as an executable test rather than a comment.
