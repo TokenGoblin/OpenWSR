@@ -59,7 +59,7 @@ premium tiers elsewhere and two have no commercial equivalent:
 | County and state boundaries | Expected | **Done** — US Census 1:500,000 state and county outlines as a layer of their own, fetched once and cached |
 | Placefile support | Expected | **Done** — full GRLevelX parser, icon sheets included |
 | Shapefile / GeoJSON / KML import | Nice | **Done** for shapefile and GeoJSON, zipped or not, as toggleable layers. KML is not read |
-| Terrain / topography | Cosmetic | **Open** — mostly a basemap style swap |
+| Terrain / topography | Cosmetic | **Done** — USGS topographic basemap, selectable in Settings |
 
 ## Analysis and derived products
 

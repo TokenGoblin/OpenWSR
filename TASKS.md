@@ -1514,3 +1514,31 @@ probability — points from the SCIT algorithm, which say *a cell probably has h
 **Gate:** [PASSED] 599/599 tests, 0 warnings. Counts at every named hail size are golden
 against ecCodes 2.47.0 on a committed MESH hour. Verified live: the layer fetched
 `MRMS_MESH_Max_60min_00.50 ... 00:16Z`, 134 KB, no errors, 60 fps.
+
+## A terrain basemap, and the silent failure that hid behind it
+
+- [x] **`TileProvider` carries its own label layer.** `MapView` used to hardcode
+      `if (provider.Name == "carto-dark")`, so no other style could ever have separate place
+      names. Whether labels are published apart from the ground is a property of the style,
+      and so is how hard they need lifting, so both moved onto the provider
+- [x] **USGS topographic basemap**, public domain and keyless, selectable in Settings and
+      appended as the last entry so no saved setting shifts meaning
+- [x] **Not shaded relief, which would have suited the radar better.** Grey relief leaves the
+      reflectivity palette the only saturated thing on screen — the same argument that makes
+      the default dark. But `USGSShadedReliefOnly`'s tile cache has holes: over northern Utah
+      it serves z8 and z12 and returns 404 at z9 and z10, while advertising levels 0 to 23 in
+      its own metadata. A basemap that vanishes at two zooms in the middle of the range is not
+      a basemap. `USGSTopo` was complete at every level checked
+- [x] **ArcGIS tile paths are `{z}/{y}/{x}`** — row before column, where XYZ is column before
+      row. Proven rather than assumed: in the right order a Rockies tile is 20 kB of texture
+      and a Pacific one 2.4 kB of nothing; in the wrong order the Rockies tile comes back
+      byte-identical to blank ocean. The swap returns tiles, just the wrong ones
+- [x] **`TileFetcher` no longer swallows failures silently.** It caught every exception into a
+      retry map, so a basemap where *every* tile 404s was indistinguishable on screen from one
+      that was merely slow — the map is blank either way. This is what hid the shaded-relief
+      problem for three rounds of guessing. It keeps the first failure now, and the status tick
+      reports it once as an error: `Basemap tiles are not loading — usgs-relief 9/97/191:
+      HttpRequestException: ... 404`. That one line found it immediately
+
+**Gate:** [PASSED] 599/599 tests, 0 warnings. Verified in the running app: 24 distinct tiles
+cached, attribution reads "USGS The National Map", no tile failures, 60 fps.

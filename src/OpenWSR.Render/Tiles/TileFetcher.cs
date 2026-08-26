@@ -44,6 +44,14 @@ public sealed class TileFetcher : IDisposable
 
     public bool TryDequeueCompleted(out (TileKey Key, byte[] Bgra) item) => _completed.TryDequeue(out item);
 
+    private int _failureCount;
+
+    /// <summary>How many tile requests have failed outright.</summary>
+    public int FailureCount => _failureCount;
+
+    /// <summary>The first failure seen, provider and reason, or null while all is well.</summary>
+    public string? FirstFailure { get; private set; }
+
     private async Task LoadAsync(TileKey key)
     {
         try
@@ -76,9 +84,14 @@ public sealed class TileFetcher : IDisposable
         catch (OperationCanceledException)
         {
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            // A tile source that fails every request looks exactly like one that is merely
+            // slow, because the map just stays empty. Keeping the first failure lets the
+            // caller say which layer is broken and why instead of guessing.
             _failed[key] = DateTime.UtcNow; // retried after a cool-down when still visible
+            FirstFailure ??= $"{_provider.Name} {key}: {ex.GetType().Name}: {ex.Message}";
+            Interlocked.Increment(ref _failureCount);
         }
         finally
         {

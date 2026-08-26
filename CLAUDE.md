@@ -186,6 +186,16 @@ Only things that *are* a physical extent — a mesocyclone radius, an alert ring
 metres. Line widths are already pixel-constant in `OverlayRenderer`. So are dash lengths —
 the forecast track's dashes were 2.5 km of Mercator and went solid at national zoom.
 
+**A tile service advertising a zoom range is not promising to have the tiles.**
+`USGSShadedReliefOnly` would have been the better terrain basemap — grey relief leaves the
+reflectivity palette the only saturated thing on screen — and its metadata advertises levels
+0 to 23. Its cache has holes: over northern Utah it serves z8 and z12 and returns **404** at
+z9 and z10. `USGSTopo` was complete everywhere checked and is what ships. Two other things
+that cost time here: ArcGIS tile paths are `{z}/{y}/{x}`, row before column, and the swap
+returns tiles rather than an error — just the wrong ones. And `TileFetcher` used to swallow
+every failure into a retry map, so a basemap where *every* tile 404s looked exactly like one
+that was merely slow. It now records the first failure and `MainWindow` reports it once.
+
 **Boundary data has to be thinned per zoom, not drawn.** The Census 1:500,000 county file
 is 1.03 million points — at national zoom about two hundred points to the pixel, and over six
 million vertices a frame if handed straight to `OverlayRenderer`. `BoundariesController`

@@ -437,11 +437,20 @@ public sealed class MapView : IDisposable
 
         // Only the dark style splits its labels out. The others bake them in, and drawing a
         // second copy over the radar would double every name.
-        if (provider.Name == "carto-dark")
-            _labelFetcher = new TileFetcher(TileProvider.CartoDarkLabels(provider.UserAgent));
+        if (provider.Labels is { } labels)
+        {
+            _labelFetcher = new TileFetcher(labels);
+            _labelBoost = provider.LabelBoost;
+        }
     }
 
     private readonly TileFetcher? _labelFetcher;
+
+    /// <summary>
+    /// The basemap's first tile failure, or null. Exposed because a broken tile source is
+    /// indistinguishable on screen from a slow one — the map is simply empty either way.
+    /// </summary>
+    public string? BasemapFailure => _fetcher.FailureCount > 0 ? _fetcher.FirstFailure : null;
 
     /// <summary>
     /// How hard the place names are lifted. CARTO draws them mid-grey, which is dim against
@@ -449,7 +458,7 @@ public sealed class MapView : IDisposable
     /// of a label from 161 to white and leaves the anti-aliased edges as a soft falloff
     /// rather than a hard outline.
     /// </summary>
-    private const float LabelBoost = 2.2f;
+    private readonly float _labelBoost = 1f;
 
     /// <summary>
     /// Physical pixels per device-independent unit, from the display this window is on.
@@ -727,7 +736,7 @@ public sealed class MapView : IDisposable
             // reading at that moment, and baked into the basemap it is the first thing an
             // echo covers. Boosted, because the style draws them mid-grey.
             if (_labelFetcher is not null)
-                DrawTiles(cam, labelTextures, quads, _labelFetcher, boost: LabelBoost);
+                DrawTiles(cam, labelTextures, quads, _labelFetcher, boost: _labelBoost);
 
             OverlayGeometry? overlayGeometry;
             lock (_overlayLock)

@@ -100,6 +100,7 @@ public partial class SettingsWindow : Window
         {
             "carto-dark" => 0,
             "maptiler" => 2,
+            "usgs-topo" => 3,
             _ => 1,
         };
         KeyBox.Text = settings.MapTilerKey ?? "";
@@ -254,6 +255,7 @@ public partial class SettingsWindow : Window
         {
             0 => "carto-dark",
             2 => "maptiler",
+            3 => "usgs-topo",
             _ => "osm",
         };
         _settings.MapTilerKey = string.IsNullOrWhiteSpace(KeyBox.Text) ? null : KeyBox.Text.Trim();

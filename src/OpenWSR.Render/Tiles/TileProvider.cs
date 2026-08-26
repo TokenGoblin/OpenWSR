@@ -5,6 +5,24 @@ namespace OpenWSR.Render.Tiles;
 /// <summary>An XYZ raster tile source. Provider and key are user-configurable from day one.</summary>
 public sealed record TileProvider(string Name, string UrlTemplate, string UserAgent)
 {
+    /// <summary>
+    /// A transparent place-name layer to draw <em>above</em> the weather, when this style
+    /// publishes one separately.
+    /// </summary>
+    /// <remarks>
+    /// It belongs on the provider rather than in the renderer because it is a property of
+    /// the style: only some publish labels apart from the ground, and the ones that bake
+    /// them in must not get a second copy of every name drawn over the first.
+    /// </remarks>
+    public TileProvider? Labels { get; init; }
+
+    /// <summary>
+    /// Tint applied to <see cref="Labels"/>. Above one lifts toward white and clamps, which
+    /// is what a mid-grey label layer needs over a near-black ground; a dark label layer on
+    /// a light ground wants one.
+    /// </summary>
+    public float LabelBoost { get; init; } = 1f;
+
     public string UrlFor(TileKey key) => UrlTemplate
         .Replace("{z}", key.Z.ToString())
         .Replace("{x}", key.X.ToString())
@@ -26,7 +44,11 @@ public sealed record TileProvider(string Name, string UrlTemplate, string UserAg
     /// contrast. Attribution is required and names CARTO as well as OpenStreetMap.
     /// </summary>
     public static TileProvider CartoDark(string userAgent) => new(
-        "carto-dark", "https://basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png", userAgent);
+        "carto-dark", "https://basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png", userAgent)
+    {
+        Labels = CartoDarkLabels(userAgent),
+        LabelBoost = 2.2f,
+    };
 
     /// <summary>
     /// The place names from the same style, as a transparent layer of their own.
@@ -43,6 +65,41 @@ public sealed record TileProvider(string Name, string UrlTemplate, string UserAg
     public static TileProvider CartoDarkLabels(string userAgent) => new(
         "carto-dark-labels",
         "https://basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png",
+        userAgent);
+
+    /// <summary>The same layer for a light ground: dark text instead of mid-grey.</summary>
+    public static TileProvider CartoLightLabels(string userAgent) => new(
+        "carto-light-labels",
+        "https://basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png",
+        userAgent);
+
+    /// <summary>
+    /// USGS topographic maps — the terrain option.
+    /// </summary>
+    /// <remarks>
+    /// Public domain, being a work of the US government, and needs no key. US-only, which is
+    /// the coverage this application has anyway.
+    ///
+    /// <para><b>Not <c>USGSShadedReliefOnly</c>, which would suit the radar better.</b> Grey
+    /// relief would have left the reflectivity palette the only saturated thing on screen,
+    /// the same argument that makes the default dark. But that service's tile cache has holes
+    /// in it: over northern Utah it serves z8 and z12 and returns 404 at z9 and z10, despite
+    /// its own metadata advertising levels 0 to 23. A basemap that vanishes at two zooms in
+    /// the middle of the range is not a basemap. <c>USGSTopo</c> was complete at every level
+    /// checked.</para>
+    ///
+    /// <para>It bakes its own names in, so it gets no <see cref="Labels"/> layer: a second
+    /// copy would draw every place name twice, once shifted.</para>
+    ///
+    /// <para>Note the tile path is <c>{z}/{y}/{x}</c> — ArcGIS orders row before column where
+    /// XYZ orders column before row. Swapping them still returns tiles, just the wrong ones.
+    /// Verified by fetching a Rockies tile and a Pacific one: in the right order the mountain
+    /// tile is 20 kB of texture and the ocean 2.4 kB of nothing, and in the wrong order the
+    /// mountain tile comes back byte-identical to blank ocean.</para>
+    /// </remarks>
+    public static TileProvider UsgsTopo(string userAgent) => new(
+        "usgs-topo",
+        "https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}",
         userAgent);
 
     public static TileProvider MapTiler(string apiKey, string userAgent) => new(

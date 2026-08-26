@@ -33,6 +33,7 @@ public partial class MainWindow : Window
     private readonly RotationTracksController _tracks;
     private readonly BoundariesController _boundaries;
     private readonly ShapeImportController _imports;
+    private bool _reportedTileFailure;
     private readonly LightningController _lightning;
     private readonly MrmsController _mrms;
     private readonly MrmsController _hailField;
@@ -70,12 +71,14 @@ public partial class MainWindow : Window
             "maptiler" when !string.IsNullOrEmpty(settings.MapTilerKey) =>
                 TileProvider.MapTiler(settings.MapTilerKey, settings.UserAgent),
             "carto-dark" => TileProvider.CartoDark(settings.UserAgent),
+            "usgs-topo" => TileProvider.UsgsTopo(settings.UserAgent),
             _ => TileProvider.Osm(settings.UserAgent),
         };
         AttributionText.Text = provider.Name switch
         {
             "maptiler" => "© MapTiler © OpenStreetMap contributors",
             "carto-dark" => "© OpenStreetMap contributors © CARTO",
+            "usgs-topo" => "USGS The National Map",
             _ => "© OpenStreetMap contributors",
         };
 
@@ -321,6 +324,14 @@ public partial class MainWindow : Window
         _statusTimer.Tick += (_, _) =>
         {
             FpsText.Text = $"{_mapView.FramesPerSecond:F0} fps · sweep upload {_mapView.LastSweepUploadMs:F1} ms";
+
+            // A basemap whose tiles all fail leaves a blank map, which reads as "still
+            // loading" for ever. Say so once.
+            if (_mapView.BasemapFailure is { } tileFailure && !_reportedTileFailure)
+            {
+                _reportedTileFailure = true;
+                ReportError($"Basemap tiles are not loading — {tileFailure}");
+            }
             UpdateAgeIndicator();
             // Storm symbols are sized in screen pixels, so a zoom change means new geometry.
             _storms.NotifyViewChanged();
