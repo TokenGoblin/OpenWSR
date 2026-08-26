@@ -146,6 +146,15 @@ looking at the right data over the wrong ground. Pane state (including the link 
 lives on the `Pane` object rather than in arrays indexed by position, because that position
 shifts whenever panes are added, removed or pinned.
 
+**The dBZ window is a draw-time discard, not a change to the data.** `MapView.SetValueFilter`
+feeds two floats into the sweep shader's constant buffer and gates discard outside them. It
+was tempting to do it by zeroing the palette's alpha instead, which needs no shader change —
+but then moving the control would have to restage the sweep, and archive playback hands the
+renderer prebuilt geometry it has no reason to rebuild. As a constant it redraws what is
+already on screen. It applies to **reflectivity only**: the window is in dBZ, and a dBZ bound
+against a velocity field or a correlation coefficient would silently blank most of the
+product, so other moments get the full range and the panel says so.
+
 **A palette's low end is a display decision, and the basemap changes the answer.**
 Reflectivity used to reach full opacity at 10 dBZ, which is clear-air return — insects,
 birds, residual clutter. That was invisible as a problem while the basemap was light, where

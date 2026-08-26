@@ -354,6 +354,17 @@
                                        ToolTip="Blend between radar cells: raw gates → soft consumer-style display" />
                             <Slider x:Name="SmoothSlider" AutomationProperties.Name="Radar smoothing" Minimum="0" Maximum="100" Value="0"
                                     ValueChanged="SmoothSlider_ValueChanged" />
+                            <TextBlock x:Name="DbzRangeLabel" Text="Show dBZ" Margin="0,8,0,0" FontSize="12"
+                                       ToolTip="Hide returns outside this window. Clear-air echo — insects, birds, residual ground clutter — sits between about 5 and 20 dBZ; raising the low end takes it off the map without touching the weather." />
+                            <Slider x:Name="DbzMinSlider" AutomationProperties.Name="Minimum dBZ shown"
+                                    Minimum="-30" Maximum="75" Value="-30" TickFrequency="5"
+                                    IsSnapToTickEnabled="True" ValueChanged="DbzFilter_Changed" />
+                            <Slider x:Name="DbzMaxSlider" AutomationProperties.Name="Maximum dBZ shown"
+                                    Minimum="-30" Maximum="75" Value="75" TickFrequency="5"
+                                    IsSnapToTickEnabled="True" ValueChanged="DbzFilter_Changed" />
+                            <TextBlock x:Name="DbzRangeNote" FontSize="10.5" FontStyle="Italic" TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextDim}" Margin="0,1,0,0" Text="" />
+
                             <CheckBox x:Name="FilterDealias" Content="Unfold velocity" Margin="0,8,0,0"
                                       ToolTip="Recover velocities past the Nyquist limit, where a strong couplet otherwise reads with its sign reversed"
                                       Checked="Dealias_Changed" Unchecked="Dealias_Changed" />

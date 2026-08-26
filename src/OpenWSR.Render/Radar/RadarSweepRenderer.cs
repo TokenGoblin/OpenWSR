@@ -24,6 +24,10 @@ public sealed class RadarSweepRenderer : IDisposable
             float firstGateM; float gateSpacingM; float kea; float invEarthR;
             float sinElev; float cosElev; float paletteMin; float invPaletteRange;
             float opacity; float gateCount; float radialCount; float smoothing;
+            // Draw only gates inside [filterMin, filterMax], in the palette's own units.
+            // Applied here rather than by zeroing the palette's alpha so that moving the
+            // control redraws the sweep already on screen, with no decode and no restage.
+            float filterMin; float filterMax; float pad0; float pad1;
         };
 
         Buffer<float> edgeAzimuths : register(t1);
@@ -131,6 +135,8 @@ public sealed class RadarSweepRenderer : IDisposable
                 if (coverage < 0.04)
                     discard; // isolated speckle fades out entirely
                 float vg = acc / wsum;
+                if (vg < filterMin || vg > filterMax)
+                    discard;
                 float t2 = saturate((vg - paletteMin) * invPaletteRange);
                 float4 c2 = palette.Sample(linearSamp, float2(t2, 0.5));
                 c2.a *= opacity * saturate(coverage * (1.6 - 0.4 * smoothing));
@@ -149,6 +155,8 @@ public sealed class RadarSweepRenderer : IDisposable
                 discard; // nothing measured under this pixel
 
             float v = vp / coverage;
+            if (v < filterMin || v > filterMax)
+                discard;
             float t = saturate((v - paletteMin) * invPaletteRange);
             float4 c = palette.Sample(linearSamp, float2(t, 0.5));
             // Feather the echo edge by how much of the footprint was measured. A hard
@@ -169,6 +177,7 @@ public sealed class RadarSweepRenderer : IDisposable
         public float FirstGateM, GateSpacingM, Kea, InvEarthR;
         public float SinElev, CosElev, PaletteMin, InvPaletteRange;
         public float Opacity, GateCount, RadialCount, Smoothing;
+        public float FilterMin, FilterMax, Pad0, Pad1;
     }
 
     private readonly ID3D11Device _device;
@@ -199,6 +208,19 @@ public sealed class RadarSweepRenderer : IDisposable
     private SweepGeometry? _current;
     private float _paletteMin;
     private float _invPaletteRange;
+
+    /// <summary>
+    /// Value window, in the palette's units. Outside it a gate is not drawn at all.
+    /// </summary>
+    /// <remarks>
+    /// Defaults to everything. The point of it is clear-air return: insects, birds and
+    /// residual ground clutter sit between roughly 5 and 20 dBZ and can cover more of the
+    /// screen than the weather does, and whether that is context worth seeing or clutter
+    /// worth hiding depends on what someone is looking for.
+    /// </remarks>
+    public float FilterMin { get; set; } = float.NegativeInfinity;
+
+    public float FilterMax { get; set; } = float.PositiveInfinity;
 
     public float Opacity { get; set; } = 0.85f;
 
@@ -335,6 +357,8 @@ public sealed class RadarSweepRenderer : IDisposable
             CosElev = MathF.Cos(g.ElevationRad),
             PaletteMin = _paletteMin,
             InvPaletteRange = _invPaletteRange,
+            FilterMin = FilterMin,
+            FilterMax = FilterMax,
             Opacity = Opacity,
             GateCount = g.GateCount,
             RadialCount = g.RadialCount,

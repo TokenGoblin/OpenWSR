@@ -167,6 +167,19 @@ public sealed class AppSettings
     /// switched on it downloads from the US Census, and a startup that reaches for the
     /// network before the user has asked for anything is the wrong default.
     /// </summary>
+    /// <summary>
+    /// The dBZ window the radar draws, defaulting to everything.
+    /// </summary>
+    /// <remarks>
+    /// Whether clear-air return is context worth seeing or clutter worth hiding depends on
+    /// what someone is watching for, so it is a control rather than a decision — but the
+    /// shipped default hides nothing, because a product that silently omits data it was
+    /// given is worse than a busy one.
+    /// </remarks>
+    public float DbzFilterMin { get; set; } = -30f;
+
+    public float DbzFilterMax { get; set; } = 75f;
+
     public bool ShowStateLines { get; set; }
 
     public bool ShowCountyLines { get; set; }

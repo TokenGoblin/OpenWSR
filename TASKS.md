@@ -1644,3 +1644,30 @@ Overlay strokes were the third cause and are left alone by request: they are 2�
 old weight because a nominal increase and the new DPI scaling compounded in one commit.
 
 **Gate:** [PASSED] 619/619 tests, 0 warnings.
+
+## A dBZ window, so hiding clear air is the user's call
+
+Asked for: a min/max dBZ filter, so the blue strips can be hidden by anyone who wants them
+hidden rather than by a decision baked into the palette.
+
+- [x] **Two sliders in the RADAR section**, which already owns how the radar layer is drawn.
+      Default is the full −30…75 range, so nothing ships filtered — a product that silently
+      omits data it was given is worse than a busy one
+- [x] **Applied as a draw-time discard**, not by editing the data or the palette. Two floats
+      in the sweep shader's constant buffer, so dragging the control redraws the sweep already
+      on screen: no decode, no restage, and archive playback keeps its prebuilt geometry.
+      Zeroing the palette's alpha instead would have needed no shader change but would have
+      forced a restage on every drag
+- [x] **Reflectivity only.** The window is in dBZ, and a dBZ bound against velocity or
+      correlation coefficient would blank most of the product. Other moments get the full
+      range, and the panel says "Reflectivity only — not applied to this product" so a
+      control that appears dead is explained rather than merely dead
+- [x] **The ends cannot cross.** Dragging one past the other pushes the other along instead of
+      asking for an empty window
+- [x] **Persisted**, and it costs nothing in the panel: RADAR is collapsed by default, so the
+      column still fits without a scrollbar
+
+**Gate:** [PASSED] 619/619 tests, 0 warnings — including the sweep shader's compile guard,
+which is what a constant-buffer change most needs. Verified live: a clean settings file opens
+at "Showing everything"; 20 gives "Showing 20 to 75 dBZ"; pushing the maximum below the
+minimum drags it along; switching to velocity stands the filter down.

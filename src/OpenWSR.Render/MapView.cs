@@ -71,6 +71,23 @@ public sealed class MapView : IDisposable
         set => _radarSmoothing = Math.Clamp(value, 0f, 1f);
     }
 
+    private volatile float _filterMin = float.NegativeInfinity;
+    private volatile float _filterMax = float.PositiveInfinity;
+
+    /// <summary>
+    /// Draw only gates whose value falls inside this window, in the palette's own units.
+    /// </summary>
+    /// <remarks>
+    /// Read per frame rather than applied to the data, so dragging the control redraws the
+    /// sweep already on screen — no decode, no restage, and archive playback keeps its
+    /// prebuilt geometry.
+    /// </remarks>
+    public void SetValueFilter(float min, float max)
+    {
+        _filterMin = min;
+        _filterMax = max;
+    }
+
     /// <summary>Raised on the UI thread with the virtual-key code of keys pressed over the map.</summary>
     public event Action<int>? KeyPressed;
 
@@ -723,6 +740,8 @@ public sealed class MapView : IDisposable
             }
             radar.Opacity = _radarOpacity;
             radar.Smoothing = _radarSmoothing;
+            radar.FilterMin = _filterMin;
+            radar.FilterMax = _filterMax;
             radar.Draw(cam);
             LastSweepUploadMs = radar.LastUploadMs;
 

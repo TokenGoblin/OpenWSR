@@ -87,6 +87,8 @@ public partial class MainWindow : Window
         _mapView.SetMarkers(RadarSites.All.Select(s => (s.LatDeg, s.LonDeg, s.Icao)));
         _mapView.MarkersEnabled = settings.ShowSiteMarkers;
         FilterSites.IsChecked = settings.ShowSiteMarkers;
+        DbzMinSlider.Value = settings.DbzFilterMin;
+        DbzMaxSlider.Value = settings.DbzFilterMax;
         FilterStates.IsChecked = settings.ShowStateLines;
         FilterCounties.IsChecked = settings.ShowCountyLines;
         MapHost.Child = new D3DHostControl(_mapView);
@@ -482,6 +484,9 @@ public partial class MainWindow : Window
         _suppressMomentEvents = true;
         _vm.SyncMoments(_radar.AvailableMoments, _radar.CurrentMoment);
         _suppressMomentEvents = false;
+
+        // The dBZ window is meaningless against velocity or CC, so it follows the product.
+        ApplyDbzFilter();
 
         var elevations = _radar.ElevationsForCurrentMoment;
         _vm.SyncTilts(elevations, _radar.CutPosition);
@@ -1371,6 +1376,52 @@ public partial class MainWindow : Window
     {
         if (_mapView is not null)
             _mapView.RadarSmoothing = (float)(e.NewValue / 100.0);
+    }
+
+    /// <summary>
+    /// Apply the dBZ window, and keep the two ends from crossing.
+    /// </summary>
+    /// <remarks>
+    /// Reflectivity only. The window is in dBZ, and a dBZ bound means nothing against a
+    /// velocity field or a correlation coefficient — applying it there would silently blank
+    /// most of the product. Other moments get the full range, and the label says which
+    /// product the control is acting on so a slider that appears to do nothing is explained.
+    /// </remarks>
+    private void DbzFilter_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_mapView is null || _settings is null || DbzMinSlider is null || DbzMaxSlider is null)
+            return;
+
+        // Dragging one past the other would ask for an empty window; push the other along.
+        if (sender == DbzMinSlider && DbzMinSlider.Value > DbzMaxSlider.Value)
+            DbzMaxSlider.Value = DbzMinSlider.Value;
+        else if (sender == DbzMaxSlider && DbzMaxSlider.Value < DbzMinSlider.Value)
+            DbzMinSlider.Value = DbzMaxSlider.Value;
+
+        _settings.DbzFilterMin = (float)DbzMinSlider.Value;
+        _settings.DbzFilterMax = (float)DbzMaxSlider.Value;
+        _settings.Save();
+        ApplyDbzFilter();
+    }
+
+    /// <summary>Push the window to the renderer, or open it wide for non-reflectivity.</summary>
+    private void ApplyDbzFilter()
+    {
+        if (_mapView is null || _settings is null) return;
+
+        bool reflectivity = _radar.CurrentMoment == Moment.Reflectivity;
+        if (reflectivity)
+            _mapView.SetValueFilter(_settings.DbzFilterMin, _settings.DbzFilterMax);
+        else
+            _mapView.SetValueFilter(float.NegativeInfinity, float.PositiveInfinity);
+
+        if (DbzRangeNote is null) return;
+        bool wideOpen = _settings.DbzFilterMin <= -30 && _settings.DbzFilterMax >= 75;
+        DbzRangeNote.Text = !reflectivity
+            ? "Reflectivity only — not applied to this product."
+            : wideOpen
+                ? "Showing everything."
+                : $"Showing {_settings.DbzFilterMin:F0} to {_settings.DbzFilterMax:F0} dBZ.";
     }
 
     private void MosaicFilter_Changed(object sender, RoutedEventArgs e)
