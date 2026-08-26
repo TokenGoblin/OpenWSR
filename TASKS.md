@@ -1610,3 +1610,37 @@ worse: BOUNDARIES, IMPORTED SHAPES and the hail swath all landed there.
 **Gate:** [PASSED] 613/613 tests, 0 warnings. Verified in the running app at each step by
 `ScrollPattern.VerticalViewSize`; persistence checked by expanding RADAR, confirming
 `{"RADAR":true}` in settings, and finding it still open after a restart.
+
+## The clear-air haze was drowning the weather
+
+Reported: the display had got busier — blue strips everywhere with the storms in between.
+Measured on a live Salt Lake volume: **26.7 % of the map was faint blue against 12 % of
+actual storm**, so the context outweighed the subject two to one.
+
+Three causes, only one of them a deliberate visual decision.
+
+- [x] **State and county lines had been left switched on** in `settings.json` from testing the
+      boundaries layer. 4,791 outlines over the map. Off again; the shipped default was
+      always off
+- [x] **The palette's low end reached full opacity at 10 dBZ.** Clear-air return — insects,
+      birds, residual clutter — painted bright cyan at full strength. Nothing about that
+      changed this month; what changed was the ground beneath it. On the old light basemap
+      pale cyan on white recedes, and against the near-black default it is the second
+      brightest thing on screen. The low end now fades in: alpha 0x28 at 5 dBZ, 0x68 at 10,
+      0xC0 at 18, full from 22
+- [x] **Weather is byte-for-byte unchanged.** Every band from the green stop upward has both
+      endpoints untouched, and `ReflectivityPaletteTests` builds the previous table and
+      asserts the two 256-entry ramps agree exactly from 22 dBZ up — not "look similar", agree
+
+| dBZ | on-screen luminance |
+|---|---|
+| 5 | 48 % of before |
+| 10 | 49 % |
+| 15 | 65 % |
+| 18 | 80 % |
+| 22 and above | **100 %** |
+
+Overlay strokes were the third cause and are left alone by request: they are 2–2.6× their
+old weight because a nominal increase and the new DPI scaling compounded in one commit.
+
+**Gate:** [PASSED] 619/619 tests, 0 warnings.

@@ -3,12 +3,29 @@ namespace OpenWSR.Palettes;
 /// <summary>Built-in tables modeled on the familiar NWS product colors.</summary>
 public static class BuiltinTables
 {
+    /// <summary>
+    /// Reflectivity, dBZ.
+    /// </summary>
+    /// <remarks>
+    /// <b>The low end fades in rather than painting.</b> Clear-air return — insects, birds,
+    /// residual ground clutter — lives between about 5 and 20 dBZ, and it used to reach full
+    /// opacity at 10, which put bright cyan across a quarter of the screen. Measured on a
+    /// live Salt Lake volume: 26.7 % of the map was faint blue against 12 % of actual storm,
+    /// so the context outweighed the subject two to one. It went unnoticed while the basemap
+    /// was light, where pale cyan on white recedes; against the near-black default it is the
+    /// second brightest thing on screen.
+    ///
+    /// <para>The colours are unchanged and so is everything at <b>22 dBZ and above</b> — every
+    /// band from the green stop upward has both endpoints untouched, so real precipitation is
+    /// bit-identical. Only the alpha below it moved, which is why this declutters without
+    /// hiding weather.</para>
+    /// </remarks>
     public static ColorTable Reflectivity { get; } = ColorTable.FromStops("Reflectivity (dBZ)",
         (-30, new Rgba(0x00, 0x00, 0x00, 0x00)),
-        (-10, new Rgba(0x40, 0x4A, 0x59, 0x60)),
-        (5, new Rgba(0x33, 0x64, 0x70, 0xB0)),
-        (10, new Rgba(0x41, 0xC0, 0xF0, 0xFF)),
-        (18, new Rgba(0x2E, 0x77, 0xEE, 0xFF)),
+        (-10, new Rgba(0x40, 0x4A, 0x59, 0x00)),
+        (5, new Rgba(0x33, 0x64, 0x70, 0x28)),
+        (10, new Rgba(0x41, 0xC0, 0xF0, 0x68)),
+        (18, new Rgba(0x2E, 0x77, 0xEE, 0xC0)),
         (22, new Rgba(0x2A, 0xFA, 0x30, 0xFF)),
         (35, new Rgba(0x0E, 0x8E, 0x12, 0xFF)),
         (40, new Rgba(0xFF, 0xFB, 0x1F, 0xFF)),

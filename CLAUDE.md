@@ -146,6 +146,16 @@ looking at the right data over the wrong ground. Pane state (including the link 
 lives on the `Pane` object rather than in arrays indexed by position, because that position
 shifts whenever panes are added, removed or pinned.
 
+**A palette's low end is a display decision, and the basemap changes the answer.**
+Reflectivity used to reach full opacity at 10 dBZ, which is clear-air return — insects,
+birds, residual clutter. That was invisible as a problem while the basemap was light, where
+pale cyan on white recedes; against the near-black default it put bright blue over **26.7 %
+of the map against 12 % of actual storm**. The low end fades in now and is full only from
+22 dBZ. When touching it, keep the property that makes it safe: every band from the green
+stop upward has both endpoints untouched, so weather is byte-for-byte what it was, and
+`ReflectivityPaletteTests` asserts that against a copy of the previous table rather than
+trusting the eye.
+
 **Place names are their own layer, drawn above the weather.** The dark basemap uses CARTO's
 `dark_nolabels` with `dark_only_labels` as a separate tile layer drawn *after* the radar sweep.
 Baked into the basemap they are the first thing an echo covers, and the name of the town a
