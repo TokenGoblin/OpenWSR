@@ -93,6 +93,18 @@ Before adding a control, decide which question it answers and put it there. Set-
 configuration goes in Settings, not the layers panel; reference material (shortcuts, the
 symbol key, About) goes in `InfoWindow`, not a panel or a MessageBox.
 
+**The layers panel has a budget too, and it was 92 % over.** Measured rather than eyeballed:
+1758 px of content in a 914 px column, 52 % of it visible. Three rules got it to 100 % with no
+scrollbar. A control that is inert until some state exists is **collapsed, not shown** — an
+opacity slider for a layer that is off, or eleven storm filters while tracking is off (that one
+was a third of the panel). Fine-grained settings that are chosen once sit behind a nested
+disclosure rather than costing rows every session. And sections that are set-once — RADAR,
+Warnings, SPC — start closed. What makes those defaults safe is that `PanelSections` in
+settings **remembers how each section was left**, so a default is only a starting point: which
+sections a person needs open is not something this can know, since a chaser lives in STORMS and
+never opens SPC while someone watching one town is the reverse. Measure with UI Automation's
+`ScrollPattern.VerticalViewSize` before and after; guessing at panel height does not work.
+
 **The left rail has a fixed budget and it is already spent.** Sixteen 44 px buttons needed
 1109 px against 1096 available, so `About` sat entirely below the window edge — and because
 the bottom group is docked to the bottom, overflow eats Settings, Help and About first: the

@@ -1576,3 +1576,37 @@ length is shear, curvature is the streamwise vorticity a storm tilts into a meso
 
 **Gate:** [PASSED] 613/613 tests, 0 warnings. Verified live: on a 0.6 km profile it draws the
 trace and suppresses both derived layers rather than inventing them.
+
+## The layers panel needed twice the height it had
+
+Reported: too much scrolling on the right. Measured with UI Automation before touching
+anything — **1758 px of content in a 914 px column, 52 % visible**. This session had made it
+worse: BOUNDARIES, IMPORTED SHAPES and the hail swath all landed there.
+
+- [x] **Inert controls are collapsed, not shown.** Four opacity sliders and three status notes
+      were on screen while their layers were switched off, and the eleven storm filters were on
+      screen while storm tracking was off — that alone was a third of the panel. Each now
+      follows its own checkbox through a `BooleanToVisibilityConverter`, which is the same rule
+      the left rail already lives by
+- [x] **Fine-grained settings sit behind a disclosure.** Which storm symbols to draw is chosen
+      once and then left, so the six filters and the hail-probability slider moved into a
+      nested "Symbols shown" section. STORMS went 443 px → 261
+- [x] **Set-once sections start closed** — RADAR, Warnings, SPC & REPORTS. Together 626 px → 111
+- [x] **The panel remembers how you leave it.** `AppSettings.PanelSections` stores each
+      section's state by header and restores it on launch. This is what makes tighter defaults
+      safe: which sections a person needs open is not something a default can know — a chaser
+      lives in STORMS and never opens SPC, someone watching one town is the reverse — so the
+      shipped defaults only have to be a reasonable start. Hooked by walking the visual tree
+      for `Expander`s rather than wiring nine handlers, so a section added later persists
+      without anyone remembering to make it so
+
+| | content | visible | scrollbar |
+|---|---|---|---|
+| before | 1758 px | 52 % | yes |
+| inert controls hidden | ~1350 px | 68 % | yes |
+| + symbols disclosure | ~1055 px | 87 % | yes |
+| + set-once closed | **~855 px** | **100 %** | **none** |
+
+**Gate:** [PASSED] 613/613 tests, 0 warnings. Verified in the running app at each step by
+`ScrollPattern.VerticalViewSize`; persistence checked by expanding RADAR, confirming
+`{"RADAR":true}` in settings, and finding it still open after a restart.

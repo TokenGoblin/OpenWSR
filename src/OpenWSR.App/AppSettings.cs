@@ -172,6 +172,18 @@ public sealed class AppSettings
     public bool ShowCountyLines { get; set; }
 
     /// <summary>
+    /// Which layer-panel sections are open, keyed by header.
+    /// </summary>
+    /// <remarks>
+    /// The panel holds more than fits: 1758 px of content in a 914 px column before this was
+    /// looked at. Which sections a given person needs open is not something a default can
+    /// know — a chaser lives in STORMS and never opens SPC, and someone watching one town is
+    /// the reverse — so the shipped defaults only have to be a reasonable start, and after
+    /// that the panel remembers.
+    /// </remarks>
+    public Dictionary<string, bool> PanelSections { get; set; } = [];
+
+    /// <summary>
     /// How many volumes an archive loop spans. This is a real cost, not a preference: every
     /// frame is a decoded sweep held in memory — about 5 MB for a super-res reflectivity cut
     /// — and each one has to be downloaded and decoded before the loop can play. Thirty is

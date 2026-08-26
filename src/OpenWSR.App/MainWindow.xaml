@@ -5,6 +5,13 @@
         MinWidth="900" MinHeight="600"
         WindowStartupLocation="CenterScreen" WindowState="Maximized"
         Background="{StaticResource Chrome}">
+    <Window.Resources>
+        <!-- A control that is inert until some state exists should be collapsed rather than
+             merely shown: an opacity slider for a layer that is switched off is a row of
+             panel height spent on something that does nothing. The panel needed 1758 px of
+             a 914 px viewport before this. -->
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+    </Window.Resources>
     <!-- The shell is arranged around the four questions this app answers, in the order it
          answers them: WHERE (top bar) → WHAT product (bar above the map) → WHEN (time bar)
          → WHAT'S ON TOP (right panel). Each question has exactly one place and no second. -->
@@ -336,7 +343,9 @@
                 <ScrollViewer x:Name="LayersPanel" Grid.Row="1" VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="10,8">
 
-                    <Expander Header="RADAR" Style="{StaticResource PanelSection}">
+                    <!-- Opacity and smoothing are set once and left, so this starts closed.
+                         The panel remembers, so anyone who does live in here opens it once. -->
+                    <Expander Header="RADAR" Style="{StaticResource PanelSection}" IsExpanded="False">
                         <StackPanel>
                             <TextBlock Text="Opacity" Margin="0,2,0,0" FontSize="12" />
                             <Slider x:Name="OpacitySlider" AutomationProperties.Name="Radar opacity" Minimum="0" Maximum="100" Value="85"
@@ -359,7 +368,8 @@
                                       ToolTip="Seamless national reflectivity from the Iowa State NEXRAD mosaic"
                                       Checked="MosaicFilter_Changed" Unchecked="MosaicFilter_Changed" />
                             <Slider x:Name="MosaicOpacitySlider" AutomationProperties.Name="National mosaic opacity" Minimum="0" Maximum="100" Value="75"
-                                    Margin="18,0,0,4" ValueChanged="MosaicOpacity_Changed" />
+                                    Margin="18,0,0,4" ValueChanged="MosaicOpacity_Changed"
+                                    Visibility="{Binding IsChecked, ElementName=FilterMosaic, Converter={StaticResource BoolToVis}}" />
 
                             <CheckBox x:Name="FilterMrms" AutomationProperties.Name="MRMS composite"
                                       Content="MRMS composite (full res)"
@@ -367,19 +377,23 @@
                                       Checked="Mrms_Changed" Unchecked="Mrms_Changed" />
                             <Slider x:Name="MrmsOpacitySlider" AutomationProperties.Name="MRMS opacity"
                                     Minimum="0" Maximum="100" Value="75" Margin="18,0,0,0"
-                                    ValueChanged="MrmsOpacity_Changed" />
+                                    ValueChanged="MrmsOpacity_Changed"
+                                    Visibility="{Binding IsChecked, ElementName=FilterMrms, Converter={StaticResource BoolToVis}}" />
                             <TextBlock x:Name="MrmsNoteText" FontSize="10.5" FontStyle="Italic"
                                        TextWrapping="Wrap" Foreground="{StaticResource TextDim}"
-                                       Margin="18,0,0,4" Text="" />
+                                       Margin="18,0,0,4" Text=""
+                                       Visibility="{Binding IsChecked, ElementName=FilterMrms, Converter={StaticResource BoolToVis}}" />
 
                             <CheckBox x:Name="FilterSatellite" AutomationProperties.Name="Satellite" Content="Satellite (GOES IR)"
                                       ToolTip="Infrared cloud tops from GOES-East ABI, decoded from the source every five minutes and drawn under the radar layers"
                                       Checked="SatelliteFilter_Changed" Unchecked="SatelliteFilter_Changed" />
                             <Slider x:Name="SatelliteOpacitySlider" AutomationProperties.Name="Satellite opacity" Minimum="0" Maximum="100" Value="60"
-                                    Margin="18,0,0,0" ValueChanged="SatelliteOpacity_Changed" />
+                                    Margin="18,0,0,0" ValueChanged="SatelliteOpacity_Changed"
+                                    Visibility="{Binding IsChecked, ElementName=FilterSatellite, Converter={StaticResource BoolToVis}}" />
                             <TextBlock x:Name="SatelliteNoteText" FontSize="10.5" FontStyle="Italic"
                                        TextWrapping="Wrap" Foreground="{StaticResource TextDim}"
-                                       Margin="18,0,0,4" Text="" />
+                                       Margin="18,0,0,4" Text=""
+                                       Visibility="{Binding IsChecked, ElementName=FilterSatellite, Converter={StaticResource BoolToVis}}" />
 
                             <CheckBox x:Name="FilterLightning" AutomationProperties.Name="Lightning"
                                       Content="Lightning (GOES GLM)"
@@ -387,7 +401,8 @@
                                       Checked="Lightning_Changed" Unchecked="Lightning_Changed" />
                             <TextBlock x:Name="LightningNoteText" FontSize="10.5" FontStyle="Italic"
                                        TextWrapping="Wrap" Foreground="{StaticResource TextDim}"
-                                       Margin="18,0,0,4" Text="" />
+                                       Margin="18,0,0,4" Text=""
+                                       Visibility="{Binding IsChecked, ElementName=FilterLightning, Converter={StaticResource BoolToVis}}" />
 
                             <Expander Header="ROTATION TRACKS" Style="{StaticResource PanelSection}" IsExpanded="False">
                                 <StackPanel>
@@ -434,7 +449,8 @@
                                       ToolTip="All 210 WSR-88D locations — hidden at national zoom, labelled up close"
                                       Checked="SiteMarkers_Changed" Unchecked="SiteMarkers_Changed" />
 
-                            <Expander Header="Warnings" Style="{StaticResource PanelSection}" Margin="0,6,0,0">
+                            <Expander Header="Warnings" Style="{StaticResource PanelSection}" Margin="0,6,0,0"
+                                      IsExpanded="False">
                                 <StackPanel>
                                     <CheckBox x:Name="FilterTornado" Content="Tornado" IsChecked="True" Foreground="#FF6B6B"
                                               Checked="WarningFilter_Changed" Unchecked="WarningFilter_Changed" />
@@ -452,42 +468,58 @@
                                     <CheckBox x:Name="StormsToggle" Content="Track storms" FontWeight="SemiBold"
                                               Checked="StormsToggle_Checked" Unchecked="StormsToggle_Unchecked"
                                               ToolTip="Fetch Level III storm tracks, hail and mesocyclones for this site" />
-                                    <CheckBox x:Name="FilterPastTrack" Content="Past track" IsChecked="True" Margin="12,4,0,0"
+
+                                    <!-- Everything below is inert until tracking is on, and eleven
+                                         inert rows is a third of the panel's height. -->
+                                    <StackPanel Visibility="{Binding IsChecked, ElementName=StormsToggle, Converter={StaticResource BoolToVis}}">
+
+                                    <!-- Which symbols to draw is set once and then left alone,
+                                         so it sits behind a disclosure rather than costing
+                                         eight rows of panel every session. -->
+                                    <Expander x:Name="StormSymbolsSection" Header="Symbols shown"
+                                              Style="{StaticResource PanelSection}" IsExpanded="False"
+                                              Margin="12,4,0,0">
+                                      <StackPanel>
+                                    <CheckBox x:Name="FilterPastTrack" Content="Past track" IsChecked="True"
                                               Checked="StormFilter_Changed" Unchecked="StormFilter_Changed" />
-                                    <CheckBox x:Name="FilterForecastTrack" Content="Forecast track" IsChecked="True" Margin="12,0,0,0"
+                                    <CheckBox x:Name="FilterForecastTrack" Content="Forecast track" IsChecked="True"
                                               Checked="StormFilter_Changed" Unchecked="StormFilter_Changed" />
-                                    <CheckBox x:Name="FilterCones" Content="Projection cones" IsChecked="True" Margin="12,0,0,0"
+                                    <CheckBox x:Name="FilterCones" Content="Projection cones" IsChecked="True"
                                               ToolTip="Direction + swept area over the next hour"
                                               Checked="StormFilter_Changed" Unchecked="StormFilter_Changed" />
-                                    <CheckBox x:Name="FilterLabels" Content="Cell labels" IsChecked="True" Margin="12,0,0,0"
+                                    <CheckBox x:Name="FilterLabels" Content="Cell labels" IsChecked="True"
                                               ToolTip="Cell ID, plus max dBZ when the storm-structure product is available"
                                               Checked="StormFilter_Changed" Unchecked="StormFilter_Changed" />
-                                    <CheckBox x:Name="FilterHail" Content="Hail markers" IsChecked="True" Margin="12,0,0,0"
+                                    <CheckBox x:Name="FilterHail" Content="Hail markers" IsChecked="True"
                                               Checked="StormFilter_Changed" Unchecked="StormFilter_Changed" />
-                                    <CheckBox x:Name="FilterMeso" Content="Mesocyclones" IsChecked="True" Foreground="#FFE066" Margin="12,0,0,0"
+                                    <CheckBox x:Name="FilterMeso" Content="Mesocyclones" IsChecked="True" Foreground="#FFE066"
                                               Checked="StormFilter_Changed" Unchecked="StormFilter_Changed" />
+                                    <TextBlock Text="Min severe-hail prob." Margin="0,6,0,0" FontSize="12" />
+                                    <Slider x:Name="PoshSlider" AutomationProperties.Name="Minimum severe hail probability" Minimum="0" Maximum="100" Value="0" TickFrequency="10"
+                                            IsSnapToTickEnabled="True"
+                                            ValueChanged="StormFilter_SliderChanged" />
+                                      </StackPanel>
+                                    </Expander>
                                     <CheckBox x:Name="FilterHailField" AutomationProperties.Name="Hail size swath"
                                               Content="Hail size swath" Margin="12,0,0,0"
                                               ToolTip="MRMS maximum estimated hail size over the last hour — where hail fell, not where a cell is now. Green 0.75 in, yellow 1 in, orange 1.75 in, red 2.75 in"
                                               Checked="HailField_Changed" Unchecked="HailField_Changed" />
                                     <Slider x:Name="HailFieldOpacitySlider" AutomationProperties.Name="Hail swath opacity"
                                             Minimum="0" Maximum="100" Value="75" Margin="30,0,0,0"
-                                            ValueChanged="HailFieldOpacity_Changed" />
+                                            ValueChanged="HailFieldOpacity_Changed"
+                                            Visibility="{Binding IsChecked, ElementName=FilterHailField, Converter={StaticResource BoolToVis}}" />
                                     <CheckBox x:Name="FilterStormRelative" Content="Storm-relative velocity" Margin="12,0,0,0"
                                               ToolTip="Subtract the tracked storm motion from velocity so rotation stands out"
                                               Checked="StormRelative_Changed" Unchecked="StormRelative_Changed" />
-                                    <TextBlock Text="Min severe-hail prob." Margin="12,6,0,0" FontSize="12" />
-                                    <Slider x:Name="PoshSlider" AutomationProperties.Name="Minimum severe hail probability" Minimum="0" Maximum="100" Value="0" TickFrequency="10"
-                                            Margin="12,0,0,0" IsSnapToTickEnabled="True"
-                                            ValueChanged="StormFilter_SliderChanged" />
                                     <TextBlock x:Name="StormNoteText" FontSize="10.5" FontStyle="Italic" TextWrapping="Wrap"
                                                Foreground="{StaticResource TextDim}" Margin="12,6,0,0" Text="" />
                                     <Button Content="What do the symbols mean?" Margin="12,6,0,0" FontSize="11"
                                             Padding="7,3" Click="SymbolKeyButton_Click" />
+                                    </StackPanel>
                                 </StackPanel>
                             </Expander>
 
-                            <Expander Header="SPC &amp; REPORTS" Style="{StaticResource PanelSection}">
+                            <Expander Header="SPC &amp; REPORTS" Style="{StaticResource PanelSection}" IsExpanded="False">
                                 <StackPanel>
                                     <CheckBox x:Name="FilterOutlooks" Content="SPC outlook"
                                               ToolTip="Day 1 categorical convective outlook"

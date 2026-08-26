@@ -355,6 +355,7 @@ public partial class MainWindow : Window
         Loaded += async (_, _) =>
         {
             SyncLoopTooltip();
+            RestorePanelSections();
             foreach (var source in settings.Placefiles.ToList())
                 await _placefiles.AddAsync(source);
             foreach (var path in settings.ImportedShapes.ToList())
@@ -1966,6 +1967,47 @@ public partial class MainWindow : Window
         HodographImage.Source = null;
         HodographImage.Visibility = Visibility.Collapsed;
         HodographNote.Text = "";
+    }
+
+    /// <summary>
+    /// Restore each panel section to however it was left, and keep it that way.
+    /// </summary>
+    /// <remarks>
+    /// Hooked generically by walking for <see cref="Expander"/>s rather than by wiring nine
+    /// handlers in XAML, so a section added later is remembered without anyone remembering to
+    /// make it so. Keyed by header text: a name would be tidier but every one of these already
+    /// has a header, and an unkeyed section would silently stop persisting.
+    /// </remarks>
+    private void RestorePanelSections()
+    {
+        foreach (var section in FindExpanders(LayersPanel))
+        {
+            if (section.Header is not string header || header.Length == 0) continue;
+
+            if (_settings.PanelSections.TryGetValue(header, out bool open))
+                section.IsExpanded = open;
+
+            section.Expanded += PanelSection_Changed;
+            section.Collapsed += PanelSection_Changed;
+        }
+    }
+
+    private void PanelSection_Changed(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Expander { Header: string header } section) return;
+        _settings.PanelSections[header] = section.IsExpanded;
+        _settings.Save();
+    }
+
+    private static IEnumerable<Expander> FindExpanders(DependencyObject root)
+    {
+        int count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++)
+        {
+            var child = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
+            if (child is Expander expander) yield return expander;
+            foreach (var nested in FindExpanders(child)) yield return nested;
+        }
     }
 
     private void SymbolKeyButton_Click(object sender, RoutedEventArgs e) =>
