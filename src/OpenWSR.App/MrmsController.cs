@@ -8,6 +8,39 @@ using OpenWSR.Render;
 namespace OpenWSR.App;
 
 /// <summary>
+/// One MRMS gridded field: which product, drawn through which table, into which slot.
+/// </summary>
+/// <remarks>
+/// The composite and the hail field differ in the product path, the colour table, the value
+/// below which nothing is drawn, and which side of the radar sweep they sit on. Everything
+/// else — fetching, decoding 24.5 million points, quantising, and re-cutting the raster when
+/// the camera moves — is identical, so it is written once.
+/// </remarks>
+public sealed record MrmsLayer(
+    string Product, ColorTable Table, float MinValue, MapView.OverlaySlot Slot, string Label)
+{
+    /// <summary>Merged composite reflectivity, under the radar sweep.</summary>
+    public static MrmsLayer Composite { get; } = new(
+        MrmsClient.CompositeReflectivity, BuiltinTables.Reflectivity,
+        // MRMS reports down into the noise and painting all of it puts a grey haze over the
+        // country; 5 dBZ is where the pre-rendered mosaic starts, so the two agree.
+        MinValue: 5f, MapView.OverlaySlot.Field, "MRMS composite");
+
+    /// <summary>
+    /// Hourly maximum hail size, <em>over</em> the radar sweep.
+    ///
+    /// It goes in the Analysis slot because it is read against the echo — the question is
+    /// which part of this storm dropped the hail — and because the Field slot is already
+    /// spoken for by the composite it would otherwise fight with.
+    /// </summary>
+    public static MrmsLayer HailSize { get; } = new(
+        MrmsClient.HailSizeHourlyMax, BuiltinTables.HailSize,
+        // 12 mm is half an inch: below that it is pea hail nobody warns on, and painting it
+        // turns every ordinary thunderstorm into a hail swath.
+        MinValue: 12f, MapView.OverlaySlot.Analysis, "MRMS hail size");
+}
+
+/// <summary>
 /// The national mosaic from MRMS itself rather than someone else's pre-rendered tiles.
 ///
 /// The tile mosaic is published only to zoom 12 and is stretched above it, so the seamless
@@ -27,17 +60,11 @@ public sealed class MrmsController : IDisposable
     /// </summary>
     private const double Overscan = 1.35;
 
-    /// <summary>
-    /// Below this, nothing is drawn. MRMS reports down into the noise and painting all of
-    /// it puts a grey haze over the whole country; 5 dBZ is where the pre-rendered mosaic
-    /// starts too, so the two look like the same product.
-    /// </summary>
-    private const float MinDbz = 5f;
-
     /// <summary>MRMS flags "no radar coverage here" with a large negative rather than a NaN.</summary>
     private const float NoCoverage = -900f;
 
     private readonly MapView _mapView;
+    private readonly MrmsLayer _layer;
     private readonly MrmsClient _client = new();
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMinutes(2) };
 
@@ -58,9 +85,10 @@ public sealed class MrmsController : IDisposable
     public event Action<string>? StatusChanged;
     public event Action<string>? ErrorRaised;
 
-    public MrmsController(MapView mapView)
+    public MrmsController(MapView mapView, MrmsLayer? layer = null)
     {
         _mapView = mapView;
+        _layer = layer ?? MrmsLayer.Composite;
         _timer.Tick += async (_, _) => await RefreshAsync();
     }
 
@@ -87,7 +115,7 @@ public sealed class MrmsController : IDisposable
         _timer.Stop();
         _levels = null;
         _grid = null;
-        _mapView.SetImageOverlay(MapView.OverlaySlot.Field, null);
+        _mapView.SetImageOverlay(_layer.Slot, null);
     }
 
     /// <summary>
@@ -115,16 +143,17 @@ public sealed class MrmsController : IDisposable
         _busy = true;
         try
         {
-            StatusChanged?.Invoke("MRMS: fetching the national composite…");
-            var product = await _client.GetLatestAsync();
+            StatusChanged?.Invoke($"{_layer.Label}: fetching…");
+            var product = await _client.GetLatestAsync(_layer.Product);
             if (product is null)
             {
-                StatusChanged?.Invoke("MRMS: nothing published in the last two days.");
+                StatusChanged?.Invoke($"{_layer.Label}: nothing published in the last two days.");
                 return;
             }
 
             // Decoding 24.5 million points is not a UI-thread job.
-            var (levels, grid) = await Task.Run(() => Quantise(product.Grib2));
+            var (levels, grid) = await Task.Run(
+                () => Quantise(product.Grib2, _layer.Table, _layer.MinValue));
             if (!IsEnabled) return;
 
             _levels = levels;
@@ -134,11 +163,12 @@ public sealed class MrmsController : IDisposable
 
             double age = (DateTime.UtcNow - product.TimeUtc).TotalMinutes;
             StatusChanged?.Invoke(
-                $"MRMS composite {product.TimeUtc:HH:mm}Z ({age:F0} min old), {grid.Nx}×{grid.Ny} at {grid.DxDeg:F2}°");
+                $"{_layer.Label} {product.TimeUtc:HH:mm}Z ({age:F0} min old), "
+              + $"{grid.Nx}×{grid.Ny} at {grid.DxDeg:F2}°");
         }
         catch (Exception ex)
         {
-            ErrorRaised?.Invoke($"Could not load the MRMS composite: {ex.Message}");
+            ErrorRaised?.Invoke($"Could not load {_layer.Label}: {ex.Message}");
         }
         finally
         {
@@ -150,17 +180,18 @@ public sealed class MrmsController : IDisposable
     /// Decode and reduce to palette levels in one pass. Level 0 is "draw nothing", which
     /// covers both the no-coverage flag and anything under the display threshold.
     /// </summary>
-    public static (byte[] Levels, Grib2Grid Grid) Quantise(byte[] grib2)
+    public static (byte[] Levels, Grib2Grid Grid) Quantise(
+        byte[] grib2, ColorTable? table = null, float minValue = 5f)
     {
         var field = Grib2File.Decode(grib2);
-        var table = BuiltinTables.Reflectivity;
+        table ??= BuiltinTables.Reflectivity;
         float min = table.MinValue, range = table.Range;
 
         var levels = new byte[field.Values.Length];
         Parallel.For(0, field.Values.Length, i =>
         {
             float value = field.Values[i];
-            if (value <= NoCoverage || float.IsNaN(value) || value < MinDbz) return;
+            if (value <= NoCoverage || float.IsNaN(value) || value < minValue) return;
             levels[i] = (byte)Math.Clamp((value - min) / range * 255f, 1, 255);
         });
         return (levels, field.Grid);
@@ -191,14 +222,13 @@ public sealed class MrmsController : IDisposable
         double minY = centreY - half, maxY = centreY + half;
 
         var bgra = RenderRegion(
-            levels, grid, minX, minY, maxX, maxY, RasterSize,
-            BuiltinTables.Reflectivity.BuildRgba256());
+            levels, grid, minX, minY, maxX, maxY, RasterSize, _layer.Table.BuildRgba256());
 
         _rasterMinX = minX; _rasterMaxX = maxX;
         _rasterMinY = minY; _rasterMaxY = maxY;
         _rasterMetresPerPixel = camera.MetersPerPixel;
 
-        _mapView.SetImageOverlay(MapView.OverlaySlot.Field, new MapView.ImageOverlay(
+        _mapView.SetImageOverlay(_layer.Slot, new MapView.ImageOverlay(
             bgra, RasterSize, RasterSize, minX, minY, maxX, maxY, _opacity));
     }
 

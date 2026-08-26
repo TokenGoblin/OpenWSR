@@ -466,6 +466,13 @@
                                               Checked="StormFilter_Changed" Unchecked="StormFilter_Changed" />
                                     <CheckBox x:Name="FilterMeso" Content="Mesocyclones" IsChecked="True" Foreground="#FFE066" Margin="12,0,0,0"
                                               Checked="StormFilter_Changed" Unchecked="StormFilter_Changed" />
+                                    <CheckBox x:Name="FilterHailField" AutomationProperties.Name="Hail size swath"
+                                              Content="Hail size swath" Margin="12,0,0,0"
+                                              ToolTip="MRMS maximum estimated hail size over the last hour — where hail fell, not where a cell is now. Green 0.75 in, yellow 1 in, orange 1.75 in, red 2.75 in"
+                                              Checked="HailField_Changed" Unchecked="HailField_Changed" />
+                                    <Slider x:Name="HailFieldOpacitySlider" AutomationProperties.Name="Hail swath opacity"
+                                            Minimum="0" Maximum="100" Value="75" Margin="30,0,0,0"
+                                            ValueChanged="HailFieldOpacity_Changed" />
                                     <CheckBox x:Name="FilterStormRelative" Content="Storm-relative velocity" Margin="12,0,0,0"
                                               ToolTip="Subtract the tracked storm motion from velocity so rotation stands out"
                                               Checked="StormRelative_Changed" Unchecked="StormRelative_Changed" />

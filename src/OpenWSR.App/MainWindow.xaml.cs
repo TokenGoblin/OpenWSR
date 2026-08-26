@@ -35,6 +35,7 @@ public partial class MainWindow : Window
     private readonly ShapeImportController _imports;
     private readonly LightningController _lightning;
     private readonly MrmsController _mrms;
+    private readonly MrmsController _hailField;
     private readonly TrayNotifier _tray;
     private readonly PaneManager _panes;
     private readonly Geocoder _geocoder;
@@ -243,6 +244,10 @@ public partial class MainWindow : Window
         });
         _mrms.ErrorRaised += text => Dispatcher.BeginInvoke(() => ReportError(text));
 
+        _hailField = new MrmsController(_mapView, MrmsLayer.HailSize);
+        _hailField.StatusChanged += text => Dispatcher.BeginInvoke(() => Report(text));
+        _hailField.ErrorRaised += text => Dispatcher.BeginInvoke(() => ReportError(text));
+
         _tray = new TrayNotifier();
         _tray.Activated += () => Dispatcher.BeginInvoke(() =>
         {
@@ -323,6 +328,7 @@ public partial class MainWindow : Window
             _imports.NotifyViewChanged();
             _lightning.NotifyViewChanged();
             _mrms.NotifyViewChanged();
+            _hailField.NotifyViewChanged();
             NotifyHomeViewChanged();
             // The alerts poll drops expired warnings once a minute; the list must not show
             // one that has already run out in the meantime as though it were still in force.
@@ -362,6 +368,7 @@ public partial class MainWindow : Window
             _boundaries.Dispose();
             _lightning.Dispose();
             _mrms.Dispose();
+            _hailField.Dispose();
             _satellite?.Dispose();
             _future.Dispose();
             _outlooks.Dispose();
@@ -1518,6 +1525,22 @@ public partial class MainWindow : Window
             _mrms.Disable();
             MrmsNoteText.Text = "";
         }
+    }
+
+    /// <summary>
+    /// The hail swath is a derived field read against the echo, so it draws over the sweep
+    /// rather than under it and does not compete for the Field slot the mosaics share.
+    /// </summary>
+    private void HailField_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_hailField is null || FilterHailField is null) return;
+        if (FilterHailField.IsChecked == true) _hailField.Enable();
+        else _hailField.Disable();
+    }
+
+    private void HailFieldOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_hailField is not null) _hailField.Opacity = (float)(e.NewValue / 100.0);
     }
 
     private void MrmsOpacity_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)

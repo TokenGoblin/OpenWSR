@@ -1478,3 +1478,39 @@ Falls almost entirely out of the boundaries work: once a reader turns bytes into
 **Gate:** [PASSED] 590/590 tests, 0 warnings. Verified end to end in the running app: a
 GeoJSON of a polygon, a line and a point restored from settings on startup and listed as
 "3 features, 8 points", at 60 fps.
+
+## Hail as a field, not a scatter of markers
+
+The second Expected-tier Partial. Hail was per-cell markers sized by severe-hail
+probability — points from the SCIT algorithm, which say *a cell probably has hail* and not
+*this town was hit and by what size*.
+
+- [x] **Contour the right data.** The obvious move — interpolating between the dozen or so
+      SCIT cell points — would have invented a field between them. MRMS already publishes
+      MESH, maximum estimated size of hail, on the 7000×3500 CONUS grid, and the project
+      already decodes MRMS GRIB2. That is a measured field rather than a drawn-in one
+- [x] **The hourly maximum, not the instantaneous field.** Hail is a thing that *happened* to
+      a place: the instantaneous MESH shows only where a core is right now, and it is speckled
+      where the hourly one is a coherent swath
+- [x] **Units established from the data, because nothing states them.** MRMS publishes MESH
+      under local discipline 209, so ecCodes reports `units: unknown`. The peak of a CONUS
+      hour is 67.6, which is 2.66 in as millimetres — a baseball, and entirely ordinary. As
+      inches it would be a five-foot hailstone. Getting this wrong is a factor of 25 and the
+      file will not tell you
+- [x] **Two flag values, and no zeros at all.** Every cell is a size or a flag: −1 for "no
+      hail" inside radar coverage (16,122,011 of them) and −3 for "no coverage" outside it
+      (8,337,611). Drawing either paints the country
+- [x] **Bands are the sizes hail is reported in** — 19 mm is the 0.75 in severe threshold,
+      25 mm a quarter, 45 mm a golf ball, 70 mm a baseball — not an even ramp, because those
+      are the units a warning is written in. Below half an inch it fades out rather than
+      turning every thunderstorm into a swath
+- [x] **`MrmsLayer` generalises the controller** rather than copying it. The composite and the
+      hail field differ only in product path, colour table, threshold and slot; fetching,
+      decoding 24.5 million points, quantising and re-cutting the raster are identical
+- [x] **It draws in the `Analysis` slot, over the sweep.** Hail is read against the echo that
+      produced it, and the `Field` slot is already contested by the two mosaics and the
+      forecast raster — a third claimant there would have made it worse
+
+**Gate:** [PASSED] 599/599 tests, 0 warnings. Counts at every named hail size are golden
+against ecCodes 2.47.0 on a committed MESH hour. Verified live: the layer fetched
+`MRMS_MESH_Max_60min_00.50 ... 00:16Z`, 134 KB, no errors, 60 fps.

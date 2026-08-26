@@ -24,6 +24,20 @@ public sealed class MrmsClient : IDisposable
     /// <summary>Merged composite reflectivity — the national mosaic everyone means.</summary>
     public const string CompositeReflectivity = "CONUS/MergedReflectivityQCComposite_00.50";
 
+    /// <summary>
+    /// Maximum estimated size of hail, in millimetres, over the last hour.
+    ///
+    /// The hourly maximum rather than the instantaneous field, because hail is a thing that
+    /// <em>happened</em> to a place: the instantaneous MESH shows only where a core is right
+    /// now, and the question being asked of a hail layer is which towns have been hit. Two
+    /// minutes of scanning also leaves the instantaneous field speckled where the hourly one
+    /// is a coherent swath.
+    /// </summary>
+    public const string HailSizeHourlyMax = "CONUS/MESH_Max_60min_00.50";
+
+    /// <summary>Maximum estimated hail size right now, in millimetres.</summary>
+    public const string HailSizeNow = "CONUS/MESH_00.50";
+
     private static readonly ILogger Log = Serilog.Log.ForContext<MrmsClient>();
 
     private readonly AmazonS3Client _s3 = new(new AnonymousAWSCredentials(), new AmazonS3Config

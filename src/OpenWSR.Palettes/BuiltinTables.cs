@@ -58,6 +58,26 @@ public static class BuiltinTables
         (0.012f, new Rgba(0xF2, 0x7A, 0x1E, 0xFF)),
         (0.020f, new Rgba(0xE0, 0x20, 0x20, 0xFF)));
 
+    /// <summary>
+    /// MRMS maximum estimated hail size, in <b>millimetres</b> — the unit the GRIB2 carries.
+    /// MRMS uses local discipline 209, so ecCodes reports its units as "unknown" and the
+    /// scale has to be established from the data: a CONUS hour peaks around 68, which is
+    /// 2.7 inches. In inches that would be absurd and in centimetres more so.
+    ///
+    /// The stops are the sizes hail is actually reported in, not an even ramp, because
+    /// "quarter" and "golf ball" are the units a warning is written in:
+    /// 19 mm is the 0.75 in severe threshold, 25 mm a quarter, 45 mm a golf ball and
+    /// 70 mm a baseball. Below severe it fades out rather than painting the whole state.
+    /// </summary>
+    public static ColorTable HailSize { get; } = ColorTable.FromStops("Hail size (mm)",
+        (0f, new Rgba(0x30, 0x60, 0x50, 0x00)),
+        (12f, new Rgba(0x3C, 0xC8, 0x8C, 0x50)),
+        (19f, new Rgba(0x50, 0xE0, 0x60, 0xC0)),   // 0.75 in — severe
+        (25f, new Rgba(0xF2, 0xE3, 0x2A, 0xD8)),   // 1.00 in — quarter
+        (45f, new Rgba(0xF2, 0x7A, 0x1E, 0xE8)),   // 1.75 in — golf ball
+        (70f, new Rgba(0xE0, 0x20, 0x20, 0xF0)),   // 2.75 in — baseball
+        (100f, new Rgba(0xE0, 0x40, 0xE0, 0xF0)));
+
     public static ColorTable SpectrumWidth { get; } = ColorTable.FromStops("Spectrum width (m/s)",
         (0, new Rgba(0x20, 0x28, 0x30, 0x80)),
         (4, new Rgba(0x3C, 0x8B, 0xC8, 0xFF)),
