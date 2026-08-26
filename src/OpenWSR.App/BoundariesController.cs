@@ -16,30 +16,18 @@ namespace OpenWSR.App;
 ///
 /// <para><b>The geometry is far too big to draw literally.</b> The 1:500,000 county file is
 /// 1.03 million points; as overlay segments that is over six million vertices a frame, to
-/// draw lines that at national zoom are two hundred points to the pixel. So each rebuild
-/// culls to the viewport and then simplifies what is left to a screen-space tolerance, and
-/// rebuilds happen on a zoom change rather than a frame. Projection and bounds are computed
-/// once at load, because those do not depend on the view and reprojecting a million points
-/// per zoom step would cost more than the simplification does.</para>
+/// draw lines that at national zoom are two hundred points to the pixel. <see cref="ShapeLayer"/>
+/// carries the answer — project once, cull and thin per view — and rebuilds happen on a zoom
+/// or a pan rather than on a frame.</para>
 /// </remarks>
 public sealed class BoundariesController : IDisposable
 {
-    /// <summary>
-    /// How far a simplified line may sit from the true one, in screen pixels. Below about a
-    /// pixel there is nothing to see; above about two the corners of a county visibly move.
-    /// </summary>
-    private const double ToleranceP2x = 1.2;
-
     private static readonly uint StateColor = OverlayGeometry.Pack(165, 185, 210, 215);
     private static readonly uint CountyColor = OverlayGeometry.Pack(120, 140, 165, 140);
 
-    private sealed record Part(
-        (double X, double Y)[] Points,
-        double MinX, double MinY, double MaxX, double MaxY);
-
     private readonly MapView _mapView;
     private readonly BoundaryClient _client;
-    private readonly Dictionary<BoundarySet, List<Part>> _loaded = [];
+    private readonly Dictionary<BoundarySet, ShapeLayer> _loaded = [];
     private readonly HashSet<BoundarySet> _loading = [];
 
     private double _builtAtMetresPerPixel;
@@ -86,28 +74,12 @@ public sealed class BoundariesController : IDisposable
             var features = await _client.GetAsync(
                 set, new Progress<string>(text => StatusChanged?.Invoke(text)));
 
-            // Project once. Everything after this is culling and thinning, which are cheap
-            // by comparison and are the only parts that depend on where the camera is.
-            var parts = await Task.Run(() =>
-            {
-                var built = new List<Part>();
-                foreach (var feature in features)
-                    foreach (var ring in feature.Parts)
-                    {
-                        if (ring.Count < 2) continue;
-                        var points = new (double X, double Y)[ring.Count];
-                        for (int i = 0; i < ring.Count; i++)
-                            points[i] = GeoMath.ToMercator(ring[i].LatDeg, ring[i].LonDeg);
-                        var (minX, minY, maxX, maxY) = Polyline.Bounds(points);
-                        built.Add(new Part(points, minX, minY, maxX, maxY));
-                    }
-                return built;
-            });
+            var layer = await Task.Run(() => ShapeLayer.From(features));
 
-            _loaded[set] = parts;
+            _loaded[set] = layer;
             StatusChanged?.Invoke(
                 $"{(set == BoundarySet.States ? "State" : "County")} boundaries ready "
-              + $"({parts.Count} outlines).");
+              + $"({layer.PartCount} outlines).");
             Rebuild();
         }
         catch (Exception ex)
@@ -160,14 +132,7 @@ public sealed class BoundariesController : IDisposable
         _builtAtCenterX = cam.CenterX;
         _builtAtCenterY = cam.CenterY;
 
-        // A margin so a small pan does not immediately show an unbuilt edge.
-        double halfW = cam.ViewportWidth * cam.MetersPerPixel * 0.75;
-        double halfH = cam.ViewportHeight * cam.MetersPerPixel * 0.75;
-        double minX = cam.CenterX - halfW, maxX = cam.CenterX + halfW;
-        double minY = cam.CenterY - halfH, maxY = cam.CenterY + halfH;
-        double tolerance = ToleranceP2x * cam.MetersPerPixel;
-
-        var sets = new List<(List<Part> Parts, uint Colour, float Width)>();
+        var sets = new List<(ShapeLayer Layer, uint Colour, float Width)>();
         if (ShowCounties && _loaded.TryGetValue(BoundarySet.Counties, out var counties))
             sets.Add((counties, CountyColor, 1.1f));
         if (ShowStates && _loaded.TryGetValue(BoundarySet.States, out var states))
@@ -183,18 +148,8 @@ public sealed class BoundariesController : IDisposable
         _ = Task.Run(() =>
         {
             var geometry = new OverlayGeometry();
-            foreach (var (parts, colour, width) in sets)
-                foreach (var part in parts)
-                {
-                    if (part.MaxX < minX || part.MinX > maxX ||
-                        part.MaxY < minY || part.MinY > maxY) continue;
-
-                    var thinned = Polyline.Simplify(part.Points, tolerance);
-                    for (int i = 0; i + 1 < thinned.Count; i++)
-                        geometry.Lines.Add((
-                            thinned[i].X, thinned[i].Y,
-                            thinned[i + 1].X, thinned[i + 1].Y, colour, width));
-                }
+            foreach (var (layer, colour, width) in sets)
+                layer.Append(geometry, cam, colour, width);
 
             // A rebuild that the camera has already overtaken is thrown away rather than
             // drawn: it describes a view that is no longer on screen.

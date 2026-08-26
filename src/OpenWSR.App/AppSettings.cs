@@ -149,6 +149,13 @@ public sealed class AppSettings
     /// <summary>Placefile sources (URLs or local paths) to reload at startup.</summary>
     public List<string> Placefiles { get; set; } = [];
 
+    /// <summary>
+    /// Imported GeoJSON and shapefile paths to reload at startup. A file that has since been
+    /// moved or deleted is dropped from the list rather than reported: it is a layer someone
+    /// added once, not a document they asked to open.
+    /// </summary>
+    public List<string> ImportedShapes { get; set; } = [];
+
     /// <summary>The shortcuts card is shown once, on the first run, and never nags again.</summary>
     public bool WelcomeShown { get; set; }
 

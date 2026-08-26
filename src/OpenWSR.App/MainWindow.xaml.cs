@@ -32,6 +32,7 @@ public partial class MainWindow : Window
     private readonly PlacefileController _placefiles;
     private readonly RotationTracksController _tracks;
     private readonly BoundariesController _boundaries;
+    private readonly ShapeImportController _imports;
     private readonly LightningController _lightning;
     private readonly MrmsController _mrms;
     private readonly TrayNotifier _tray;
@@ -194,6 +195,16 @@ public partial class MainWindow : Window
         _boundaries.SetVisible(BoundarySet.States, settings.ShowStateLines);
         _boundaries.SetVisible(BoundarySet.Counties, settings.ShowCountyLines);
 
+        _imports = new ShapeImportController(_mapView);
+        _imports.Changed += () => Dispatcher.BeginInvoke(() =>
+        {
+            ImportList.ItemsSource = null;
+            ImportList.ItemsSource = _imports.Files;
+            ComposeOverlay();
+        });
+        _imports.StatusChanged += text => Dispatcher.BeginInvoke(() => Report(text));
+        _imports.ErrorRaised += text => Dispatcher.BeginInvoke(() => ReportError(text));
+
         _tracks = new RotationTracksController(_mapView);
         _tracks.StatusChanged += text => Dispatcher.BeginInvoke(() =>
         {
@@ -309,6 +320,7 @@ public partial class MainWindow : Window
             // Storm symbols are sized in screen pixels, so a zoom change means new geometry.
             _storms.NotifyViewChanged();
             _boundaries.NotifyViewChanged();
+            _imports.NotifyViewChanged();
             _lightning.NotifyViewChanged();
             _mrms.NotifyViewChanged();
             NotifyHomeViewChanged();
@@ -328,6 +340,11 @@ public partial class MainWindow : Window
             SyncLoopTooltip();
             foreach (var source in settings.Placefiles.ToList())
                 await _placefiles.AddAsync(source);
+            foreach (var path in settings.ImportedShapes.ToList())
+            {
+                if (System.IO.File.Exists(path)) await _imports.AddAsync(path);
+                else settings.ImportedShapes.Remove(path);
+            }
             await LoadStartupAsync();
             if (!settings.WelcomeShown)
             {
@@ -926,7 +943,7 @@ public partial class MainWindow : Window
 
         OverlayGeometry?[] sources =
         [
-            _boundaries.Geometry,
+            _boundaries.Geometry, _imports.Geometry,
             _outlooks.Geometry, _warnings.Geometry, _placefiles.Geometry,
             _storms.Geometry, _lightning.Geometry, _homeGeometry, _measureGeometry,
             _drawing.Geometry,
@@ -1997,6 +2014,37 @@ public partial class MainWindow : Window
         var url = PlacefilePrompt.Ask(this);
         if (string.IsNullOrWhiteSpace(url)) return;
         await AddPlacefileAsync(url.Trim());
+    }
+
+    private async void ImportAddFile_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Open a GeoJSON or shapefile",
+            Filter = ShapeImportController.FileFilter,
+        };
+        if (dialog.ShowDialog(this) != true) return;
+        await _imports.AddAsync(dialog.FileName);
+
+        if (_imports.Files.Any(f => f.Path == dialog.FileName)
+            && !_settings.ImportedShapes.Contains(dialog.FileName))
+        {
+            _settings.ImportedShapes.Add(dialog.FileName);
+            _settings.Save();
+        }
+    }
+
+    private void ImportToggled(object sender, RoutedEventArgs e)
+    {
+        if (_imports is null || sender is not FrameworkElement { Tag: ImportedShapes entry }) return;
+        _imports.SetEnabled(entry, ((System.Windows.Controls.CheckBox)sender).IsChecked == true);
+    }
+
+    private void ImportRemove_Click(object sender, RoutedEventArgs e)
+    {
+        if (_imports is null || sender is not FrameworkElement { Tag: ImportedShapes entry }) return;
+        _imports.Remove(entry);
+        if (_settings.ImportedShapes.Remove(entry.Path)) _settings.Save();
     }
 
     private async void PlacefileAddFile_Click(object sender, RoutedEventArgs e)

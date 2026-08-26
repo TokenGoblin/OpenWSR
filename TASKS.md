@@ -1444,3 +1444,37 @@ County until 7:15" — so it has to be something the app controls rather than in
 **Gate:** [PASSED] 569/569 tests, 0 warnings. Verified in the running app: both sets drawn
 over Utah, `Boundaries "Counties": 3235 shapes, 1033837 points` in the log, restored from
 settings across a restart, 60 fps with both on.
+
+## Importing your own shapes
+
+Falls almost entirely out of the boundaries work: once a reader turns bytes into
+`ShapeFeature`s, nothing about a county outline is special.
+
+- [x] **`GeoJson` reader in `OpenWSR.Geo`**, producing the same `ShapeFeature` a shapefile
+      does, so one drawing path serves both. Handles FeatureCollection, Feature, bare
+      geometry and GeometryCollection; Point, MultiPoint, LineString, MultiLineString,
+      Polygon and MultiPolygon. Polygon holes are kept as parts of their own, because the
+      inner boundary of a doughnut is as real a line as the outer one when drawing outlines
+- [x] **Coordinates are [longitude, latitude]** — RFC 7946 §3.1.1, the opposite of how a
+      position is spoken and of the (lat, lon) used everywhere else here. Reading it backwards
+      throws nothing, so it has its own test
+- [x] **A byte-order mark is stripped.** `System.Text.Json` rejects one outright rather than
+      skipping it, and SPC serves its GeoJSON with a UTF-8 BOM — a reader without this fails
+      on a real, current, official source
+- [x] **`ShapeLayer` extracted** from the boundaries controller, so project-once/cull-and-thin
+      lives in one place and both layers use it. Points draw as pixel-sized crosses rather
+      than as ground extents
+- [x] **`.geojson`, `.json`, `.shp` and `.zip`.** An archive is what a public data portal
+      actually hands you. The `.dbf` inside is matched by base name, not by "the first .dbf":
+      that works on a Census archive, which holds one of each, and silently mismatches on a
+      bundle of several layers. A missing `.dbf` costs attributes, not geometry, so it loads
+- [x] **Imports persist across a restart**, like placefiles. A path that has since moved is
+      dropped from the list rather than reported — it is a layer someone added once, not a
+      document they asked to open
+- [x] **Colours cycle through a fixed palette**, deliberately avoiding red, amber and green:
+      those already mean tornado, severe and flood on this map, and an imported county list
+      must not read as a warning
+
+**Gate:** [PASSED] 590/590 tests, 0 warnings. Verified end to end in the running app: a
+GeoJSON of a polygon, a line and a point restored from settings on startup and listed as
+"3 features, 8 points", at 60 fps.

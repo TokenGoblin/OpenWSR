@@ -498,6 +498,34 @@
                         </StackPanel>
                     </Expander>
 
+                    <Expander Header="IMPORTED SHAPES" Style="{StaticResource PanelSection}" IsExpanded="False">
+                        <StackPanel>
+                            <ItemsControl x:Name="ImportList">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,1">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <CheckBox Content="{Binding DisplayName}" IsChecked="{Binding Enabled}"
+                                                      ToolTip="{Binding Status}" Checked="ImportToggled"
+                                                      Unchecked="ImportToggled" Tag="{Binding}" />
+                                            <Button Grid.Column="1" Content="✕" Width="20" Padding="0" FontSize="10"
+                                                    Background="Transparent" BorderThickness="0"
+                                                    Click="ImportRemove_Click" Tag="{Binding}"
+                                                    ToolTip="Remove this file" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Button Content="Add file…" Click="ImportAddFile_Click" Margin="0,5,0,0" />
+                            <TextBlock FontSize="10" FontStyle="Italic" TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextDim}" Margin="0,4,0,0"
+                                       Text="GeoJSON or shapefile, zipped or not. Drawn as outlines in latitude and longitude — a projected file is not reprojected." />
+                        </StackPanel>
+                    </Expander>
+
                     <Expander Header="PLACEFILES" Style="{StaticResource PanelSection}" IsExpanded="False">
                         <StackPanel>
                             <ItemsControl x:Name="PlacefileList">
