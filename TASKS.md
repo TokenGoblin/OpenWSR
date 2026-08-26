@@ -1671,3 +1671,52 @@ hidden rather than by a decision baked into the palette.
 which is what a constant-buffer change most needs. Verified live: a clean settings file opens
 at "Showing everything"; 20 gives "Showing 20 to 75 dBZ"; pushing the maximum below the
 minimum drags it along; switching to velocity stands the filter down.
+
+## Code review: nine findings, all fixed
+
+A review of the nine commits on this branch. Two were shipping blockers, both in the dBZ
+window added an hour earlier, and both in the one path I had not exercised — restoring a
+*saved* value. I had tested the default and I had tested dragging the control at runtime.
+
+- [x] **Startup crash for anyone with a saved window.** `DbzMinSlider.Value = settings.…`
+      raises `ValueChanged` synchronously, and the handler reached `_radar`, which the
+      constructor does not assign until twelve lines later. Reproduced from the log:
+      `NullReferenceException at ApplyDbzFilter, MainWindow.xaml.cs:1412`, from the
+      constructor at line 90. The window never opened. Fixed by guarding `_radar` and by
+      calling `ApplyDbzFilter` once after the controller exists
+- [x] **Restoring the minimum destroyed the saved maximum.** The same synchronous event wrote
+      *both* ends back to disk while the maximum still held its XAML default, so a saved
+      50 dBZ became 75 on every launch. Demonstrated: a seeded max of 50 came back as 75.
+      Fixed with the `_suppressSliderEvents` flag this class already uses, and the restored
+      pair is clamped so a corrupt file cannot produce an inverted window
+- [x] **`Analysis` had two unmanaged claimants.** The hail swath and the rotation-track swath
+      both wrote it wholesale, so switching hail off cleared the slot and took the tracks with
+      it until they were rebuilt from scratch. They are different quantities, not alternatives,
+      so the answer is a fourth slot rather than the mutual exclusion `Field` uses
+- [x] **The hail swath could become unreachable while still running.** Its checkbox was inside
+      the panel gated on `StormsToggle` — today's decluttering work put it there — while
+      `StormsToggle_Unchecked` only stops storm tracking. Unticking "Track storms" hid the
+      control and left the layer painting and polling MRMS with no way to stop it. It is a
+      national MRMS field with no per-site dependency, so it moved to LAYERS
+- [x] **One failed tile raised a permanent error bar.** `BasemapFailure` fired at the first
+      exception, and a 404, a rate limit or one dropped packet is ordinary — ArcGIS caches
+      404 for tiles they do not hold, so the new terrain basemap would have tripped it on a
+      normal session. Now twelve failures, which is more than a screen's worth and not luck
+- [x] **A tombstoned `.dbf` row shifted every later attribute.** The row was skipped, but the
+      `.shp` has no matching deletion and the two are paired by position alone — one deleted
+      record silently drew Texas with California's name and FIPS. Deleted rows keep their
+      place now, with a regression test
+- [x] **Vertical pan could outrun the built margin.** The cull box is a fraction of each
+      viewport axis but the rebuild threshold divided both by the *width*, so on a pane wider
+      than tall a downward pan left an unbuilt strip along the bottom indefinitely. Measured
+      per axis now, in both the boundaries and the import controllers
+- [x] **A failed boundary download left the checkbox ticked** over a layer that was off, so
+      retrying meant unticking and reticking. The controller raises `LoadFailed` and the panel
+      puts the tick back where the layer actually is
+- [x] **A duplicated `<summary>` tag** orphaned the boundaries documentation onto the dBZ
+      property and left `ShowStateLines` undocumented — from a scripted insert of mine. Doc
+      generation is off, so nothing would have caught it
+
+**Gate:** [PASSED] 621/621 tests, 0 warnings. Both blockers reproduced before fixing and
+re-verified after: the app now starts with a saved 20–50 window, restores it, draws it, and
+leaves it intact on disk. The hail control stays in the tree with storm tracking off.

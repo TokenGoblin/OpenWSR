@@ -105,8 +105,18 @@ public sealed class HailFieldTests
     {
         // They are different quantities, so unlike the mosaics they do not compete: hail is
         // read against the echo that produced it.
-        Assert.Equal(OpenWSR.Render.MapView.OverlaySlot.Analysis, MrmsLayer.HailSize.Slot);
+        Assert.Equal(OpenWSR.Render.MapView.OverlaySlot.Swath, MrmsLayer.HailSize.Slot);
         Assert.Equal(OpenWSR.Render.MapView.OverlaySlot.Field, MrmsLayer.Composite.Slot);
         Assert.NotEqual(MrmsLayer.HailSize.Product, MrmsLayer.Composite.Product);
+    }
+
+    [Fact]
+    public void TheHailSwathDoesNotShareASlotWithRotationTracks()
+    {
+        // Both are accumulations over time drawn above the sweep, and both write their slot
+        // wholesale — so sharing one meant switching the hail layer off cleared the slot and
+        // took a rotation-track swath with it, not giving it back until the tracks were
+        // rebuilt from scratch. A slot is owned by one producer.
+        Assert.NotEqual(OpenWSR.Render.MapView.OverlaySlot.Analysis, MrmsLayer.HailSize.Slot);
     }
 }

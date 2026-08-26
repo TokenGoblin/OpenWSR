@@ -163,11 +163,6 @@ public sealed class AppSettings
     public bool ShowSiteMarkers { get; set; } = true;
 
     /// <summary>
-    /// Political boundaries as their own layer. Off by default: the first time either is
-    /// switched on it downloads from the US Census, and a startup that reaches for the
-    /// network before the user has asked for anything is the wrong default.
-    /// </summary>
-    /// <summary>
     /// The dBZ window the radar draws, defaulting to everything.
     /// </summary>
     /// <remarks>
@@ -180,6 +175,11 @@ public sealed class AppSettings
 
     public float DbzFilterMax { get; set; } = 75f;
 
+    /// <summary>
+    /// Political boundaries as their own layer. Off by default: the first time either is
+    /// switched on it downloads from the US Census, and a startup that reaches for the
+    /// network before the user has asked for anything is the wrong default.
+    /// </summary>
     public bool ShowStateLines { get; set; }
 
     public bool ShowCountyLines { get; set; }

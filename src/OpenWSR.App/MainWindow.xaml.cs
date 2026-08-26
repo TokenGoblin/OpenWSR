@@ -87,13 +87,20 @@ public partial class MainWindow : Window
         _mapView.SetMarkers(RadarSites.All.Select(s => (s.LatDeg, s.LonDeg, s.Icao)));
         _mapView.MarkersEnabled = settings.ShowSiteMarkers;
         FilterSites.IsChecked = settings.ShowSiteMarkers;
-        DbzMinSlider.Value = settings.DbzFilterMin;
-        DbzMaxSlider.Value = settings.DbzFilterMax;
+        // Setting Value raises ValueChanged synchronously. Left unsuppressed, restoring the
+        // minimum ran the handler while the maximum still held its XAML default, which wrote
+        // that default back over the saved one — and the handler reaches _radar, which is not
+        // constructed until further down this constructor.
+        _suppressSliderEvents = true;
+        DbzMinSlider.Value = Math.Min(settings.DbzFilterMin, settings.DbzFilterMax);
+        DbzMaxSlider.Value = Math.Max(settings.DbzFilterMin, settings.DbzFilterMax);
+        _suppressSliderEvents = false;
         FilterStates.IsChecked = settings.ShowStateLines;
         FilterCounties.IsChecked = settings.ShowCountyLines;
         MapHost.Child = new D3DHostControl(_mapView);
 
         _radar = new RadarDisplayController(_mapView);
+        ApplyDbzFilter(); // the sliders were restored above, before this existed
 
         _volume = new VolumeController(_mapView, _radar);
         _volume.StatusChanged += text => Dispatcher.BeginInvoke(() => Report(text));
@@ -196,6 +203,12 @@ public partial class MainWindow : Window
             BoundariesStatusText.Text = text;
         });
         _boundaries.ErrorRaised += text => Dispatcher.BeginInvoke(() => ReportError(text));
+        _boundaries.LoadFailed += set => Dispatcher.BeginInvoke(() =>
+        {
+            // Put the tick back where the layer actually is, so retrying is one click.
+            if (set == BoundarySet.States) FilterStates.IsChecked = false;
+            else FilterCounties.IsChecked = false;
+        });
 
         // The checkboxes were restored above, before this existed, so their handler no-opped.
         _boundaries.SetVisible(BoundarySet.States, settings.ShowStateLines);
@@ -363,7 +376,7 @@ public partial class MainWindow : Window
             foreach (var path in settings.ImportedShapes.ToList())
             {
                 if (System.IO.File.Exists(path)) await _imports.AddAsync(path);
-                else settings.ImportedShapes.Remove(path);
+                else if (settings.ImportedShapes.Remove(path)) settings.Save();
             }
             await LoadStartupAsync();
             if (!settings.WelcomeShown)
@@ -1389,6 +1402,7 @@ public partial class MainWindow : Window
     /// </remarks>
     private void DbzFilter_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
+        if (_suppressSliderEvents) return;
         if (_mapView is null || _settings is null || DbzMinSlider is null || DbzMaxSlider is null)
             return;
 
@@ -1407,7 +1421,7 @@ public partial class MainWindow : Window
     /// <summary>Push the window to the renderer, or open it wide for non-reflectivity.</summary>
     private void ApplyDbzFilter()
     {
-        if (_mapView is null || _settings is null) return;
+        if (_mapView is null || _settings is null || _radar is null) return;
 
         bool reflectivity = _radar.CurrentMoment == Moment.Reflectivity;
         if (reflectivity)

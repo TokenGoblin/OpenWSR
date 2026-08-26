@@ -181,9 +181,12 @@ public sealed class ShapeImportController
 
         bool zoomed = Math.Abs(cam.MetersPerPixel - _builtAtMetresPerPixel)
                       / Math.Max(cam.MetersPerPixel, 1e-6) > 0.05;
-        double moved = Math.Max(
-            Math.Abs(cam.CenterX - _builtAtCenterX), Math.Abs(cam.CenterY - _builtAtCenterY));
-        if (!zoomed && moved / (cam.ViewportWidth * cam.MetersPerPixel) < 0.25) return;
+        // Per axis — see BoundariesController.NotifyViewChanged.
+        double pannedX = Math.Abs(cam.CenterX - _builtAtCenterX)
+                       / (cam.ViewportWidth * cam.MetersPerPixel);
+        double pannedY = Math.Abs(cam.CenterY - _builtAtCenterY)
+                       / (cam.ViewportHeight * cam.MetersPerPixel);
+        if (!zoomed && Math.Max(pannedX, pannedY) < 0.25) return;
         Rebuild();
     }
 

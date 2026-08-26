@@ -49,6 +49,15 @@ public sealed class BoundariesController : IDisposable
     public event Action<string>? StatusChanged;
     public event Action<string>? ErrorRaised;
 
+    /// <summary>
+    /// A set asked for could not be loaded and is no longer on.
+    /// </summary>
+    /// <remarks>
+    /// The panel has to hear about this, or its checkbox stays ticked over a layer that is
+    /// off and the only way to retry is to untick and retick.
+    /// </remarks>
+    public event Action<BoundarySet>? LoadFailed;
+
     /// <summary>True when the set is on disk, so turning it on will not hit the network.</summary>
     public bool IsCached(BoundarySet set) => _client.IsCached(set);
 
@@ -86,6 +95,7 @@ public sealed class BoundariesController : IDisposable
         {
             if (set == BoundarySet.States) ShowStates = false;
             else ShowCounties = false;
+            LoadFailed?.Invoke(set);
             ErrorRaised?.Invoke($"Could not load boundaries: {ex.Message}");
         }
         finally
@@ -110,11 +120,15 @@ public sealed class BoundariesController : IDisposable
 
         bool zoomed = Math.Abs(cam.MetersPerPixel - _builtAtMetresPerPixel)
                       / Math.Max(cam.MetersPerPixel, 1e-6) > 0.05;
-        double movedX = Math.Abs(cam.CenterX - _builtAtCenterX);
-        double movedY = Math.Abs(cam.CenterY - _builtAtCenterY);
-        double panned = Math.Max(movedX, movedY) / (cam.ViewportWidth * cam.MetersPerPixel);
+        // Per axis: the margin is a fraction of each viewport dimension, and on a pane
+        // wider than it is tall a vertical pan would otherwise be measured against the
+        // width and leave an unbuilt strip along the bottom edge indefinitely.
+        double pannedX = Math.Abs(cam.CenterX - _builtAtCenterX)
+                       / (cam.ViewportWidth * cam.MetersPerPixel);
+        double pannedY = Math.Abs(cam.CenterY - _builtAtCenterY)
+                       / (cam.ViewportHeight * cam.MetersPerPixel);
 
-        if (!zoomed && panned < 0.25) return;
+        if (!zoomed && Math.Max(pannedX, pannedY) < 0.25) return;
         Rebuild();
     }
 

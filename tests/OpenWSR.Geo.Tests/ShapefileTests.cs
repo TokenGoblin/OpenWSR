@@ -127,6 +127,27 @@ public sealed class ShapefileTests
     }
 
     [Fact]
+    public void ADeletedAttributeRowKeepsItsPlace()
+    {
+        // A .dbf marks a deleted record with '*' but the .shp has no matching deletion, and
+        // the two are paired by position alone. Dropping the row would slide every later
+        // shape onto its neighbour's attributes — Texas drawn as California, silently.
+        var shp = File.ReadAllBytes(Path("cb_2023_us_state_20m.shp"));
+        var dbf = File.ReadAllBytes(Path("cb_2023_us_state_20m.dbf"));
+
+        int headerBytes = BitConverter.ToUInt16(dbf, 8);
+        int recordBytes = BitConverter.ToUInt16(dbf, 10);
+        dbf[headerBytes] = (byte)'*';          // tombstone the first record
+
+        var features = Shapefile.Read(shp, dbf);
+
+        Assert.Equal(52, features.Count);
+        Assert.Equal("California", features[1]["NAME"]);   // still the second row
+        Assert.Equal("Arizona", features[51]["NAME"]);     // and the last is not shifted
+        Assert.True(recordBytes > 0);
+    }
+
+    [Fact]
     public void SomethingThatIsNotAShapefileSaysSo()
     {
         var bytes = new byte[200];

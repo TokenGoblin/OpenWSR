@@ -221,9 +221,18 @@ public static class Shapefile
         {
             int at = headerBytes + r * recordBytes;
             if (at + recordBytes > dbf.Length) break;
-            if (dbf[at] == (byte)'*') continue; // tombstoned
-
             var row = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            // A tombstoned row keeps its place. The .shp has no matching deletion and the
+            // two files are matched by position alone, so dropping one here would shift
+            // every following shape onto its neighbour's attributes — a county drawn with
+            // the wrong name and FIPS, with nothing to notice it by.
+            if (dbf[at] == (byte)'*')
+            {
+                rows.Add(row);
+                continue;
+            }
+
             int field = at + 1;
             for (int f = 0; f < names.Count; f++)
             {

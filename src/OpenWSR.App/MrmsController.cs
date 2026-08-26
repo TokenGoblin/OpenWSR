@@ -37,7 +37,7 @@ public sealed record MrmsLayer(
         MrmsClient.HailSizeHourlyMax, BuiltinTables.HailSize,
         // 12 mm is half an inch: below that it is pea hail nobody warns on, and painting it
         // turns every ordinary thunderstorm into a hail swath.
-        MinValue: 12f, MapView.OverlaySlot.Analysis, "MRMS hail size");
+        MinValue: 12f, MapView.OverlaySlot.Swath, "MRMS hail size");
 }
 
 /// <summary>

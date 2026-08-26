@@ -201,6 +201,19 @@ public sealed class MapView : IDisposable
         Analysis = 1,
 
         /// <summary>
+        /// Over the radar too, but a slot of its own so it cannot fight
+        /// <see cref="Analysis"/>.
+        ///
+        /// Rotation tracks and the hail swath are both accumulations over time drawn above
+        /// the sweep, and sharing one slot meant each silently erased the other: switching
+        /// the hail layer off cleared the slot, taking a rotation-track swath with it and
+        /// not giving it back until the tracks were rebuilt from scratch. They are different
+        /// quantities measuring different things, so unlike Field's claimants they are not
+        /// alternatives and must not be made mutually exclusive.
+        /// </summary>
+        Swath = 3,
+
+        /// <summary>
         /// Below everything else: cloud imagery, drawn where the satellite tiles are.
         ///
         /// Separate from <see cref="Field"/> on purpose. Field's claimants — the forecast
@@ -212,7 +225,7 @@ public sealed class MapView : IDisposable
         Satellite = 2,
     }
 
-    private const int OverlaySlotCount = 3;
+    private const int OverlaySlotCount = 4;
     private readonly ImageOverlay?[] _imageOverlays = new ImageOverlay?[OverlaySlotCount];
     private readonly ImageOverlay?[] _uploadedImages = new ImageOverlay?[OverlaySlotCount];
     private readonly Vortice.Direct3D11.ID3D11Texture2D?[] _imageTextures =
@@ -464,10 +477,19 @@ public sealed class MapView : IDisposable
     private readonly TileFetcher? _labelFetcher;
 
     /// <summary>
-    /// The basemap's first tile failure, or null. Exposed because a broken tile source is
-    /// indistinguishable on screen from a slow one — the map is simply empty either way.
+    /// Set once the basemap looks genuinely broken rather than merely unlucky, and null
+    /// otherwise. A broken tile source is indistinguishable on screen from a slow one, since
+    /// the map is empty either way.
     /// </summary>
-    public string? BasemapFailure => _fetcher.FailureCount > 0 ? _fetcher.FirstFailure : null;
+    /// <remarks>
+    /// A threshold rather than the first failure. One 404, a rate limit, a dropped packet or
+    /// a timeout is ordinary, and ArcGIS caches in particular answer 404 for tiles they
+    /// simply do not hold at some zooms — the terrain basemap would raise a persistent error
+    /// bar on a perfectly normal session. Twelve failures is more than a screen's worth of
+    /// tiles and is not luck.
+    /// </remarks>
+    public string? BasemapFailure =>
+        _fetcher.FailureCount >= 12 ? _fetcher.FirstFailure : null;
 
     /// <summary>
     /// How hard the place names are lifted. CARTO draws them mid-grey, which is dim against
@@ -749,6 +771,7 @@ public sealed class MapView : IDisposable
             // instead of it.
             quads.Begin();
             DrawImageOverlay(OverlaySlot.Analysis, cam, quads, device);
+            DrawImageOverlay(OverlaySlot.Swath, cam, quads, device);
 
             // Place names last of the map layers, so they sit over the weather rather than
             // under it. The name of the town a storm is on top of is exactly what wants
