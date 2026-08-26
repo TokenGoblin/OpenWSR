@@ -71,7 +71,7 @@ premium tiers elsewhere and two have no commercial equivalent:
 | Azimuthal shear / rotation tracks | Expected | **Done** — LLSD azimuthal shear as a live product, plus time-accumulated rotation-track swaths |
 | Hail size contours | Expected | **Done** — MRMS MESH hourly maximum as a size-banded field, plus the per-cell markers |
 | VWP / VAD wind profile | Nice | **Done** — fitted from Level II velocity rather than decoded from NVW, so it works on any volume back to 1991 |
-| Soundings / hodographs | Nice | **Open** — arguably out of scope |
+| Soundings / hodographs | Nice | **Hodograph done** — plotted from the VAD profile with storm-relative helicity and bulk shear. A thermodynamic sounding stays out of scope: it needs model or RAOB data, which a radar does not carry |
 | 3D volume rendering | Cosmetic | **Done** — Cartesian resample, ray marched, orbit camera |
 
 The cross-section was called out in the original scan as *"the largest structural gap in

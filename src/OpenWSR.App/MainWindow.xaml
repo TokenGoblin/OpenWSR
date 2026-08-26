@@ -767,6 +767,13 @@
                 <DockPanel Margin="8,6,6,6">
                     <TextBlock DockPanel.Dock="Top" Text="WIND PROFILE" FontWeight="Bold" FontSize="11"
                                Foreground="{StaticResource TextDim}" Margin="0,0,0,2" />
+                    <Image x:Name="HodographImage" DockPanel.Dock="Top" Width="176" Height="176"
+                           Margin="0,2,0,2" HorizontalAlignment="Center"
+                           Visibility="Collapsed"
+                           ToolTip="Hodograph: the wind vector at each height, tip to tip. Length is shear, curvature is the rotation a storm can tilt upright. Dots mark each kilometre; the cross is the tracked storm's motion." />
+                    <TextBlock x:Name="HodographNote" DockPanel.Dock="Top" FontSize="10.5"
+                               FontFamily="Consolas" TextWrapping="Wrap" Margin="0,0,0,4"
+                               Foreground="{StaticResource TextDim}" Text="" />
                     <TextBlock x:Name="WindProfileNote" DockPanel.Dock="Top" FontSize="10.5"
                                FontStyle="Italic" TextWrapping="Wrap" Margin="0,0,0,6"
                                Foreground="{StaticResource TextDim}" Text="" />

@@ -186,6 +186,19 @@ Only things that *are* a physical extent — a mesocyclone radius, an alert ring
 metres. Line widths are already pixel-constant in `OverlayRenderer`. So are dash lengths —
 the forecast track's dashes were 2.5 km of Mercator and went solid at national zoom.
 
+**The hodograph has two sign-and-scope traps, and neither one throws.** A `VadLevel`
+reports the direction the wind comes *from*, so components carry a negative sign
+(`u = -speed·sin`, `v = -speed·cos`); lose it and the plot is rotated 180°, which still looks
+like a hodograph. WPF's y grows downward, so the vertical axis is negated when projecting;
+without that the plot is mirrored, turning a veering profile into a backing one and reversing
+the sign of everything read off it. Separately, `Hodograph.Layer` returns what it has when
+asked for more depth than the profile spans — right for a calculation, a trap for a caption,
+because a 2.7 km profile will happily produce a "0–6 km shear". Check `Hodograph.DepthM`
+before labelling anything with a depth. Storm-relative helicity is golden against MetPy 1.7.1
+including the interpolated layer top; **Bunkers is deliberately absent**, because its mean
+wind is pressure-weighted and a radar profile has no pressure — a standard atmosphere would
+only make our number agree with the reference because both were fed the same invention.
+
 **A tile service advertising a zoom range is not promising to have the tiles.**
 `USGSShadedReliefOnly` would have been the better terrain basemap — grey relief leaves the
 reflectivity palette the only saturated thing on screen — and its metadata advertises levels

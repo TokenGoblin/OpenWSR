@@ -1542,3 +1542,37 @@ against ecCodes 2.47.0 on a committed MESH hour. Verified live: the layer fetche
 
 **Gate:** [PASSED] 599/599 tests, 0 warnings. Verified in the running app: 24 distinct tiles
 cached, attribution reads "USGS The National Map", no tile failures, 60 fps.
+
+## A hodograph, from the profile already being fitted
+
+The wind profile panel listed barbs. A barb list says what the wind does at each height; the
+hodograph says what the *profile* does, which is the question that matters for rotation —
+length is shear, curvature is the streamwise vorticity a storm tilts into a mesocyclone.
+
+- [x] **`Hodograph` in `OpenWSR.Nexrad.Analysis`**, working from the VAD profile the app
+      already fits from Level II velocity. No new data source, and nothing thermodynamic:
+      storm-relative helicity needs heights and winds only
+- [x] **Storm-relative helicity golden against MetPy 1.7.1**, on a regular grid and on an
+      irregular profile whose layer tops fall *between* levels — MetPy interpolates there and
+      snapping to the level below would drop a third of the layer. Depth is measured from the
+      lowest fitted level, matching MetPy's `with_agl=True`: a VAD profile starts wherever the
+      lowest cut found echo, so measuring from sea level would make "0–1 km" mean something
+      different every scan
+- [x] **Positive and negative helicity reported apart**, not just summed. A hodograph that
+      doubles back contains rotation of both signs and the total alone calls that benign
+- [x] **Helicity is measured against the *observed* storm motion** when a cell is tracked —
+      the advantage of doing this in a radar application rather than from a sounding, which
+      has to estimate where a storm would go. The 0–6 km mean wind is the fallback, and the
+      readout says which was used, because the number means different things
+- [x] **Bunkers deliberately not implemented.** Its mean wind is pressure-weighted and a radar
+      profile has no pressure. Synthesising a standard atmosphere would produce a number that
+      agrees with MetPy only because both were handed the same invention — and we already have
+      something better in the measured cell motion
+- [x] **Caught by running it: the readout was quoting layers the profile did not span.** On a
+      live volume fitted to 2.7 km it printed "0–6 shear" and "SRH 0–3", because
+      `Hodograph.Layer` returns what it has when asked for more. It now checks
+      `Hodograph.DepthM` and omits any layer it cannot honestly fill, saying how deep the
+      profile actually is instead
+
+**Gate:** [PASSED] 613/613 tests, 0 warnings. Verified live: on a 0.6 km profile it draws the
+trace and suppresses both derived layers rather than inventing them.

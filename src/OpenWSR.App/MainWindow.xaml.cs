@@ -1848,6 +1848,7 @@ public partial class MainWindow : Window
         {
             WindProfileList.ItemsSource = null;
             WindProfileNote.Text = "No velocity in this volume.";
+            ClearHodograph();
             return;
         }
 
@@ -1859,6 +1860,7 @@ public partial class MainWindow : Window
             WindProfileList.ItemsSource = null;
             WindProfileNote.Text =
                 "No level had enough echo around the radar to fit a wind. Clear air often will not.";
+            ClearHodograph();
             return;
         }
 
@@ -1877,6 +1879,93 @@ public partial class MainWindow : Window
         WindProfileNote.Text =
             $"{levels.Count} levels to {levels[^1].AltitudeM / 1000:F1} km · "
             + $"surface flow {lowest.DirectionDeg:F0}° at {lowest.SpeedKnots:F0} kt";
+
+        DrawHodograph(levels, sweeps[0].RadarLatDeg, sweeps[0].RadarLonDeg);
+    }
+
+    /// <summary>
+    /// Plot the profile and report the helicity in it.
+    /// </summary>
+    /// <remarks>
+    /// Helicity is measured against the <em>observed</em> motion of a tracked cell when there
+    /// is one. That is the advantage of computing this inside a radar application rather than
+    /// from a sounding: a sounding has to estimate where a storm would go, and this knows
+    /// where one actually went. With nothing tracked it falls back to the mean wind through
+    /// the layer, and says which it used, because the number means different things.
+    /// </remarks>
+    private void DrawHodograph(IReadOnlyList<VadLevel> levels, double radarLatDeg, double radarLonDeg)
+    {
+        var points = Hodograph.FromProfile(levels);
+        if (points.Count < 2)
+        {
+            ClearHodograph();
+            return;
+        }
+
+        var tracked = _storms.Storms
+            .Where(s => s.SpeedKmh is > 3 && s.BearingDeg is not null)
+            .OrderBy(s => GeoMath.DistanceM(s.LatDeg, s.LonDeg, radarLatDeg, radarLonDeg))
+            .FirstOrDefault();
+
+        (double UMs, double VMs) motion;
+        string basis;
+        if (tracked is not null)
+        {
+            // A storm bearing is the direction it is heading, not where it comes from, so
+            // this carries no negative sign — unlike the wind conversion.
+            double radians = tracked.BearingDeg!.Value * Math.PI / 180.0;
+            double speedMs = tracked.SpeedKmh!.Value / 3.6;
+            motion = (speedMs * Math.Sin(radians), speedMs * Math.Cos(radians));
+            basis = $"vs cell {tracked.Id}";
+        }
+        else
+        {
+            motion = Hodograph.MeanWind(points, 6000);
+            basis = "vs 0–6 km mean wind";
+        }
+
+        bool knots = Units.System != UnitSystem.Metric;
+        HodographImage.Source = HodographPlot.Build(points, motion, 176, knots);
+        HodographImage.Visibility = HodographImage.Source is null
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+
+        // Only quote a layer the profile actually spans. Hodograph.Layer returns what it has
+        // when asked for more, so labelling a 2.7 km profile's shear "0–6 km" would be a
+        // plausible-looking number that is simply not the quantity named.
+        double depthM = Hodograph.DepthM(points);
+        var lines = new List<string>();
+
+        var helicity = new List<string>();
+        foreach (int km in new[] { 1, 3 })
+            if (depthM >= km * 1000)
+            {
+                var (_, _, srh) = Hodograph.StormRelativeHelicity(
+                    points, motion.UMs, motion.VMs, km * 1000);
+                helicity.Add($"0–{km} {srh:F0}");
+            }
+        if (helicity.Count > 0) lines.Add($"SRH {string.Join("  ", helicity)} m²/s²");
+
+        int shearKm = depthM >= 6000 ? 6 : (int)(depthM / 1000);
+        if (shearKm >= 1)
+        {
+            var shear = Hodograph.BulkShear(points, shearKm * 1000);
+            double magnitude = knots ? shear.MagnitudeMs * 1.943844 : shear.MagnitudeMs;
+            lines.Add($"0–{shearKm} shear {magnitude:F0} {(knots ? "kt" : "m/s")}");
+        }
+
+        lines.Add(depthM < 3000
+            ? $"{basis} · profile only {depthM / 1000:F1} km deep"
+            : basis);
+
+        HodographNote.Text = string.Join(Environment.NewLine, lines);
+    }
+
+    private void ClearHodograph()
+    {
+        HodographImage.Source = null;
+        HodographImage.Visibility = Visibility.Collapsed;
+        HodographNote.Text = "";
     }
 
     private void SymbolKeyButton_Click(object sender, RoutedEventArgs e) =>
