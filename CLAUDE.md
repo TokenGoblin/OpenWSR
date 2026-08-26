@@ -57,7 +57,7 @@ GitHub is deferred rather than abandoned: revisit it at release time.
 
 ```
 dotnet build OpenWSR.slnx                    # NOTE: .slnx, not .sln
-dotnet test OpenWSR.slnx                     # 546 tests
+dotnet test OpenWSR.slnx                     # 621 tests
 dotnet run --project src/OpenWSR.App
 dotnet publish src/OpenWSR.App -c Release    # single-file self-contained exe
 ```
@@ -264,6 +264,15 @@ genuinely stand alone: dashes, crosshairs, the measure line. Chains must actuall
 is sized in physical pixels, so a width taken literally draws at two thirds of its weight on a
 150 % display — which looks like nothing more than a design choice, and was most of why every
 overlay line read as a hairline.
+
+**A gigabyte of working set is this application behaving normally.** Measured over twenty
+minutes of live streaming with no interaction: it sawtooths between roughly 700 MB and
+1.45 GB, with two full gen2 cycles returning it to a stable floor (685 MB, then 748 MB). It
+is not a leak — handles and threads stay flat, `LiveFeed`'s assemblers are capped at two and
+pruned, and the peaks are one volume's decode awaiting collection. A Level II volume is about
+210 MB as floats once every moment is decoded, so a couple of them in flight is the shape of
+the graph. Tile textures are *not* part of that number: they are `Immutable` with no CPU
+access and live in VRAM.
 
 **Nothing on the UI thread may block on I/O.** `LiveFeed` exposes `StartAsync`/`StopAsync`;
 a blocking `Wait(5s)` in `Stop()` froze the window on every live toggle. Dispose paths

@@ -201,6 +201,17 @@ public sealed class MapView : IDisposable
         Analysis = 1,
 
         /// <summary>
+        /// Below everything else: cloud imagery, drawn where the satellite tiles are.
+        ///
+        /// Separate from <see cref="Field"/> on purpose. Field's claimants — the forecast
+        /// raster, the MRMS composite — are the same quantity as the radar and are mutually
+        /// exclusive with each other by construction. Clouds are a different measurement
+        /// entirely and the whole point is to see them *under* precipitation, so sharing a
+        /// slot would make the two turn each other off.
+        /// </summary>
+        Satellite = 2,
+
+        /// <summary>
         /// Over the radar too, but a slot of its own so it cannot fight
         /// <see cref="Analysis"/>.
         ///
@@ -212,17 +223,6 @@ public sealed class MapView : IDisposable
         /// alternatives and must not be made mutually exclusive.
         /// </summary>
         Swath = 3,
-
-        /// <summary>
-        /// Below everything else: cloud imagery, drawn where the satellite tiles are.
-        ///
-        /// Separate from <see cref="Field"/> on purpose. Field's claimants — the forecast
-        /// raster, the MRMS composite — are the same quantity as the radar and are mutually
-        /// exclusive with each other by construction. Clouds are a different measurement
-        /// entirely and the whole point is to see them *under* precipitation, so sharing a
-        /// slot would make the two turn each other off.
-        /// </summary>
-        Satellite = 2,
     }
 
     private const int OverlaySlotCount = 4;

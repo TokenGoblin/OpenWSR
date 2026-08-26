@@ -5,9 +5,16 @@ using Vortice.DXGI;
 namespace OpenWSR.Render.Tiles;
 
 /// <summary>
-/// VRAM LRU cache of tile textures, owned by the render thread. Capped at ~512 MB:
-/// a 256x256 BGRA tile is 256 KB, so 2000 tiles ≈ 500 MB.
+/// VRAM LRU cache of tile textures, owned by the render thread.
 /// </summary>
+/// <remarks>
+/// A 256x256 BGRA tile is 256 KB, so the default 2000 is about 500 MB. That figure described
+/// the whole system when there was one cache; there are four now — the basemap on this
+/// default, and the mosaic, satellite and label layers at 600 apiece — so the ceiling across
+/// all of them is nearer 1 GB. It is VRAM rather than process memory: the textures are
+/// <see cref="ResourceUsage.Immutable"/> with no CPU access, which is worth knowing before
+/// blaming them for a working-set number.
+/// </remarks>
 public sealed class TileTextureCache(ID3D11Device device, int capacity = 2000) : IDisposable
 {
     private sealed class Entry

@@ -1720,3 +1720,32 @@ window added an hour earlier, and both in the one path I had not exercised — r
 **Gate:** [PASSED] 621/621 tests, 0 warnings. Both blockers reproduced before fixing and
 re-verified after: the app now starts with a saved 20–50 window, restores it, draws it, and
 leaves it intact on disk. The hail control stays in the tree with storm tracking off.
+
+## Sweep after the review: three items, and a memory question answered
+
+With the review's nine findings closed, a sweep for what was actually left. No TODO or FIXME
+anywhere, and the bug class the review found — a XAML handler firing during
+`InitializeComponent` and reaching a field assigned later — was checked across every handler
+that a XAML default can fire. `ApplyStormFilters`, `WarningFilter_Changed`,
+`SiteMarkers_Changed` and the sliders all guard correctly; the dBZ one was the only gap and
+it is fixed.
+
+- [x] **`CLAUDE.md` claimed 546 tests**, against 621. It had already gone stale once this
+      session, from 229
+- [x] **`OverlaySlot` declared `Swath = 3` above `Satellite = 2`** — my own edit an hour
+      earlier. The enum documents draw order, so reading out of value order is exactly the
+      wrong place for it
+- [x] **The 1–1.8 GB working set is normal, and now measured rather than wondered about.**
+      Twenty minutes of live streaming with no interaction: it sawtooths between about 700 MB
+      and 1.45 GB, with two complete gen2 cycles returning it to a stable floor — 685 MB at
+      60 s, 748 MB at 440 s, 754 MB at 480 s. Not a leak. Handles and threads stay flat,
+      `LiveFeed`'s assemblers are capped at two and pruned, and a Level II volume is about
+      210 MB as floats once every moment is decoded, so the peaks are one volume's decode
+      awaiting collection
+- [x] **Tile textures are not part of that number**, which is worth writing down before
+      someone blames them: they are `ResourceUsage.Immutable` with no CPU access and live in
+      VRAM. The cache comment did need correcting though — its "~512 MB" described the whole
+      system when there was one cache, and there are four now, so the ceiling across them is
+      nearer 1 GB
+
+**Gate:** [PASSED] 621/621 tests, 0 warnings.
