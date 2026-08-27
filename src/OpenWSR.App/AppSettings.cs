@@ -163,15 +163,24 @@ public sealed class AppSettings
     public bool ShowSiteMarkers { get; set; } = true;
 
     /// <summary>
-    /// The dBZ window the radar draws, defaulting to everything.
+    /// The dBZ window the radar draws. Opens at 20 dBZ, which is where rain starts.
     /// </summary>
     /// <remarks>
-    /// Whether clear-air return is context worth seeing or clutter worth hiding depends on
-    /// what someone is watching for, so it is a control rather than a decision — but the
-    /// shipped default hides nothing, because a product that silently omits data it was
-    /// given is worse than a busy one.
+    /// Marshall-Palmer puts 20 dBZ at 0.026 in/hr — light rain reaching the ground — while
+    /// 10 dBZ is 0.006 in/hr, which is not rain at all but insects, birds and dust. So the
+    /// default is not hiding weather, it is hiding the things that are not weather, and it
+    /// agrees with <c>GateQuality.DefaultMinReflectivityDbz</c>, chosen separately and for
+    /// a different reason.
+    ///
+    /// <para>This did start at −30, on the principle that a product silently omitting data
+    /// it was given is worse than a busy one. That principle is right and the default still
+    /// broke it, so it is worth being clear about what changed: a floor is only an omission
+    /// if what it removes is weather. What it actually costs is <b>snow</b>, which returns
+    /// far less energy per unit water — 15 dBZ of snow can be accumulating steadily and this
+    /// default hides it. The panel says so, next to the slider, because that is where someone
+    /// needs to know it.</para>
     /// </remarks>
-    public float DbzFilterMin { get; set; } = -30f;
+    public float DbzFilterMin { get; set; } = 20f;
 
     public float DbzFilterMax { get; set; } = 75f;
 

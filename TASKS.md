@@ -1749,3 +1749,26 @@ it is fixed.
       nearer 1 GB
 
 **Gate:** [PASSED] 621/621 tests, 0 warnings.
+
+## The dBZ window opens where rain starts
+
+Requested: default the low end to 20 dBZ so light rain is what you see on opening, with the
+slider still free to go lower.
+
+- [x] **20 dBZ, not −30.** Marshall–Palmer puts 20 dBZ at 0.026 in/hr — light rain reaching
+      the ground — against 0.006 for 10 dBZ, which is insects, birds and dust. Four times the
+      rate across ten dBZ, which is why a floor between them separates weather from clutter
+      at all
+- [x] **It agrees with `GateQuality.DefaultMinReflectivityDbz`**, which arrived at 20 from a
+      different question entirely — where velocity stops meaning anything. `DbzWindowTests`
+      asserts the two match, so if one moves the other is revisited
+- [x] **This reverses a principle written into the setting's own doc comment**, and the comment
+      now says so rather than being quietly deleted. "A product that silently omits data it was
+      given is worse than a busy one" is still right; a floor is only an omission if what it
+      removes is weather
+- [x] **The cost is snow**, which returns far less energy per unit water — 15 dBZ of it can be
+      accumulating steadily and this default hides it. So the panel says "Lower it for snow"
+      whenever the floor is above 15, at the control rather than in a document nobody has open
+
+**Gate:** [PASSED] 625/625 tests, 0 warnings. Verified in the running app: opens at 20, slider
+still reaches −30, note reads "Showing 20 to 75 dBZ. Lower it for snow."

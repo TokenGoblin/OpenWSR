@@ -1431,11 +1431,16 @@ public partial class MainWindow : Window
 
         if (DbzRangeNote is null) return;
         bool wideOpen = _settings.DbzFilterMin <= -30 && _settings.DbzFilterMax >= 75;
+        // Name the cost where the control is. Snow is the case this floor gets wrong, and
+        // someone watching a winter storm should not have to already know that.
+        string snow = _settings.DbzFilterMin > 15
+            ? " Lower it for snow."
+            : "";
         DbzRangeNote.Text = !reflectivity
             ? "Reflectivity only — not applied to this product."
             : wideOpen
                 ? "Showing everything."
-                : $"Showing {_settings.DbzFilterMin:F0} to {_settings.DbzFilterMax:F0} dBZ.";
+                : $"Showing {_settings.DbzFilterMin:F0} to {_settings.DbzFilterMax:F0} dBZ.{snow}";
     }
 
     private void MosaicFilter_Changed(object sender, RoutedEventArgs e)
