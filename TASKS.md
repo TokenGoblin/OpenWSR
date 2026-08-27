@@ -1848,3 +1848,34 @@ with a hint to go and find one.
 **Gate:** [PASSED] 634/634 tests, 0 warnings. Verified on a simulated first run: a Home was
 saved from a Wi-Fi fix at 165 m, the app went live on KMTX, and the bar read "Found you near
 KMTX and saved it as Home — watching for storms within 9.3 mi."
+
+## The panel remembers the layers, not just the furniture
+
+Asked: does the profile save the last settings? Audited — **5 of 34** panel controls were
+restored. Places, radii, units, provider, the dBZ window and which *sections* were open all
+survived a restart; the toggles inside those sections did not. Remembering the furniture and
+forgetting the contents.
+
+- [x] **`LayerToggles` and `LayerSliders`**, keyed by control name, hooked by walking the panel
+      rather than by wiring thirty handlers — the same approach `PanelSections` already used,
+      so a layer added later is remembered without anyone remembering to make it so
+- [x] **Walked over the logical tree, not the visual one.** A collapsed `Expander` has not
+      realised its content, so a visual walk finds nothing inside Warnings, SPC or "Symbols
+      shown" while they are shut — which is most of the time, since all three ship collapsed.
+      Verified by toggling Flash flood, restarting, and finding it still off. The same bug was
+      latent in `RestorePanelSections`, which could not see a nested section, and is fixed too
+- [x] **Handlers are deliberately not suppressed on restore.** Ticking Satellite is what starts
+      its fetch, so the handler running *is* the state being applied. The save debounce is what
+      stops a restore writing the file thirty times
+- [x] **Only changed controls are recorded.** Anything never touched stays out of the file and
+      keeps its XAML default, so a shipped default can still be revised later rather than being
+      pinned by a settings file that merely agreed with the old one
+- [x] **Site, product and tilt stay unsaved**, by request and on merit: those are where you were
+      looking rather than how you like the app set up, and reopening on velocity at tilt four
+      over last week's site is worse than opening on reflectivity at home
+- [x] **The dBZ debounce generalised** into `MarkSettingsDirty`, now that more than one control
+      can dirty the settings quickly
+
+**Gate:** [PASSED] 637/637 tests, 0 warnings. Verified across a restart: the hail swath came
+back on, Flash flood came back off from inside a collapsed section, and Tornado — never
+touched — was neither written nor changed.

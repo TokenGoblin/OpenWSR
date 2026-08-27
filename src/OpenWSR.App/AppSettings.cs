@@ -219,6 +219,25 @@ public sealed class AppSettings
     public Dictionary<string, bool> PanelSections { get; set; } = [];
 
     /// <summary>
+    /// Layer checkboxes by control name, and the sliders beside them.
+    /// </summary>
+    /// <remarks>
+    /// Dictionaries rather than thirty typed properties, and hooked by walking the panel
+    /// rather than by wiring thirty handlers, for the same reason <see cref="PanelSections"/>
+    /// is: a layer added later is remembered without anyone remembering to make it so. It
+    /// also means the panel does not end up half-remembered, which is where this started —
+    /// which <em>sections</em> were open survived a restart while every toggle inside them
+    /// reset.
+    ///
+    /// <para>Site, product and tilt are deliberately absent. Those are where you were looking
+    /// rather than how you like the app set up, and reopening on velocity at tilt four over
+    /// a site investigated last week is worse than opening on reflectivity at home.</para>
+    /// </remarks>
+    public Dictionary<string, bool> LayerToggles { get; set; } = [];
+
+    public Dictionary<string, double> LayerSliders { get; set; } = [];
+
+    /// <summary>
     /// How many volumes an archive loop spans. This is a real cost, not a preference: every
     /// frame is a decoded sweep held in memory — about 5 MB for a super-res reflectivity cut
     /// — and each one has to be downloaded and decoded before the loop can play. Thirty is

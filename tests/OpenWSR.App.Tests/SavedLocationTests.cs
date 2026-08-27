@@ -58,6 +58,45 @@ public class SavedLocationTests
         Assert.True(settings.LocationAsked);
     }
 
+    [Fact]
+    public void LayerStateRoundTripsAndOnlyRecordsWhatChanged()
+    {
+        // Untouched controls stay out of the file, so anything never changed keeps whatever
+        // the XAML says — which is what lets a shipped default be revised later without
+        // being overridden by a settings file that only ever agreed with the old one.
+        var settings = FromJson("""
+            {
+              "layerToggles": { "FilterHailField": true, "FilterFlood": false },
+              "layerSliders": { "OpacitySlider": 62.5 }
+            }
+            """);
+
+        Assert.True(settings.LayerToggles["FilterHailField"]);
+        Assert.False(settings.LayerToggles["FilterFlood"]);
+        Assert.Equal(62.5, settings.LayerSliders["OpacitySlider"]);
+        Assert.False(settings.LayerToggles.ContainsKey("FilterTornado"));
+    }
+
+    [Fact]
+    public void ASettingsFileNamingAControlThatNoLongerExistsIsHarmless()
+    {
+        // Renaming or removing a control must not strand someone on an unopenable settings
+        // file; the restore looks each name up and skips what it cannot find.
+        var settings = FromJson("""
+            { "layerToggles": { "FilterSomethingRemovedInV2": true } }
+            """);
+
+        Assert.Single(settings.LayerToggles);
+    }
+
+    [Fact]
+    public void LayerStateStartsEmptySoTheShippedDefaultsApply()
+    {
+        var fresh = new AppSettings();
+        Assert.Empty(fresh.LayerToggles);
+        Assert.Empty(fresh.LayerSliders);
+    }
+
     // ---- migration ----
 
     /// <summary>

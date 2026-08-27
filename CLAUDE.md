@@ -83,6 +83,19 @@ Before adding a control, decide which question it answers and put it there. Set-
 configuration goes in Settings, not the layers panel; reference material (shortcuts, the
 symbol key, About) goes in `InfoWindow`, not a panel or a MessageBox.
 
+**The panel remembers itself, and the walk has to be the logical tree.** `PanelSections`
+holds which sections are open and `LayerToggles`/`LayerSliders` hold the controls inside
+them, keyed by control name and hooked by walking the panel rather than by wiring thirty
+handlers — so a layer added later persists without anyone remembering to make it so. Two
+things that are easy to get wrong. Walk the **logical** tree: a collapsed `Expander` has not
+realised its content, so a visual walk finds nothing inside Warnings, SPC or "Symbols shown"
+while they are shut, which is most of the time. And do **not** suppress the handlers on
+restore — ticking Satellite is what starts its fetch, so the handler running *is* the state
+being applied; the save debounce is what stops a restore writing the file thirty times. Only
+changed controls are recorded, which is what lets a shipped default be revised later instead
+of being pinned by a settings file that merely agreed with the old one. Site, product and tilt
+are deliberately not persisted: those are where you were looking, not how you like the app.
+
 **The layers panel has a budget too, and it was 92 % over.** Measured rather than eyeballed:
 1758 px of content in a 914 px column, 52 % of it visible. Three rules got it to 100 % with no
 scrollbar. A control that is inert until some state exists is **collapsed, not shown** — an

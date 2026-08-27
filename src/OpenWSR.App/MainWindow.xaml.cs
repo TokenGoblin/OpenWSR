@@ -34,8 +34,22 @@ public partial class MainWindow : Window
     private readonly BoundariesController _boundaries;
     private readonly ShapeImportController _imports;
     private bool _reportedTileFailure;
-    private bool _dbzSaveDue;
-    private DateTime _dbzChangedAtUtc;
+    private bool _settingsSaveDue;
+    private DateTime _settingsChangedAtUtc;
+
+    /// <summary>
+    /// Note that settings changed, and write them once the flurry stops.
+    /// </summary>
+    /// <remarks>
+    /// A snapped slider raises ValueChanged on every tick, so dragging one end of the dBZ
+    /// window across its range was twenty-odd whole-document writes on the UI thread. The
+    /// value is applied live either way; only writing it down waits.
+    /// </remarks>
+    private void MarkSettingsDirty()
+    {
+        _settingsSaveDue = true;
+        _settingsChangedAtUtc = DateTime.UtcNow;
+    }
     private readonly LightningController _lightning;
     private readonly MrmsController _mrms;
     private readonly MrmsController _hailField;
@@ -342,10 +356,10 @@ public partial class MainWindow : Window
         {
             FpsText.Text = $"{_mapView.FramesPerSecond:F0} fps · sweep upload {_mapView.LastSweepUploadMs:F1} ms";
 
-            // Write the dBZ window down once the drag has settled rather than per tick.
-            if (_dbzSaveDue && DateTime.UtcNow - _dbzChangedAtUtc > TimeSpan.FromSeconds(1))
+            // Write settings down once the flurry has settled rather than per tick.
+            if (_settingsSaveDue && DateTime.UtcNow - _settingsChangedAtUtc > TimeSpan.FromSeconds(1))
             {
-                _dbzSaveDue = false;
+                _settingsSaveDue = false;
                 _settings.Save();
             }
 
@@ -380,6 +394,7 @@ public partial class MainWindow : Window
         {
             SyncLoopTooltip();
             RestorePanelSections();
+            RestoreLayerState();
             foreach (var source in settings.Placefiles.ToList())
                 await _placefiles.AddAsync(source);
             foreach (var path in settings.ImportedShapes.ToList())
@@ -398,7 +413,7 @@ public partial class MainWindow : Window
         Closed += (_, _) =>
         {
             // A change made in the last second before closing has not been written yet.
-            if (_dbzSaveDue) { _dbzSaveDue = false; _settings.Save(); }
+            if (_settingsSaveDue) { _settingsSaveDue = false; _settings.Save(); }
 
             _statusTimer.Stop();
             _tray.Dispose();
@@ -1551,8 +1566,7 @@ public partial class MainWindow : Window
         // Not Save() here: the sliders snap every 5 dBZ, so dragging one end across the
         // range rewrites the whole settings document twenty-odd times from the UI thread.
         // The window is applied live; only writing it down waits for the drag to finish.
-        _dbzSaveDue = true;
-        _dbzChangedAtUtc = DateTime.UtcNow;
+        MarkSettingsDirty();
     }
 
     /// <summary>Push the window to the renderer, or open it wide for non-reflectivity.</summary>
@@ -2207,6 +2221,95 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Controls that persist through their own typed setting rather than the dictionaries.
+    /// </summary>
+    /// <remarks>
+    /// The dBZ window is clamped and cross-checked on load, and the boundary layers decide
+    /// whether to reach for the network, so both are worth being explicit about. Letting the
+    /// generic pass also write them would give two owners for one value.
+    /// </remarks>
+    private static readonly HashSet<string> SeparatelyPersisted =
+    [
+        "DbzMinSlider", "DbzMaxSlider", "FilterStates", "FilterCounties", "FilterSites",
+    ];
+
+    /// <summary>
+    /// Put the layer panel back the way it was left, then keep it that way.
+    /// </summary>
+    /// <remarks>
+    /// Restoring a control fires its handler, which is how the state is actually applied —
+    /// ticking Satellite is what starts the fetch. So the handlers are deliberately *not*
+    /// suppressed; the debounce is what stops the restore from writing the file thirty times.
+    ///
+    /// <para>Called before <c>LoadStartupAsync</c>, which turns the national mosaic on when
+    /// there is no saved place. On a genuine first run these dictionaries are empty and this
+    /// does nothing, so that first-screen behaviour is untouched.</para>
+    /// </remarks>
+    private void RestoreLayerState()
+    {
+        foreach (var (name, on) in _settings.LayerToggles)
+        {
+            if (SeparatelyPersisted.Contains(name)) continue;
+            if (FindName(name) is CheckBox box && box.IsChecked != on) box.IsChecked = on;
+        }
+
+        foreach (var (name, value) in _settings.LayerSliders)
+        {
+            if (SeparatelyPersisted.Contains(name)) continue;
+            if (FindName(name) is Slider slider && Math.Abs(slider.Value - value) > 1e-9)
+                slider.Value = Math.Clamp(value, slider.Minimum, slider.Maximum);
+        }
+
+        foreach (var control in FindControls(LayersPanel))
+        {
+            switch (control)
+            {
+                case CheckBox box when box.Name.Length > 0 && !SeparatelyPersisted.Contains(box.Name):
+                    box.Checked += LayerControl_Changed;
+                    box.Unchecked += LayerControl_Changed;
+                    break;
+                case Slider slider when slider.Name.Length > 0 && !SeparatelyPersisted.Contains(slider.Name):
+                    slider.ValueChanged += LayerSlider_Changed;
+                    break;
+            }
+        }
+    }
+
+    private void LayerControl_Changed(object sender, RoutedEventArgs e)
+    {
+        if (sender is not CheckBox { Name.Length: > 0 } box) return;
+        _settings.LayerToggles[box.Name] = box.IsChecked == true;
+        MarkSettingsDirty();
+    }
+
+    private void LayerSlider_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (sender is not Slider { Name.Length: > 0 } slider) return;
+        _settings.LayerSliders[slider.Name] = slider.Value;
+        MarkSettingsDirty();
+    }
+
+    /// <summary>
+    /// Every checkbox and slider under <paramref name="root"/>, whether or not it is on
+    /// screen.
+    /// </summary>
+    /// <remarks>
+    /// The <em>logical</em> tree, not the visual one. A collapsed <see cref="Expander"/> has
+    /// not realised its content, so a visual walk finds nothing inside Warnings, SPC or
+    /// "Symbols shown" while they are shut — which is most of the time, since they ship
+    /// collapsed. Their contents would then never be hooked and never persist.
+    /// </remarks>
+    private static IEnumerable<FrameworkElement> FindControls(DependencyObject root)
+    {
+        foreach (var child in LogicalTreeHelper.GetChildren(root))
+        {
+            if (child is not DependencyObject node) continue;
+            if (node is CheckBox or Slider) yield return (FrameworkElement)node;
+            foreach (var nested in FindControls(node)) yield return nested;
+        }
+    }
+
     private void PanelSection_Changed(object sender, RoutedEventArgs e)
     {
         if (sender is not Expander { Header: string header } section) return;
@@ -2214,14 +2317,14 @@ public partial class MainWindow : Window
         _settings.Save();
     }
 
+    /// <inheritdoc cref="FindControls"/>
     private static IEnumerable<Expander> FindExpanders(DependencyObject root)
     {
-        int count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);
-        for (int i = 0; i < count; i++)
+        foreach (var child in LogicalTreeHelper.GetChildren(root))
         {
-            var child = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
-            if (child is Expander expander) yield return expander;
-            foreach (var nested in FindExpanders(child)) yield return nested;
+            if (child is not DependencyObject node) continue;
+            if (node is Expander expander) yield return expander;
+            foreach (var nested in FindExpanders(node)) yield return nested;
         }
     }
 
