@@ -270,3 +270,9 @@ real-time corpus spanning a volume boundary and its archive ground truth.
 
 `OpenWSR-build-plan.md` is the original phase-gated brief; `TASKS.md` tracks everything
 built since, including the competitive parity work.
+
+## Licence
+
+MIT — see [LICENSE](LICENSE). The data it reads is public and unrestricted; the third-party
+components and data sources, with their own terms and required attributions, are listed in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

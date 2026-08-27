@@ -30,9 +30,13 @@ public class SavedLocationTests
     // ---- migration ----
 
     /// <summary>
-    /// A real settings file from before the change, byte for byte — this is what was on disk
-    /// when the list was introduced.
+    /// The shape of a settings file from before the change.
     /// </summary>
+    /// <remarks>
+    /// The coordinates are the geographic centre of the contiguous United States, carried to
+    /// full double precision on purpose: the migration must not round a saved position, and a
+    /// value with digits all the way down is the only kind that proves it.
+    /// </remarks>
     [Fact]
     public void APreListSettingsFileKeepsItsHome()
     {

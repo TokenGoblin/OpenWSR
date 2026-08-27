@@ -23,35 +23,25 @@ Scratch directories are session-scoped and get lost.
 
 ## Git hosting
 
-This repository is hosted on a **self-hosted Forgejo instance**, not GitHub.
+Development happens against a **self-hosted Forgejo instance on a private network**. Its
+hostname, ports and credentials are deliberately not in this repository — they live in the
+machine's git config and `~/.ssh/config`, which is where machine-specific facts belong.
 
-**Do not use the `gh` CLI.** It only speaks to GitHub, so it will either fail against this
-remote or, worse, act against an unrelated GitHub repo. Use plain `git` for everything. For
-pull requests and issues use the Forgejo web UI, or the `tea` CLI — Forgejo/Gitea's equivalent
-of `gh`, and not currently installed here.
+What is worth writing down is the behaviour, not the address:
 
-| Protocol | URL |
-|---|---|
-| HTTP | `http://forgejo-host:3000/<owner>/<repo>.git` |
-| SSH | `ssh://git@forgejo-host:2222/<owner>/<repo>.git` |
-
-**SSH is on port 2222**, not 22 — the Forgejo container maps host 2222 to container 22, so an
-SSH URL without the port will fail. Web UI: `http://forgejo-host:3000`.
-
-`forgejo-host` resolves only on the home LAN or over the Tailscale tailnet. **A push failing with a
-DNS or connection error is almost certainly that**, not a repo or auth problem — check the
-tailnet before debugging anything else.
-
-Auth is configured on the machine, by SSH key or a stored Forgejo token. If a push prompts for
-credentials or returns 403, **stop and report it** rather than reconfiguring auth or switching
-remotes.
-
-- Never point `origin` at a GitHub URL.
-- Never create a GitHub repo as a fallback when a push fails.
-- No GitHub Actions workflows. Forgejo Actions is similar but distinct — ask before adding CI.
+- **Do not use the `gh` CLI against the development remote.** It only speaks to GitHub, so it
+  will either fail or, worse, act against an unrelated GitHub repo. Use plain `git`. Forgejo's
+  equivalent CLI is `tea`.
+- The SSH remote is on a **non-standard port**, because the Forgejo container remaps it. An
+  SSH URL without the port silently tries 22 and fails.
+- The host resolves only on the local network or over a VPN. **A push failing with a DNS or
+  connection error is almost always that**, not a repo or auth problem — check the network
+  before debugging anything else.
+- If a push prompts for credentials or returns 403, **stop and report it** rather than
+  reconfiguring auth or switching remotes.
 - Commit and push only when asked.
 
-GitHub is deferred rather than abandoned: revisit it at release time.
+Forgejo Actions is similar to GitHub Actions but distinct; ask before adding CI to either.
 
 ## Commands
 
