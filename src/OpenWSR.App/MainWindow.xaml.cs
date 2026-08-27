@@ -393,6 +393,15 @@ public partial class MainWindow : Window
         Loaded += async (_, _) =>
         {
             SyncLoopTooltip();
+
+            // Display scaling decides stroke weights and the swap chain size, and "it looks
+            // thin on his machine" is very hard to act on without knowing it.
+            Serilog.Log.Information(
+                "Display scaling {Percent}%; map surface {Width}x{Height} px",
+                (int)Math.Round(_mapView.DipScale * 100),
+                (int)_mapView.Camera.Snapshot().ViewportWidth,
+                (int)_mapView.Camera.Snapshot().ViewportHeight);
+
             RestorePanelSections();
             RestoreLayerState();
             foreach (var source in settings.Placefiles.ToList())
@@ -466,6 +475,14 @@ public partial class MainWindow : Window
     /// </remarks>
     public void ReportNotice(string text)
     {
+        // Never over an error. They share one bar, and a notice saying something went to
+        // plan must not bury a failure the user still has to act on.
+        if (ErrorBar.Visibility == Visibility.Visible && ErrorBar.Background == ErrorBackground)
+        {
+            Report(text);
+            return;
+        }
+
         ErrorText.Text = text;
         ErrorBar.Background = NoticeBackground;
         ErrorBar.BorderBrush = NoticeBorder;
@@ -953,6 +970,16 @@ public partial class MainWindow : Window
             // The message names the two privacy switches, which is the only useful thing to
             // say here. Shown once, because LocationAsked is already set.
             ReportError($"{ex.Message} You can add a place by hand in Settings at any time.");
+            return;
+        }
+        catch (Exception ex)
+        {
+            // Nothing awaits this, so anything escaping would be an unobserved task: the app
+            // would do nothing and say nothing, having already recorded that it asked.
+            Serilog.Log.Warning(ex, "First-run location lookup failed unexpectedly");
+            ReportError(
+                "Could not work out where this PC is. Add a place by hand in Settings, "
+              + "or click the map to set one.");
             return;
         }
 

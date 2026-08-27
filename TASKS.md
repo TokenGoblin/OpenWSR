@@ -1909,3 +1909,33 @@ commit reachable from it.
 
 **Gate:** [PASSED] 637/637 tests in Release with `-warnaserror`, 0 warnings. The published
 single-file artifact was also built and run: 261 MB, live data, 60 fps.
+
+## 100 % display scaling, and the bugs that looking for it found
+
+The app had only ever run at 150 %, which is where its DPI bugs were found and fixed, so the
+easier case was the untested one.
+
+- [x] **Verified at 100 %.** `DipScale` computes 1.0, the map surface is 1622×957, the layers
+      panel fits with no scrollbar at all, every one of the twelve left-rail buttons is
+      on-screen including the bottom-docked group that overflow eats first, 59 fps, and not a
+      warning in the log. Nothing broke. In hindsight 100 % was always the safer case: a DIU
+      is a pixel there, so the panel gets 1009 units of height against 609 at 150 %, and the
+      rail budget CLAUDE.md calls "already spent" is only tight at the higher scale
+- [x] **`DipScale` was read once and never again.** Fixed while looking: `D3DHostControl`
+      overrides `OnDpiChanged`, so a window dragged between a laptop panel and an external
+      monitor at another scale no longer keeps the stroke weights of the display it was born
+      on. The swap chain never needed help — it is sized from `WM_SIZE`, which reports real
+      pixels whatever the scaling
+- [x] **Scaling is logged at startup.** "It looks thin on his machine" is close to unactionable
+      without it
+- [x] **`new Geolocator()` sat outside the try block.** On a machine with no location provider
+      it throws rather than returning a status, so it escaped as something other than
+      `LocationUnavailableException` — which the first-run caller filters on. Since that
+      caller is fire-and-forget and records `LocationAsked` *before* the attempt, the failure
+      would have been silent, permanent and unexplained. Guarded, and the caller now also
+      catches broadly, because nothing awaits it
+- [x] **A notice could bury an error.** `ReportNotice` and `ReportError` share one bar, so the
+      first-run "found you" message could paper over a failure the user still had to act on.
+      A notice now falls back to the status line rather than displacing an error
+
+**Gate:** [PASSED] 637/637 tests, 0 warnings, verified running at both 100 % and 150 %.

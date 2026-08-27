@@ -63,11 +63,25 @@ public static class GeoLocationService
 
         // Whole-metre desired accuracy would demand GPS; the coarse tier is a wifi/IP fix,
         // which arrives in a second or two and is well inside any sensible alert radius.
-        var locator = new Geolocator
+        //
+        // Constructing this is guarded too. On a machine with no location provider at all it
+        // throws rather than returning a status, and this method's whole contract is that it
+        // fails as a LocationUnavailableException carrying a sentence the user can act on —
+        // a caller filtering on that type would otherwise see nothing and say nothing.
+        Geolocator locator;
+        try
         {
-            DesiredAccuracy = PositionAccuracy.Default,
-            ReportInterval = 1000,
-        };
+            locator = new Geolocator
+            {
+                DesiredAccuracy = PositionAccuracy.Default,
+                ReportInterval = 1000,
+            };
+        }
+        catch (Exception ex)
+        {
+            throw new LocationUnavailableException(
+                $"Windows could not start a location request ({ex.Message}). {PrivacyHint}");
+        }
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(Timeout);

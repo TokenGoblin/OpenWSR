@@ -510,6 +510,20 @@ public sealed class MapView : IDisposable
     /// </summary>
     public double DipScale { get; private set; } = 1.0;
 
+    /// <summary>
+    /// Follow a change in display scaling.
+    /// </summary>
+    /// <remarks>
+    /// Read once at construction otherwise, which is wrong for a window dragged between a
+    /// laptop panel and an external monitor at a different scale — the strokes would keep
+    /// the weight of the display they were born on. The swap chain needs no help here: it is
+    /// sized from <c>WM_SIZE</c>, which reports real pixels whatever the scaling.
+    /// </remarks>
+    public void UpdateDipScale(double dipScale)
+    {
+        if (dipScale > 0) DipScale = dipScale;
+    }
+
     public void Start(IntPtr hwnd, int width, int height, double dipScale = 1.0)
     {
         _hwnd = hwnd;

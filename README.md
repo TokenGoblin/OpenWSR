@@ -313,9 +313,10 @@ real-time corpus spanning a volume boundary and its archive ground truth.
   skipped and reported.
 - **Ground clutter at coastal sites** is suppressed on rotation products but not on plain
   reflectivity, where it is left visible rather than guessed at.
-- **Tested on one machine.** One Windows 11 install, one GPU, one display at 150 %
-  scaling. CI now builds and tests on hosted Windows and Linux runners, but the rendering
-  half has only ever been *run* here.
+- **Tested on one machine.** One Windows 11 install, one GPU — at both 100 % and 150 %
+  display scaling, but still one machine. CI builds and tests on hosted Windows and Linux
+  runners, so a clean checkout is known to compile and pass; the rendering half has only
+  ever been *run* here.
 
 `OpenWSR-build-plan.md` is the original phase-gated brief; `TASKS.md` tracks everything
 built since, including the competitive parity work.

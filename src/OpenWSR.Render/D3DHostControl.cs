@@ -41,11 +41,21 @@ public sealed class D3DHostControl : HwndHost
 
         Instances[_hwnd] = this;
         var dpi = VisualTreeHelper.GetDpi(this);
+
         _mapView.Start(_hwnd,
             (int)(ActualWidth * dpi.DpiScaleX),
             (int)(ActualHeight * dpi.DpiScaleY),
             dpi.DpiScaleX);
         return new HandleRef(this, _hwnd);
+    }
+
+    /// <summary>
+    /// Keep stroke weights right when the window moves to a display at another scale.
+    /// </summary>
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        _mapView.UpdateDipScale(newDpi.DpiScaleX);
     }
 
     protected override void DestroyWindowCore(HandleRef hwnd)
