@@ -1772,3 +1772,47 @@ slider still free to go lower.
 
 **Gate:** [PASSED] 625/625 tests, 0 warnings. Verified in the running app: opens at 20, slider
 still reaches −30, note reads "Showing 20 to 75 dBZ. Lower it for snow."
+
+## Second review: nine findings, all fixed
+
+No blockers this time. The two that mattered were both consequences of yesterday's work
+landing on code that had been fine when the default hid nothing.
+
+- [x] **A crafted or corrupt shapefile record asked for a 2 GB array.** `pointCount * 16` is
+      int arithmetic, so a record declaring `0x08000000` points overflows to −2,147,483,648;
+      a bounds check done in `int` sees a negative length and waves it through. `partCount * 4`
+      overflows the same way, and `new int[partCount]` was reached before any bound on it. The
+      file is user-chosen — anything openable through the import panel gets here. Both
+      comparisons are done in `long` now, with four crafted-record tests
+- [x] **MultiPoint had no bounds check its siblings had**, so a truncated record threw where
+      Point and Polygon degrade to an empty feature — one bad record cost every good one in
+      the file
+- [x] **The dBZ window only reached the primary pane.** Every pane builds its own `MapView`,
+      and this was invisible while the window defaulted to everything — it became visible the
+      moment it defaulted to 20 dBZ, as two panes on the same site and product drawing
+      demonstrably different data. `PaneManager.ApplyValueFilter` applies it to all of them,
+      per pane, because the window is reflectivity-only and panes open on different products
+- [x] **`BasemapFailure` fired on a working basemap.** The count was monotonic and a failed
+      tile is retried after a 30-second cool-down, so one permanently-missing tile — exactly
+      what `UsgsTopo`'s own comment says ArcGIS caches do — crossed the twelve-failure
+      threshold in six minutes on its own. It counts *distinct* tiles currently failing now,
+      which is what "more than a screen's worth" meant
+- [x] **The hodograph's storm-motion label named a depth the profile lacked.** The SRH and
+      shear captions already refused to; the fallback motion was unconditionally
+      "vs 0–6 km mean wind" even on a 4.5 km profile. Same rule now: name the depth used
+- [x] **The dBZ sliders wrote the settings file on every tick** — snapped every 5 dBZ, so one
+      drag across the range was twenty-odd whole-document writes on the UI thread, which is
+      what CLAUDE.md's rule about UI-thread I/O exists to prevent. The window still applies
+      live; only writing it down waits a second for the drag to settle, with a flush on close
+- [x] **Importing the same file twice** drew two layers in different colours while persisting
+      only one, so removing "it" left a copy that would not come back. Rejected with a message,
+      as the placefile panel already does
+- [x] **`MrmsController`'s comment still named the Analysis slot** the review before last moved
+      it out of
+- [x] **Reflectivity was resampled twice per derived shear** — an azimuth index and a full
+      float array over every gate, built and discarded, on every uncached cut and every scan
+      of a rotation-track loop. `GateQuality.Mask` does both tests in one pass, and a test
+      asserts it is gate-for-gate identical to the two steps in sequence
+
+**Gate:** [PASSED] 632/632 tests, 0 warnings. Verified in the running app: opens at 20 dBZ,
+two panes render consistently, no tile-failure bar, 60 fps.

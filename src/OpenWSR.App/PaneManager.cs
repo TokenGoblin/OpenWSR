@@ -123,6 +123,34 @@ public sealed class PaneManager : IDisposable
         Relayout(count);
     }
 
+    private float _filterMin = float.NegativeInfinity;
+    private float _filterMax = float.PositiveInfinity;
+
+    /// <summary>
+    /// Apply the reflectivity window to every pane, not just the one that owns the slider.
+    /// </summary>
+    /// <remarks>
+    /// Each pane has its own <see cref="MapView"/>, so a filter set on the primary reached
+    /// nothing else. That was invisible while the window defaulted to everything and became
+    /// visible the moment it defaulted to 20 dBZ: two panes on the same site and product
+    /// drawing demonstrably different data. The decision is per pane because the window is
+    /// reflectivity-only and panes deliberately open on different products.
+    /// </remarks>
+    public void ApplyValueFilter(float min, float max)
+    {
+        _filterMin = min;
+        _filterMax = max;
+        foreach (var pane in _secondaries) ApplyValueFilterTo(pane.MapView, pane.Radar);
+    }
+
+    private void ApplyValueFilterTo(MapView mapView, RadarDisplayController radar)
+    {
+        if (radar.CurrentMoment == Moment.Reflectivity)
+            mapView.SetValueFilter(_filterMin, _filterMax);
+        else
+            mapView.SetValueFilter(float.NegativeInfinity, float.PositiveInfinity);
+    }
+
     private Pane CreateSecondary(int index)
     {
         var mapView = new MapView(_provider);
@@ -132,10 +160,17 @@ public sealed class PaneManager : IDisposable
         // rather than four copies.
         int defaultKey = index switch { 0 => 0x56, 1 => 0x44, _ => 0x43 }; // V, D, C
         radar.OnKey(defaultKey);
-        mapView.KeyPressed += key => radar.OnKey(key);
+        mapView.KeyPressed += key =>
+        {
+            radar.OnKey(key);
+            // A key may have changed this pane's product, and the window is reflectivity-only.
+            ApplyValueFilterTo(mapView, radar);
+        };
 
         var camera = _primary.MapView.Camera.Snapshot();
         mapView.Camera.SetView(camera.CenterX, camera.CenterY, camera.MetersPerPixel);
+
+        ApplyValueFilterTo(mapView, radar);
 
         var feed = new PaneFeed();
         var pane = new Pane

@@ -106,14 +106,12 @@ public sealed class RotationTracksController(MapView mapView) : IDisposable
                     // of strong-shear gates sit where there is no echo to have reflected.
                     if (GateQuality.ReflectivityFor(volume.Sweeps, velocity) is not { } reflectivity)
                         return computed;
-                    var masked = GateQuality.MaskByReflectivity(computed, reflectivity);
-
-                    // Clutter passes the echo test -- it returns strongly. On a quiet coastal
-                    // night at KBOX the swath's peak was 0.0995 1/s of pure sea clutter, which
-                    // reads as rotation; the CC test drops it to 0.0226.
-                    return GateQuality.CorrelationFor(volume.Sweeps, velocity) is { } correlation
-                        ? GateQuality.MaskClutter(masked, reflectivity, correlation)
-                        : masked;
+                    // Clutter passes the echo test -- it returns strongly. On a quiet
+                    // coastal night at KBOX the swath's peak was 0.0995 1/s of pure sea
+                    // clutter, which reads as rotation; the CC test drops it to 0.0226.
+                    return GateQuality.Mask(
+                        computed, reflectivity,
+                        GateQuality.CorrelationFor(volume.Sweeps, velocity));
                 }, cts.Token);
 
                 if (sweep is not null) shear.Add(sweep);

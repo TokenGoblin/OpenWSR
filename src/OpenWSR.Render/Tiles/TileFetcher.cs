@@ -44,10 +44,17 @@ public sealed class TileFetcher : IDisposable
 
     public bool TryDequeueCompleted(out (TileKey Key, byte[] Bgra) item) => _completed.TryDequeue(out item);
 
-    private int _failureCount;
-
-    /// <summary>How many tile requests have failed outright.</summary>
-    public int FailureCount => _failureCount;
+    /// <summary>
+    /// How many <em>distinct</em> tiles are currently failing.
+    /// </summary>
+    /// <remarks>
+    /// Distinct, not a running total. A failed tile is retried once its 30-second cool-down
+    /// expires, so counting attempts made one permanently-missing tile look like a broken
+    /// basemap after six minutes — and ArcGIS caches answer 404 for tiles they simply do not
+    /// hold, which is a normal session rather than a fault. A key drops out of the set as
+    /// soon as it succeeds.
+    /// </remarks>
+    public int FailingTiles => _failed.Count;
 
     /// <summary>The first failure seen, provider and reason, or null while all is well.</summary>
     public string? FirstFailure { get; private set; }
@@ -91,7 +98,6 @@ public sealed class TileFetcher : IDisposable
             // caller say which layer is broken and why instead of guessing.
             _failed[key] = DateTime.UtcNow; // retried after a cool-down when still visible
             FirstFailure ??= $"{_provider.Name} {key}: {ex.GetType().Name}: {ex.Message}";
-            Interlocked.Increment(ref _failureCount);
         }
         finally
         {

@@ -131,6 +131,8 @@ public static class Shapefile
             {
                 if (content.Length < 40) return new ShapeFeature(kind, [], attributes);
                 int count = BinaryPrimitives.ReadInt32LittleEndian(content[36..]);
+                if (count <= 0 || 40L + (long)count * 16 > content.Length)
+                    return new ShapeFeature(kind, [], attributes);
                 var points = ReadPoints(content, 40, count);
                 return new ShapeFeature(kind, [points], attributes);
             }
@@ -145,9 +147,13 @@ public static class Shapefile
                 if (partCount <= 0 || pointCount <= 0)
                     return new ShapeFeature(kind, [], attributes);
 
-                int partsAt = 44;
-                int pointsAt = partsAt + partCount * 4;
-                if (pointsAt + pointCount * 16 > content.Length)
+                // In long, because these counts come from the file. A record declaring
+                // 0x08000000 points overflows `pointCount * 16` to a *negative* int, which
+                // sails past a naive bounds check and then asks for a 2 GB array — from a
+                // file the user merely opened.
+                const int partsAt = 44;
+                long pointsAt = partsAt + (long)partCount * 4;
+                if (pointsAt + (long)pointCount * 16 > content.Length)
                     return new ShapeFeature(kind, [], attributes);
 
                 var starts = new int[partCount];
@@ -160,7 +166,7 @@ public static class Shapefile
                     int from = starts[i];
                     int to = i + 1 < partCount ? starts[i + 1] : pointCount;
                     if (from < 0 || to > pointCount || to <= from) continue;
-                    parts.Add(ReadPoints(content, pointsAt + from * 16, to - from));
+                    parts.Add(ReadPoints(content, (int)pointsAt + from * 16, to - from));
                 }
 
                 return new ShapeFeature(kind, parts, attributes);

@@ -485,11 +485,15 @@ public sealed class MapView : IDisposable
     /// A threshold rather than the first failure. One 404, a rate limit, a dropped packet or
     /// a timeout is ordinary, and ArcGIS caches in particular answer 404 for tiles they
     /// simply do not hold at some zooms — the terrain basemap would raise a persistent error
-    /// bar on a perfectly normal session. Twelve failures is more than a screen's worth of
-    /// tiles and is not luck.
+    /// bar on a perfectly normal session. Twelve is more than a screen's worth of tiles and
+    /// is not luck.
+    ///
+    /// <para>Counted as distinct tiles currently failing, not as attempts: a failed tile is
+    /// retried after a cool-down, so a running total would let a single missing tile reach
+    /// any threshold given enough minutes.</para>
     /// </remarks>
     public string? BasemapFailure =>
-        _fetcher.FailureCount >= 12 ? _fetcher.FirstFailure : null;
+        _fetcher.FailingTiles >= 12 ? _fetcher.FirstFailure : null;
 
     /// <summary>
     /// How hard the place names are lifted. CARTO draws them mid-grey, which is dim against

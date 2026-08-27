@@ -34,6 +34,8 @@ public partial class MainWindow : Window
     private readonly BoundariesController _boundaries;
     private readonly ShapeImportController _imports;
     private bool _reportedTileFailure;
+    private bool _dbzSaveDue;
+    private DateTime _dbzChangedAtUtc;
     private readonly LightningController _lightning;
     private readonly MrmsController _mrms;
     private readonly MrmsController _hailField;
@@ -340,6 +342,13 @@ public partial class MainWindow : Window
         {
             FpsText.Text = $"{_mapView.FramesPerSecond:F0} fps · sweep upload {_mapView.LastSweepUploadMs:F1} ms";
 
+            // Write the dBZ window down once the drag has settled rather than per tick.
+            if (_dbzSaveDue && DateTime.UtcNow - _dbzChangedAtUtc > TimeSpan.FromSeconds(1))
+            {
+                _dbzSaveDue = false;
+                _settings.Save();
+            }
+
             // A basemap whose tiles all fail leaves a blank map, which reads as "still
             // loading" for ever. Say so once.
             if (_mapView.BasemapFailure is { } tileFailure && !_reportedTileFailure)
@@ -388,6 +397,9 @@ public partial class MainWindow : Window
         };
         Closed += (_, _) =>
         {
+            // A change made in the last second before closing has not been written yet.
+            if (_dbzSaveDue) { _dbzSaveDue = false; _settings.Save(); }
+
             _statusTimer.Stop();
             _tray.Dispose();
             _placefiles.Dispose();
@@ -1414,8 +1426,13 @@ public partial class MainWindow : Window
 
         _settings.DbzFilterMin = (float)DbzMinSlider.Value;
         _settings.DbzFilterMax = (float)DbzMaxSlider.Value;
-        _settings.Save();
         ApplyDbzFilter();
+
+        // Not Save() here: the sliders snap every 5 dBZ, so dragging one end across the
+        // range rewrites the whole settings document twenty-odd times from the UI thread.
+        // The window is applied live; only writing it down waits for the drag to finish.
+        _dbzSaveDue = true;
+        _dbzChangedAtUtc = DateTime.UtcNow;
     }
 
     /// <summary>Push the window to the renderer, or open it wide for non-reflectivity.</summary>
@@ -1428,6 +1445,10 @@ public partial class MainWindow : Window
             _mapView.SetValueFilter(_settings.DbzFilterMin, _settings.DbzFilterMax);
         else
             _mapView.SetValueFilter(float.NegativeInfinity, float.PositiveInfinity);
+
+        // Extra panes have their own MapView, and each decides for itself because they open
+        // on different products.
+        _panes?.ApplyValueFilter(_settings.DbzFilterMin, _settings.DbzFilterMax);
 
         if (DbzRangeNote is null) return;
         bool wideOpen = _settings.DbzFilterMin <= -30 && _settings.DbzFilterMax >= 75;
@@ -1991,8 +2012,12 @@ public partial class MainWindow : Window
         }
         else
         {
-            motion = Hodograph.MeanWind(points, 6000);
-            basis = "vs 0–6 km mean wind";
+            // Same rule the captions below follow: name the depth actually used. MeanWind
+            // returns what it has when asked for more, so a 4.5 km profile would otherwise
+            // report a 4.5 km mean under a "0-6 km" label.
+            int meanKm = (int)Math.Clamp(Math.Floor(Hodograph.DepthM(points) / 1000), 1, 6);
+            motion = Hodograph.MeanWind(points, meanKm * 1000);
+            basis = $"vs 0–{meanKm} km mean wind";
         }
 
         bool knots = Units.System != UnitSystem.Metric;

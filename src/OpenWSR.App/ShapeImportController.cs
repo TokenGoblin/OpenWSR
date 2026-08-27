@@ -68,6 +68,15 @@ public sealed class ShapeImportController
 
     public async Task AddAsync(string path)
     {
+        // Adding the same file twice drew two layers in different palette colours, and only
+        // one of them was ever persisted — so removing "it" left a copy on screen that did
+        // not come back next launch.
+        if (_files.Any(f => string.Equals(f.Path, path, StringComparison.OrdinalIgnoreCase)))
+        {
+            StatusChanged?.Invoke($"{Path.GetFileName(path)} is already loaded.");
+            return;
+        }
+
         var entry = new ImportedShapes
         {
             Path = path,

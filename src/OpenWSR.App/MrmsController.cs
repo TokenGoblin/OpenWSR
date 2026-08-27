@@ -29,9 +29,11 @@ public sealed record MrmsLayer(
     /// <summary>
     /// Hourly maximum hail size, <em>over</em> the radar sweep.
     ///
-    /// It goes in the Analysis slot because it is read against the echo — the question is
-    /// which part of this storm dropped the hail — and because the Field slot is already
-    /// spoken for by the composite it would otherwise fight with.
+    /// It draws over the sweep because it is read against the echo — the question is which
+    /// part of this storm dropped the hail — and it has the Swath slot to itself. Not
+    /// Analysis: the rotation-track swath owns that one and writes it wholesale, so sharing
+    /// meant each layer erased the other. Not Field either, which the composite and the
+    /// forecast raster already contend for.
     /// </summary>
     public static MrmsLayer HailSize { get; } = new(
         MrmsClient.HailSizeHourlyMax, BuiltinTables.HailSize,

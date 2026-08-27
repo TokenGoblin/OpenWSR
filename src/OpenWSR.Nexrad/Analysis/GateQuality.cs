@@ -91,6 +91,43 @@ public static class GateQuality
     /// all — the RDA's own clutter filter has already notched out the truly stationary
     /// returns, so what survives is not sitting at zero Doppler.
     /// </remarks>
+    /// <summary>
+    /// Both masks in one pass: blank weak echo, then blank low-CC gates under a weak one.
+    /// </summary>
+    /// <remarks>
+    /// The two are always applied together and both need reflectivity on the field's own
+    /// geometry, so doing them separately resampled it twice — an azimuth index and a full
+    /// float array over every gate, built and thrown away, on every uncached cut and every
+    /// scan of a rotation-track loop.
+    /// </remarks>
+    public static Sweep Mask(
+        Sweep field, Sweep reflectivity, Sweep? correlation,
+        float minDbz = DefaultMinReflectivityDbz,
+        float clutterMaxDbz = ClutterMaxReflectivityDbz,
+        float maxCc = ClutterMaxCorrelation)
+    {
+        var dbz = Resample(reflectivity, field);
+        var rho = correlation is null ? null : Resample(correlation, field);
+        var masked = new float[field.Data.Length];
+
+        Parallel.For(0, field.Data.Length, i =>
+        {
+            if (float.IsNaN(dbz[i]) || dbz[i] < minDbz)
+            {
+                masked[i] = float.NaN;
+                return;
+            }
+
+            // Absent CC is not evidence, so a gate with nothing to judge it by is left alone.
+            bool clutter = rho is not null
+                        && !float.IsNaN(rho[i]) && rho[i] < maxCc
+                        && dbz[i] < clutterMaxDbz;
+            masked[i] = clutter ? float.NaN : field.Data[i];
+        });
+
+        return field with { Data = masked };
+    }
+
     public static Sweep MaskClutter(
         Sweep field, Sweep reflectivity, Sweep correlation,
         float maxDbz = ClutterMaxReflectivityDbz, float maxCc = ClutterMaxCorrelation)

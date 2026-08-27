@@ -147,6 +147,61 @@ public sealed class ShapefileTests
         Assert.True(recordBytes > 0);
     }
 
+    /// <summary>A one-record .shp whose polygon header declares the given counts.</summary>
+    private static byte[] CraftedRecord(int partCount, int pointCount, int contentBytes = 44)
+    {
+        var file = new byte[100 + 8 + contentBytes];
+        // Header: big-endian file code, then big-endian length in 16-bit words.
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(file.AsSpan(0), 9994);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(
+            file.AsSpan(24), file.Length / 2);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(file.AsSpan(28), 1000);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(file.AsSpan(32), 5);
+
+        // One record: number, then content length in words.
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(file.AsSpan(100), 1);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(file.AsSpan(104), contentBytes / 2);
+
+        var content = file.AsSpan(108);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(content, 5); // Polygon
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(content[36..], partCount);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(content[40..], pointCount);
+        return file;
+    }
+
+    [Theory]
+    // 0x08000000 * 16 overflows int to -2,147,483,648, so a bounds check done in int sees a
+    // negative length and waves it through — then asks for a 2 GB array from a 152-byte file.
+    [InlineData(1, 0x08000000)]
+    [InlineData(0x20000000, 1)]      // the same overflow via partCount * 4
+    [InlineData(1, int.MaxValue)]
+    [InlineData(int.MaxValue, 1)]
+    public void AnImpossibleCountIsRefusedRatherThanAllocated(int partCount, int pointCount)
+    {
+        // The file is user-chosen — anything openable through the import panel gets here.
+        var features = Shapefile.Read(CraftedRecord(partCount, pointCount));
+
+        Assert.Single(features);
+        Assert.Empty(features[0].Parts);
+    }
+
+    [Fact]
+    public void ATruncatedMultiPointIsRefusedRatherThanThrowing()
+    {
+        // The Point and Polygon branches both degrade to an empty feature; MultiPoint used
+        // to throw instead, so one bad record cost every other record in the file.
+        var file = CraftedRecord(1, 1);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(
+            file.AsSpan(108), 8);                                   // MultiPoint
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(
+            file.AsSpan(108 + 36), 1_000_000);                      // more points than bytes
+
+        var features = Shapefile.Read(file);
+
+        Assert.Single(features);
+        Assert.Empty(features[0].Parts);
+    }
+
     [Fact]
     public void SomethingThatIsNotAShapefileSaysSo()
     {

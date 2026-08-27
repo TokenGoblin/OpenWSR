@@ -99,6 +99,54 @@ public sealed class ClutterMaskTests(DecodedVolumes volumes) : IClassFixture<Dec
         Assert.Equal(0.0226f, Peak(GateQuality.MaskClutter(shear, reflectivity, cc)).Value, 4);
     }
 
+    [Fact]
+    public void TheCombinedMaskIsExactlyTheTwoStepsInSequence()
+    {
+        // Mask() exists to resample reflectivity once instead of twice. It is only worth
+        // having if it changes nothing, so this compares gate for gate rather than
+        // comparing summary numbers that could agree by luck.
+        var volume = volumes.Moore;
+        var doppler = volume.Sweeps
+            .Where(s => s.Moment == Moment.Velocity).MinBy(s => s.ElevationIndex)!;
+        var reflectivity = GateQuality.ReflectivityFor(volume.Sweeps, doppler)!;
+        var cc = GateQuality.CorrelationFor(volume.Sweeps, doppler)!;
+        var raw = AzimuthalShear.Compute(VelocityDealiasing.Dealias(doppler));
+
+        var stepwise = GateQuality.MaskClutter(
+            GateQuality.MaskByReflectivity(raw, reflectivity), reflectivity, cc);
+        var combined = GateQuality.Mask(raw, reflectivity, cc);
+
+        Assert.Equal(stepwise.Data.Length, combined.Data.Length);
+        for (int i = 0; i < stepwise.Data.Length; i++)
+        {
+            if (float.IsNaN(stepwise.Data[i]))
+                Assert.True(float.IsNaN(combined.Data[i]), $"gate {i} should be blank");
+            else
+                Assert.Equal(stepwise.Data[i], combined.Data[i]);
+        }
+    }
+
+    [Fact]
+    public void WithNoCorrelationSweepItIsJustTheEchoMask()
+    {
+        // A volume with no low-level dual-pol gets the reflectivity mask and nothing else,
+        // rather than an exception or an unmasked field.
+        var volume = volumes.Moore;
+        var doppler = volume.Sweeps
+            .Where(s => s.Moment == Moment.Velocity).MinBy(s => s.ElevationIndex)!;
+        var reflectivity = GateQuality.ReflectivityFor(volume.Sweeps, doppler)!;
+        var raw = AzimuthalShear.Compute(VelocityDealiasing.Dealias(doppler));
+
+        var echoOnly = GateQuality.MaskByReflectivity(raw, reflectivity);
+        var combined = GateQuality.Mask(raw, reflectivity, correlation: null);
+
+        for (int i = 0; i < echoOnly.Data.Length; i++)
+            if (float.IsNaN(echoOnly.Data[i]))
+                Assert.True(float.IsNaN(combined.Data[i]));
+            else
+                Assert.Equal(echoOnly.Data[i], combined.Data[i]);
+    }
+
     // ---- The pairing rule ----
 
     [Fact]
