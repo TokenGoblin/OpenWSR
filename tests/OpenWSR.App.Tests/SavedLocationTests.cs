@@ -27,6 +27,37 @@ public class SavedLocationTests
         return settings;
     }
 
+    [Fact]
+    public void LocationIsAskedForOnceAndOnlyWithNoPlaceSaved()
+    {
+        // Two guards, and both matter. An unpackaged app gets no consent dialog when the
+        // privacy switches are off — the call just returns Denied — so without the flag the
+        // same red bar would greet someone who has already decided, every single launch.
+        var fresh = new AppSettings();
+        Assert.False(fresh.LocationAsked);
+        Assert.Empty(fresh.Locations);
+
+        // And a settings file that already names a place must never be second-guessed by the
+        // OS's idea of where the machine is.
+        var configured = FromJson("""
+            {
+              "locations": [
+                { "name": "Home", "latDeg": 39.8283, "lonDeg": -98.5795, "isPrimary": true }
+              ]
+            }
+            """);
+        Assert.Single(configured.Locations);
+    }
+
+    [Fact]
+    public void TheAskedFlagSurvivesARoundTrip()
+    {
+        // It is written before the attempt rather than after, so a call that throws or an app
+        // closed mid-way still counts as having asked. That only holds if it persists.
+        var settings = FromJson("""{ "locationAsked": true }""");
+        Assert.True(settings.LocationAsked);
+    }
+
     // ---- migration ----
 
     /// <summary>

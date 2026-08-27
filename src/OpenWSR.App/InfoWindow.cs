@@ -80,10 +80,13 @@ public static class InfoWindow
 
         AddHeading(panel, "Start here", first: true);
         AddParagraph(panel,
-            "Open Settings and add at least one place under MY PLACES — the gear at the bottom "
-          + "of the left rail. “Add my location” asks Windows where this PC is; “Move primary on "
-          + "map” hands you back to the map to click a spot. Everything below follows from "
-          + "having one.");
+            "On its first run the app asks Windows where this PC is and saves that as Home, "
+          + "which is all the setup there is — it then opens on your nearest radar and watches "
+          + "for storms heading your way. If Windows would not say (the two location switches "
+          + "in Privacy & security both have to be on), or you want somewhere else watched, "
+          + "open Settings — the gear at the bottom of the left rail — and use MY PLACES. "
+          + "“Add my location” asks again; “Move primary on map” hands you back to the map to "
+          + "click a spot. Everything below follows from having at least one place.");
         AddRows(panel,
             ("Primary", "The place the app opens on, and whose nearest radar the storm layer follows. Exactly one, marked by the filled dot."),
             ("Other places", "Watched for approaching storms just the same — they simply do not move the camera."),

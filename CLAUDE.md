@@ -322,6 +322,21 @@ closing to 14 miles in nineteen minutes. Also, **advisories are not threats**: t
 draws statements when ticked and should, but `IsDangerous` keeps them off the list and out of the
 tray. Warnings always count; anything else needs a Severe or Extreme severity.
 
+**The first run asks Windows where it is, once, and never again on its own.** With a place
+saved the app opens on its radar, watches storms from it and can say what is heading for it;
+without one it is a browser for other people's weather, so finding the machine is the whole
+setup step. `TryLocateOnFirstRunAsync` runs only when no place exists, is **not awaited** —
+Windows can sit on a cold radio for twelve seconds and holding the first paint hostage to
+that would make the app feel broken — and sets `AppSettings.LocationAsked` **before** the
+attempt, so a call that throws or an app closed mid-way still counts as having asked. That
+flag is the point: with the privacy switches off there is no consent dialog to answer, so
+retrying each launch would put the same bar in front of someone who has already decided.
+
+**A one-time thing done on the user's behalf needs `ReportNotice`, not `Report`.** The status
+line is a running commentary that the live feed overwrites within seconds, which is right for
+a commentary and useless for "I saved a location for you". `ReportNotice` borrows the error
+bar's persistence and drops its alarm colours.
+
 **Windows Location Services works unpackaged, but says `Denied` rather than prompting.** The two
 privacy switches that block it live in different places on the same Settings page, and an
 unpackaged desktop app gets no consent dialog when either is off — so `GeoLocationService` names

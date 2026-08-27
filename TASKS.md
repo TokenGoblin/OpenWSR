@@ -1816,3 +1816,35 @@ landing on code that had been fine when the default hid nothing.
 
 **Gate:** [PASSED] 632/632 tests, 0 warnings. Verified in the running app: opens at 20 dBZ,
 two panes render consistently, no tile-failure bar, 60 fps.
+
+## The first run finds you
+
+Requested: check location services when the app opens and save a user profile. Until now the
+only way to get a place was a button in Settings, so a new user opened on the national view
+with a hint to go and find one.
+
+- [x] **`TryLocateOnFirstRunAsync`**, run when no place is saved. On success it writes a
+      primary `SavedLocation` named Home with the fix's source and accuracy, arms the threat
+      monitor and storm watch, draws the ring, and opens live on the nearest radar. That is
+      the whole setup step: with a place the app watches for storms heading at you, and
+      without one it is a browser for other people's weather
+- [x] **Not awaited.** Windows can sit on a cold radio for twelve seconds, and the national
+      view is a fine thing to look at meanwhile — holding the first paint hostage to an OS
+      call would make the app feel broken to anyone whose location is switched off
+- [x] **Asked once.** `AppSettings.LocationAsked` is written *before* the attempt, so a call
+      that throws or an app closed mid-way still counts. It matters because an unpackaged app
+      gets no consent dialog when either privacy switch is off — the call simply returns
+      Denied — so retrying every launch would put the same bar in front of someone who has
+      already decided. Settings still has "Add my location" for anyone who turns it on later
+- [x] **Never overwrites an existing place**, including one added by hand while the call was
+      still outstanding
+- [x] **`ReportNotice` added**, because testing showed the confirmation being overwritten by
+      live-feed chatter within seconds. `Report` is a running commentary; the one thing the
+      app did without being asked needs the error bar's persistence and none of its alarm
+- [x] **The guide was corrected.** Its first instruction was to open Settings and add a place
+      — which the app now does itself, so it was telling new users to redo the setup that had
+      just happened
+
+**Gate:** [PASSED] 634/634 tests, 0 warnings. Verified on a simulated first run: a Home was
+saved from a Wi-Fi fix at 165 m, the app went live on KMTX, and the bar read "Found you near
+KMTX and saved it as Home — watching for storms within 9.3 mi."

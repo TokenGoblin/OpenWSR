@@ -159,6 +159,19 @@ public sealed class AppSettings
     /// <summary>The shortcuts card is shown once, on the first run, and never nags again.</summary>
     public bool WelcomeShown { get; set; }
 
+    /// <summary>
+    /// Whether the app has already asked Windows where this machine is.
+    /// </summary>
+    /// <remarks>
+    /// Asked once, on the first run that has no saved place, and then never again on its own.
+    /// The point is the "never again": an unpackaged desktop app gets no consent dialog when
+    /// either of the two privacy switches is off — the call just comes back Denied — so
+    /// retrying every launch would put the same red bar in front of someone who has already
+    /// decided, every time they open the app. "Add my location" in Settings is always there
+    /// for anyone who turns it on later.
+    /// </remarks>
+    public bool LocationAsked { get; set; }
+
     /// <summary>Draw the WSR-88D site layer (hidden at national zoom regardless).</summary>
     public bool ShowSiteMarkers { get; set; } = true;
 

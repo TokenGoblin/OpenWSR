@@ -432,9 +432,52 @@ public partial class MainWindow : Window
     public void ReportError(string text)
     {
         ErrorText.Text = text;
+        ErrorBar.Background = ErrorBackground;
+        ErrorBar.BorderBrush = ErrorBorder;
+        ErrorText.Foreground = ErrorForeground;
         ErrorBar.Visibility = Visibility.Visible;
         Serilog.Log.Warning("UI error surfaced: {Text}", text);
     }
+
+    /// <summary>
+    /// A persistent, dismissible notice that is not a failure.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Report"/> is the running commentary and is overwritten within seconds by
+    /// the live feed, which is right for a commentary and wrong for telling someone what the
+    /// app has just done on their behalf — saving a location it found, say. That needs the
+    /// same persistence as an error and none of the alarm, so it borrows the bar and changes
+    /// its colours.
+    /// </remarks>
+    public void ReportNotice(string text)
+    {
+        ErrorText.Text = text;
+        ErrorBar.Background = NoticeBackground;
+        ErrorBar.BorderBrush = NoticeBorder;
+        ErrorText.Foreground = NoticeForeground;
+        ErrorBar.Visibility = Visibility.Visible;
+        Serilog.Log.Information("UI notice surfaced: {Text}", text);
+    }
+
+    private static readonly System.Windows.Media.Brush ErrorBackground =
+        new System.Windows.Media.SolidColorBrush(
+            System.Windows.Media.Color.FromRgb(0x3A, 0x22, 0x26));
+    private static readonly System.Windows.Media.Brush ErrorBorder =
+        new System.Windows.Media.SolidColorBrush(
+            System.Windows.Media.Color.FromRgb(0x8E, 0x40, 0x48));
+    private static readonly System.Windows.Media.Brush ErrorForeground =
+        new System.Windows.Media.SolidColorBrush(
+            System.Windows.Media.Color.FromRgb(0xFF, 0xC8, 0xC8));
+
+    private static readonly System.Windows.Media.Brush NoticeBackground =
+        new System.Windows.Media.SolidColorBrush(
+            System.Windows.Media.Color.FromRgb(0x1E, 0x2E, 0x3A));
+    private static readonly System.Windows.Media.Brush NoticeBorder =
+        new System.Windows.Media.SolidColorBrush(
+            System.Windows.Media.Color.FromRgb(0x3C, 0x6E, 0x8E));
+    private static readonly System.Windows.Media.Brush NoticeForeground =
+        new System.Windows.Media.SolidColorBrush(
+            System.Windows.Media.Color.FromRgb(0xC8, 0xE4, 0xFF));
 
     private void DismissError_Click(object sender, RoutedEventArgs e) =>
         ErrorBar.Visibility = Visibility.Collapsed;
@@ -856,6 +899,83 @@ public partial class MainWindow : Window
         SiteCombo.SelectedItem ??= RadarSites.ByIcao("KTLX");
         FilterMosaic.IsChecked = true;
         Report("Pick a radar site, search for a place, or press 🎯 for the heaviest weather in the country.");
+
+        // Not awaited. Windows can sit on a cold radio for twelve seconds, and the national
+        // view is a perfectly good thing to be looking at meanwhile — holding the first paint
+        // hostage to an OS call would make the app feel broken to anyone whose location is off.
+        _ = TryLocateOnFirstRunAsync();
+    }
+
+    /// <summary>
+    /// On a first run with no saved place, ask Windows where we are and keep the answer.
+    /// </summary>
+    /// <remarks>
+    /// This is the whole setup step for a new user: with a place saved the app opens on its
+    /// radar, watches storms from it, and can say what is heading for it. Without one it is a
+    /// browser for other people's weather.
+    ///
+    /// <para>It runs at most once — see <see cref="AppSettings.LocationAsked"/> — and it never
+    /// overwrites an existing place, so someone who has set a home deliberately is not
+    /// second-guessed by the OS's idea of where they are.</para>
+    /// </remarks>
+    private async Task TryLocateOnFirstRunAsync()
+    {
+        if (_settings.LocationAsked || _settings.Locations.Count > 0) return;
+
+        // Recorded before the attempt, not after: if the call throws, hangs or the app is
+        // closed mid-way, the intent was still "we have asked once".
+        _settings.LocationAsked = true;
+        _settings.Save();
+
+        Report("Checking Windows for your location…");
+        LocationFix fix;
+        try
+        {
+            fix = await GeoLocationService.GetCurrentAsync();
+        }
+        catch (GeoLocationService.LocationUnavailableException ex)
+        {
+            // The message names the two privacy switches, which is the only useful thing to
+            // say here. Shown once, because LocationAsked is already set.
+            ReportError($"{ex.Message} You can add a place by hand in Settings at any time.");
+            return;
+        }
+
+        if (_settings.Locations.Count > 0) return; // added by hand while we were waiting
+
+        _settings.Locations.Add(new SavedLocation
+        {
+            Name = "Home",
+            LatDeg = fix.LatDeg,
+            LonDeg = fix.LonDeg,
+            Source = fix.Source,
+            AccuracyM = fix.AccuracyM,
+            IsPrimary = true,
+        });
+        _settings.Save();
+
+        ConfigureThreats();
+        RebuildHomeGeometry();
+        ComposeOverlay();
+        EnsureStormWatchForHome();
+
+        var site = RadarSites.Nearest(fix.LatDeg, fix.LonDeg);
+        SiteCombo.SelectedItem = RadarSites.ByIcao(site.Icao);
+        FilterMosaic.IsChecked = false;
+        FrameSite(site);
+        ApplyMode(DataMode.Live);
+
+        // A network fix can be a town rather than a street, and the alert radius is measured
+        // from this point — so say how good it is rather than implying it is exact.
+        string quality = fix.AccuracyM is { } metres && metres > 5000
+            ? $" That is accurate to about {Units.Distance(metres / 1000.0)}, so nudge it in "
+              + "Settings if the marker is off."
+            : "";
+        // A notice rather than a status line: the live feed overwrites the status within
+        // seconds, and this is the one thing the app did without being asked.
+        ReportNotice($"Found you near {site.Icao} and saved it as Home — "
+                   + $"watching for storms within {Units.Distance(_settings.AlertRadiusKm)}."
+                   + $"{quality} Change it in Settings under MY PLACES.");
     }
 
     private async Task LoadSelectedDayAsync()
