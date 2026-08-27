@@ -1,0 +1,66 @@
+# Build and test on every push and pull request.
+#
+# Two jobs, because the solution is two things. The Windows job is the real gate: the shell
+# is WPF and Direct3D, so it is the only platform that can run all of the tests. The Linux
+# job guards a property rather than a platform — the decoders, geodesy and format readers are
+# meant to stay free of Windows, and that is enforced in-process by PurityTests but only
+# actually proven by building them somewhere without Windows to fall back on.
+#
+# No network is needed. All 56 MB of test fixtures are committed, so a failure here is a
+# code failure rather than a flaky download.
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    name: Windows — full suite
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # Warnings are treated as errors because the project holds itself to zero: every gate
+      # recorded in TASKS.md says "0 warnings", and a standard nobody checks stops being one.
+      - name: Build
+        run: dotnet build OpenWSR.slnx --configuration Release -warnaserror
+
+      # Everything: the decoders, and the WPF/D3D half that only Windows can run. The shader
+      # tests compile HLSL through d3dcompiler rather than creating a device, so no GPU is
+      # required — which is what makes them runnable on a hosted runner at all.
+      - name: Test
+        run: dotnet test OpenWSR.slnx --configuration Release --no-build --verbosity normal
+
+  linux:
+    name: Linux — portable half stays portable
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # Only the projects that target net10.0. OpenWSR.App and OpenWSR.Render are WPF and
+      # Direct3D and are deliberately absent: they can be *built* here with
+      # EnableWindowsTargeting, but never run, so building them would prove nothing.
+      - name: Build the pure libraries
+        run: |
+          for p in Geo Grib2 NetCdf Nexrad Palettes Placefiles Ingest Harness; do
+            dotnet build "src/OpenWSR.$p" --configuration Release -warnaserror
+          done
+
+      # 406 of the 637 tests — every binary decoder, the geodesy, dealiasing, the clutter
+      # mask and the hodograph. The other 231 are the render and UI seam, covered by the
+      # Windows job above.
+      - name: Test the pure libraries
+        run: |
+          dotnet test tests/OpenWSR.Geo.Tests --configuration Release
+          dotnet test tests/OpenWSR.Nexrad.Tests --configuration Release

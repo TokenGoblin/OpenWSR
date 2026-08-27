@@ -1879,3 +1879,33 @@ forgetting the contents.
 **Gate:** [PASSED] 637/637 tests, 0 warnings. Verified across a restart: the hail swath came
 back on, Flash flood came back off from inside a collapsed section, and Tornado — never
 touched — was neither written nor changed.
+
+## CI, and a public repository
+
+Sanitised for publication and wired for CI on GitHub. The move to GitHub changes the answer
+I gave earlier about a Linux runner: **public repositories get free Windows runners**, so all
+637 tests can run rather than the 406 a Linux-only runner allows.
+
+- [x] **Two jobs, guarding different things.** Windows is the real gate and runs everything —
+      it is the only platform that can, since the shell is WPF and Direct3D. The shader tests
+      work on a hosted runner because they compile HLSL through `d3dcompiler` rather than
+      creating a device, so no GPU is needed
+- [x] **The Linux job guards a property, not a platform.** The decoders, geodesy and format
+      readers are meant to stay free of Windows. `PurityTests` asserts that in-process; only
+      a build somewhere without Windows to fall back on actually proves it. `App` and `Render`
+      are deliberately absent — they *can* be built there with `EnableWindowsTargeting` but
+      never run, so building them would prove nothing
+- [x] **`-warnaserror` on both.** Every gate in this file says "0 warnings"; a standard nobody
+      checks stops being one
+- [x] **Both commands verified locally first**, in Release, which is not the configuration
+      anything had been built in — 637 tests, 0 warnings. Running CI to discover whether the
+      build works is how a first red build ends up meaning nothing
+- [x] **No network needed.** All 56 MB of fixtures are committed, so a red build is a code
+      failure rather than a flaky download
+
+Sanitisation re-verified after the two commits that landed since the history rewrite: no
+session URLs, hostname, home coordinates or absolute personal paths, in the tree or in any
+commit reachable from it.
+
+**Gate:** [PASSED] 637/637 tests in Release with `-warnaserror`, 0 warnings. The published
+single-file artifact was also built and run: 261 MB, live data, 60 fps.

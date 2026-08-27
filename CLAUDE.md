@@ -41,7 +41,27 @@ What is worth writing down is the behaviour, not the address:
   reconfiguring auth or switching remotes.
 - Commit and push only when asked.
 
-Forgejo Actions is similar to GitHub Actions but distinct; ask before adding CI to either.
+## CI
+
+`.github/workflows/ci.yml` runs on every push and pull request, in two jobs that guard
+different things.
+
+**Windows is the real gate** and runs all 637 tests. It is the only platform that can: the
+shell is WPF and Direct3D. The shader tests work on a hosted runner because they compile HLSL
+through `d3dcompiler` rather than creating a device, so no GPU is needed.
+
+**Linux builds the eight `net10.0` projects and runs their 406 tests.** That job exists to
+guard a property, not a platform: the decoders, geodesy and format readers are meant to stay
+free of Windows, which `PurityTests` asserts in-process but only a build without Windows to
+fall back on actually proves. `OpenWSR.App` and `OpenWSR.Render` are deliberately absent —
+they *can* be built there with `EnableWindowsTargeting`, but never run, so building them
+would prove nothing.
+
+Both build with **`-warnaserror`**, because the project holds itself to zero warnings and a
+standard nobody checks stops being one. No network is needed: all 56 MB of fixtures are
+committed, so a red build is a code failure rather than a flaky download.
+
+Forgejo Actions is similar but distinct, and the workflow here is GitHub's format.
 
 ## Commands
 
