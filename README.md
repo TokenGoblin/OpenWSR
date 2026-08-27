@@ -25,8 +25,8 @@ No account, no API key, no subscription. Everything it reads is public data.
   `SV_VertexID`; beam propagation, great-circle offset and the Mercator projection all
   happen on the GPU relative to the radar origin, so it stays precise at street zoom.
   Switching product or palette is a texture swap (measured 0.7–11 ms). 60 fps.
-- **Archive** — any site, any UTC day back to 1991. Time slider across the day, 30-frame
-  loop at 2/4/8 fps, 2 GB LRU disk cache.
+- **Archive** — any site, any UTC day back to 1991. Time slider across the day, loops of
+  12/30/60/144 volumes at 2/4/8 fps, 2 GB LRU disk cache.
 - **Live** — real-time chunk streaming. Partial volumes render as each tilt completes,
   roughly five seconds after the radar sweeps it, with order-independent assembly and a
   prominent data-age indicator.
@@ -79,9 +79,40 @@ No account, no API key, no subscription. Everything it reads is public data.
   per-cell max dBZ / VIL / echo top.
 - **Hotspot finder** — one click scans all 163 WSR-88Ds and flies to the heaviest
   precipitation in the country.
-- **Proximity alerts** — set a home location and radius; OpenWSR raises a tray
-  notification when a storm's forecast track will pass within range (with an ETA and the
-  cell's attributes) or when a warning polygon includes or nears your area.
+- **Hail size swath** — MRMS maximum estimated hail size over the last hour, banded at the
+  sizes hail is actually reported in: 0.75 in severe, 1 in a quarter, 1.75 in a golf ball,
+  2.75 in a baseball. Where hail fell, rather than where a cell happens to be now.
+- **Hodograph** — the wind profile plotted as a curve, coloured by height with kilometre
+  ticks, plus storm-relative helicity and bulk shear. Helicity is measured against the
+  *observed* motion of a tracked cell where there is one, which is the advantage of doing
+  this in a radar application: a sounding has to estimate where a storm would go.
+- **Clutter suppression** — rotation products are masked twice, because noise and clutter
+  are different problems. Weak echo goes first (shear computed where nothing reflected is
+  the phase of receiver noise), then low correlation coefficient *but only under a weak
+  echo* — because a tornadic debris signature is itself a low-CC target, and a bare CC
+  threshold deletes the very thing the product exists to find.
+- **Watched places** — a named list, each with its own alert radius. On its first run the
+  app asks Windows where it is and saves that as Home, which is the whole setup step.
+  OpenWSR then raises a tray notification when a storm's forecast track will pass within
+  range — with an ETA and the cell's attributes — or when a warning polygon includes or
+  nears one of them. A storm that comes close but misses is listed and named, not alarmed
+  about; one that is leaving is not listed at all.
+
+**Map and overlays**
+
+- **Basemaps** — CARTO Dark Matter by default, because reflectivity is a bright saturated
+  palette and against a near-black ground the weather is the only bright thing on screen.
+  Place names are drawn as their own layer *above* the radar, since the name of the town a
+  storm is over is exactly what you want to read at that moment. OpenStreetMap, USGS
+  topographic and MapTiler are also selectable.
+- **Political boundaries** — US Census state and county outlines as a layer you control,
+  rather than whatever the basemap happens to bake in. A county line is how a warning is
+  described, so it needs to be something you can turn up. Downloaded once and cached.
+- **Bring your own geometry** — import GeoJSON or ESRI shapefiles, zipped or not, as
+  toggleable overlays.
+- **Reflectivity window** — a min/max dBZ filter, opening at 20 dBZ, which is about
+  0.026 in/hr: light rain reaching the ground. Below it is mostly insects, birds and dust.
+  Drop it for snow, which returns far less energy for the same water.
 
 **Working with it**
 
@@ -93,7 +124,12 @@ No account, no API key, no subscription. Everything it reads is public data.
   which turns the split from a product comparison into a place comparison.
 - **Tools** — hover inspector (value, azimuth, ranges, beam height), geodesic
   distance/bearing measuring, colour scale on the map.
+- **Drawing** — freehand lines, areas, circles of a true ground radius, and labels, saved
+  out as placefiles so they can be shared with other GRLevelX-compatible software.
 - **Export** — PNG stills and animated GIFs of the loop, carrying every layer on screen.
+- **It remembers** — layers, filters, opacities, which panel sections you left open, your
+  places and their radii. Not which site or product you were last looking at: that is where
+  you happened to be looking, not how you like the application set up.
 - **Search** — city, ZIP code or lat/lon, resolving to the nearest radar.
 
 ---
@@ -187,11 +223,13 @@ Everything below is public and unauthenticated.
 | `unidata-nexrad-level2-chunks` | Level II real-time chunks |
 | `unidata-nexrad-level3` | Level III products (NST, NHI, NMD, NSS, DVL) and the TDWR terminal radars (TZ0–2, TV0–2) |
 | `noaa-hrrr-bdp-pds` (AWS) | HRRR model output for future radar |
-| `noaa-mrms-pds` (AWS) | MRMS national composite, decoded natively from GRIB2 |
+| `noaa-mrms-pds` (AWS) | MRMS national composite and MESH hail size, decoded natively from GRIB2 |
 | `noaa-goes19` (AWS) | GOES-East ABI cloud imagery and GLM lightning |
 | `api.weather.gov` | Active warnings |
 | `spc.noaa.gov` | Day 1 convective outlooks |
 | Iowa Environmental Mesonet | National radar mosaic and GOES tiles, SPC watches and discussions, storm reports |
+| US Census (cartographic boundary files) | State and county outlines, 1:500,000 |
+| USGS The National Map | Topographic basemap tiles |
 | CARTO / OpenStreetMap / MapTiler | Basemap tiles — dark by default, so the radar palette is the only bright thing on screen |
 | NCEI HOMR | Radar site table (embedded) |
 
@@ -262,13 +300,22 @@ real-time corpus spanning a volume boundary and its archive ground truth.
 
 ## Known limitations
 
-- Placefile icon *sheets* are not downloaded; `Icon` statements draw as markers.
-  `Triangles` and `Image` blocks are skipped and reported.
-- MRMS decodes natively and is golden-tested, but is not yet drawn — the tile mosaic
-  covers the visual.
-- No lightning, velocity dealiasing, azimuthal shear, VWP panel, or 3D volume rendering.
-- Velocity is displayed as received, so it folds beyond the Nyquist limit.
-- Animated GIF export is implemented but has not been exercised end-to-end.
+- **Windows only, and US only.** The shell is WPF and Direct3D; the data sources are the
+  US radar network and NOAA's public buckets.
+- **Storm-structure attributes are mostly empty on live data.** NSS stopped being
+  distributed around 2021, so max dBZ, cell-based VIL and echo top come back null on
+  anything current. The decoder still works on archives. The layers panel says so when it
+  detects it — it is not a bug to be fixed here.
+- **Velocity dealiasing reaches 85–92 % of Py-ART's correction rate.** The gap is genuine
+  judgement-call difference on marginal folds, and two plausible fixes were measured and
+  rejected — see `docs/verification.md`.
+- **Placefile icon sheets** are fetched and drawn, but `Triangles` and `Image` blocks are
+  skipped and reported.
+- **Ground clutter at coastal sites** is suppressed on rotation products but not on plain
+  reflectivity, where it is left visible rather than guessed at.
+- **Tested on one machine.** One Windows 11 install, one GPU, one display at 150 %
+  scaling. CI now builds and tests on hosted Windows and Linux runners, but the rendering
+  half has only ever been *run* here.
 
 `OpenWSR-build-plan.md` is the original phase-gated brief; `TASKS.md` tracks everything
 built since, including the competitive parity work.
