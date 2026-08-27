@@ -1,7 +1,6 @@
 # OpenWSR
 
-<!-- Replace OWNER below with the GitHub account this lives under, or the badge will 404. -->
-[![build](https://github.com/OWNER/OpenWSR/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/OpenWSR/actions/workflows/ci.yml)
+[![build](https://github.com/TokenGoblin/OpenWSR/actions/workflows/ci.yml/badge.svg)](https://github.com/TokenGoblin/OpenWSR/actions/workflows/ci.yml)
 
 An open-source native Windows NEXRAD radar viewer. .NET 10 / WPF shell, Direct3D 11
 rendering via Vortice, and its own Web Mercator tile engine — so radar composites into
