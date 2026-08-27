@@ -134,6 +134,22 @@ No account, no API key, no subscription. Everything it reads is public data.
 
 ---
 
+## Install
+
+Download the `.msi` from [Releases](https://github.com/TokenGoblin/OpenWSR/releases) and run
+it. It installs per-user under `%LocalAppData%\Programs\OpenWSR` with no administrator
+prompt, and adds a Start menu entry. Uninstall from Settings → Apps; your saved places,
+settings and cached tiles are left alone.
+
+The installer is **unsigned**, so SmartScreen shows "Windows protected your PC" on first run
+— *More info → Run anyway*. That is about the absence of a code-signing certificate, not
+about anything found in the file.
+
+Requires 64-bit Windows 10 1809 or later. Nothing else: the .NET runtime is bundled, which
+is most of the download.
+
+---
+
 ## Build and run
 
 ```

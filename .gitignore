@@ -482,3 +482,6 @@ $RECYCLE.BIN/
 *.swp
 
 tools/sweep-data.js
+
+# Installer output (an 80 MB MSI has no business in git; releases carry it).
+dist/

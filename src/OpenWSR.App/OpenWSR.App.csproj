@@ -37,6 +37,12 @@
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>OpenWSR</AssemblyName>
+    <ApplicationIcon>..\..\assets\brand\openwsr.ico</ApplicationIcon>
+    <Product>OpenWSR</Product>
+    <Company>OpenWSR</Company>
+    <Authors>TokenGoblin</Authors>
+    <Copyright>Copyright (c) 2026 TokenGoblin</Copyright>
+    <Description>Native Windows NEXRAD radar viewer</Description>
     <Version>0.1.0</Version>
   </PropertyGroup>
 

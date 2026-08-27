@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Per-user installer for the self-contained build.
+
+  Per-user (Scope="perUser") on purpose: it installs under %LocalAppData%\Programs with no
+  UAC prompt at all, which is where the application already keeps its settings, tile cache
+  and logs. It also avoids showing an elevation prompt for an unsigned package, where the
+  warning is the yellow "unknown publisher" one rather than the blue one.
+
+  Self-contained on purpose too. A plain MSI cannot install a prerequisite — chaining the
+  .NET runtime needs a Burn bundle, which is an .exe and no longer an MSI — so bundling the
+  runtime is the only way this stays one file that works for someone who is not a developer.
+  It costs about 260 MB before cabinet compression.
+
+  Build (from the repository root, which -b makes the base for relative sources):
+    wix build installer/OpenWSR.wxs -arch x64 -b . -d Version=0.1.0 -d Payload=<OpenWSR.exe> -o dist/OpenWSR-0.1.0.msi
+
+  -arch x64 matters. WiX defaults to x86, and a 32-bit package delivering a 64-bit-only
+  application registers itself in the WOW6432Node view of the registry, which is the
+  wrong place to describe a 64-bit program.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <Package
+      Name="OpenWSR"
+      Manufacturer="TokenGoblin"
+      Version="$(Version)"
+      Scope="perUser"
+      Compressed="yes"
+      Language="1033"
+      Codepage="1252"
+      UpgradeStrategy="majorUpgrade"
+      UpgradeCode="A68A2D63-F9EB-4CAA-9FD7-649D8C41E889">
+
+    <!--
+      This GUID identifies the product family for the rest of its life. Changing it makes
+      every future installer treat the old one as an unrelated product, so upgrades stop
+      upgrading and users end up with two copies. It must never change.
+    -->
+
+    <SummaryInformation
+        Description="OpenWSR — native Windows NEXRAD radar viewer"
+        Manufacturer="TokenGoblin" />
+
+    <MajorUpgrade
+        AllowSameVersionUpgrades="yes"
+        DowngradeErrorMessage="A newer version of OpenWSR is already installed. Uninstall it first if you meant to go back." />
+
+    <!-- One embedded cabinet: a single .msi to hand someone, nothing beside it to lose. -->
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="OpenWSR.ico" SourceFile="assets\brand\openwsr.ico" />
+    <Property Id="ARPPRODUCTICON" Value="OpenWSR.ico" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/TokenGoblin/OpenWSR" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsFolder" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="OpenWSR" />
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder" />
+
+    <Feature Id="Main" Title="OpenWSR" Level="1">
+      <ComponentGroupRef Id="AppComponents" />
+    </Feature>
+  </Package>
+
+  <Fragment>
+    <ComponentGroup Id="AppComponents">
+
+      <Component Id="MainExecutable" Directory="INSTALLFOLDER" Guid="*">
+        <File Id="OpenWSRExe" Source="$(Payload)" Name="OpenWSR.exe" KeyPath="yes" />
+      </Component>
+
+      <!--
+        A per-user install writes to HKCU, and every per-user component needs a registry
+        keypath there for Windows to track it reliably. Uninstall removes the key and with
+        it the folder; it deliberately does not touch %LocalAppData%\OpenWSR, where the
+        settings, saved places and cached tiles live — removing an application should not
+        throw away the places someone asked it to watch.
+      -->
+      <Component Id="RegistryMarker" Directory="INSTALLFOLDER"
+                 Guid="CE4B7296-B29B-4576-B603-40694D3335E7">
+        <RegistryValue
+            Root="HKCU"
+            Key="Software\OpenWSR"
+            Name="InstallFolder"
+            Type="string"
+            Value="[INSTALLFOLDER]"
+            KeyPath="yes" />
+        <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
+
+        <!--
+          A plain shortcut rather than an advertised one. Advertised shortcuts are resolved
+          through the installer, so their target reads as an icon in the MSI cache and
+          launching one can raise "please wait while Windows configures OpenWSR" — a poor
+          thing to meet on first run. This points straight at the executable.
+        -->
+        <Shortcut
+            Id="StartMenuShortcut"
+            Directory="ProgramMenuFolder"
+            Name="OpenWSR"
+            Description="Native Windows NEXRAD radar viewer"
+            Target="[INSTALLFOLDER]OpenWSR.exe"
+            WorkingDirectory="INSTALLFOLDER"
+            Icon="OpenWSR.ico" />
+      </Component>
+
+    </ComponentGroup>
+  </Fragment>
+</Wix>

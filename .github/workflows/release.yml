@@ -1,0 +1,107 @@
+# Build the installer and publish a GitHub Release, on a version tag.
+#
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# The tag is the single source of the version: it is written into the assembly and into the
+# MSI's ProductVersion, so a release cannot claim a version its binary disagrees with.
+#
+# The MSI is unsigned. Windows SmartScreen will warn on first run until the download builds
+# reputation, or until a code-signing certificate is added — see the release notes below.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build, without the leading v (e.g. 0.1.0)'
+        required: true
+
+jobs:
+  msi:
+    runs-on: windows-latest
+    permissions:
+      contents: write          # needed to create the release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Work out the version
+        id: v
+        shell: pwsh
+        run: |
+          $v = if ($env:GITHUB_REF -like 'refs/tags/v*') {
+            $env:GITHUB_REF -replace '^refs/tags/v',''
+          } else {
+            '${{ github.event.inputs.version }}'
+          }
+          if ($v -notmatch '^\d+\.\d+\.\d+$') { throw "Version '$v' is not x.y.z" }
+          "version=$v" >> $env:GITHUB_OUTPUT
+          "OpenWSR $v"
+
+      # Tests gate the release. A tag should not be able to produce an installer that the
+      # ordinary build would have rejected.
+      - name: Test
+        run: dotnet test OpenWSR.slnx --configuration Release -warnaserror
+
+      - name: Publish the self-contained application
+        run: >
+          dotnet publish src/OpenWSR.App --configuration Release
+          -p:Version=${{ steps.v.outputs.version }}
+
+      - name: Install WiX
+        run: dotnet tool install --global wix --version 5.0.2
+
+      - name: Build the MSI
+        shell: pwsh
+        run: |
+          $exe = "src/OpenWSR.App/bin/Release/net10.0-windows10.0.19041.0/win-x64/publish/OpenWSR.exe"
+          if (-not (Test-Path $exe)) { throw "publish did not produce $exe" }
+          New-Item -ItemType Directory -Force dist | Out-Null
+          # -arch x64 because a 32-bit package delivering a 64-bit-only application registers
+          # itself in the WOW6432Node view, which is the wrong place to describe it.
+          wix build installer/OpenWSR.wxs -arch x64 -b . `
+            -d Version=${{ steps.v.outputs.version }} -d "Payload=$exe" `
+            -o "dist/OpenWSR-${{ steps.v.outputs.version }}.msi"
+          Get-Item "dist/OpenWSR-${{ steps.v.outputs.version }}.msi" |
+            ForEach-Object { "MSI: {0:N0} MB" -f ($_.Length / 1MB) }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenWSR-${{ steps.v.outputs.version }}-msi
+          path: dist/*.msi
+
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $notes = @"
+          ## OpenWSR ${{ steps.v.outputs.version }}
+
+          A native Windows NEXRAD radar viewer. No account, no API key, no subscription.
+
+          **Install** — download the ``.msi`` and run it. It installs per-user under
+          ``%LocalAppData%\Programs\OpenWSR`` with no administrator prompt, and adds a Start
+          menu entry. Uninstall from Settings > Apps like anything else; your saved places,
+          settings and cached tiles are left alone.
+
+          **Unsigned.** SmartScreen will show "Windows protected your PC" on first run —
+          More info > Run anyway. That warning is about the absence of a code-signing
+          certificate, not about anything detected in the file.
+
+          **Requires** Windows 10 1809 or later, 64-bit. Nothing else: the .NET runtime is
+          included, which is most of the download size.
+
+          > Not for life-safety decisions. Use official National Weather Service products and
+          > local warning systems for protective action.
+          "@
+          gh release create "${{ github.ref_name }}" `
+            "dist/OpenWSR-${{ steps.v.outputs.version }}.msi" `
+            --title "OpenWSR ${{ steps.v.outputs.version }}" `
+            --notes $notes

@@ -1939,3 +1939,38 @@ easier case was the untested one.
       A notice now falls back to the status line rather than displacing an error
 
 **Gate:** [PASSED] 637/637 tests, 0 warnings, verified running at both 100 % and 150 %.
+
+## An MSI, per-user and self-contained
+
+Requested: the release should be an installer rather than a bare executable.
+
+- [x] **Self-contained, because a plain MSI cannot install a prerequisite.** Chaining the
+      .NET runtime needs a Burn bundle, which is an `.exe` and no longer an MSI — so bundling
+      it is the only way this stays one file that works for someone who is not a developer.
+      261 MB of payload compresses to a **78 MB** MSI
+- [x] **Per-user, no elevation.** Installs to `%LocalAppData%\Programs\OpenWSR`, which is
+      where the application already keeps its settings, cache and logs. It also avoids an
+      elevation prompt on an unsigned package, where the warning is the yellow
+      "unknown publisher" one rather than the blue one
+- [x] **Uninstall leaves your data alone.** The install folder and shortcut go; the settings,
+      saved places and cached tiles under `%LocalAppData%\OpenWSR` stay. Removing an
+      application should not throw away the places someone asked it to watch. Verified by
+      installing, uninstalling and checking `settings.json` survived
+- [x] **`-arch x64`, found by checking rather than assuming.** WiX defaults to x86, and the
+      first build registered a 64-bit-only application in the `WOW6432Node` view of the
+      registry. It still worked, which is exactly why it was worth looking for
+- [x] **A plain shortcut, not an advertised one.** Advertised shortcuts resolve through the
+      installer, so their target reads as an icon in the MSI cache and launching one can
+      raise "please wait while Windows configures OpenWSR" — a poor thing to meet on a first
+      run
+- [x] **An icon and product metadata**, neither of which existed. The shortcut and Add/Remove
+      entry were going to be generic otherwise
+- [x] **`release.yml` builds it on a version tag**, taking the version from the tag so a
+      release cannot claim a version its binary disagrees with, running the full test suite
+      first, and attaching the MSI to a GitHub Release
+
+Verified end to end: install (exit 0, no prompt), correct registration, shortcut points at
+the executable, the installed copy runs live at 60 fps, uninstall removes everything it
+should and nothing it should not.
+
+**Gate:** [PASSED] 637/637 tests, 0 warnings.
