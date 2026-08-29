@@ -86,19 +86,29 @@ public partial class MainWindow : Window
         {
             "maptiler" when !string.IsNullOrEmpty(settings.MapTilerKey) =>
                 TileProvider.MapTiler(settings.MapTilerKey, settings.UserAgent),
-            "carto-dark" => TileProvider.CartoDark(settings.UserAgent),
+            "osm" => TileProvider.Osm(settings.UserAgent),
             "usgs-topo" => TileProvider.UsgsTopo(settings.UserAgent),
-            _ => TileProvider.Osm(settings.UserAgent),
+            // Anything else — a value from a newer build, a corrupt file, MapTiler selected
+            // with no key — gets the default rather than the light map, so a settings file
+            // nobody can read still opens on the basemap AppSettings promises.
+            _ => TileProvider.OsmDark(settings.UserAgent),
         };
         AttributionText.Text = provider.Name switch
         {
             "maptiler" => "© MapTiler © OpenStreetMap contributors",
-            "carto-dark" => "© OpenStreetMap contributors © CARTO",
             "usgs-topo" => "USGS The National Map",
             _ => "© OpenStreetMap contributors",
         };
 
         _mapView = new MapView(provider);
+        // The sliders' XAML values are the shipped defaults, but the handlers that apply them
+        // ran during InitializeComponent, when _mapView was still null, and dropped them on the
+        // floor. Until now that was invisible because the two ends were kept equal by hand —
+        // Value="85" against a _radarOpacity of 0.85f — which is a coincidence one edit away
+        // from a panel that disagrees with the picture. Push them once, so the XAML is the only
+        // place a default is written. Settings restore, further down, overrides these with
+        // whatever the user has actually changed.
+        ApplyRadarAppearance();
         _mapView.Camera.MoveTo(39.0, -98.0, 6000); // continental US
         _mapView.SetMarkers(RadarSites.All.Select(s => (s.LatDeg, s.LonDeg, s.Icao)));
         _mapView.MarkersEnabled = settings.ShowSiteMarkers;
@@ -355,6 +365,7 @@ public partial class MainWindow : Window
         _statusTimer.Tick += (_, _) =>
         {
             FpsText.Text = $"{_mapView.FramesPerSecond:F0} fps · sweep upload {_mapView.LastSweepUploadMs:F1} ms";
+            UpdateCentreReadout();
 
             // Write settings down once the flurry has settled rather than per tick.
             if (_settingsSaveDue && DateTime.UtcNow - _settingsChangedAtUtc > TimeSpan.FromSeconds(1))
@@ -1425,6 +1436,67 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Paint the map-centre readout in the WHERE bar. Driven off the status tick rather than
+    /// a camera event because it has to follow inertial panning, which settles over about a
+    /// second after the mouse is released — a one-shot notification would leave the readout
+    /// reporting where the drag ended rather than where the map came to rest.
+    ///
+    /// Centred is shown as a colour change as well as words: the whole point of the control
+    /// is to be readable at a glance, and a distance that happens to say "0.4 mi" is not
+    /// something the eye catches while it is looking at the weather.
+    /// </summary>
+    private void UpdateCentreReadout()
+    {
+        var camera = _mapView.Camera.Snapshot();
+        var (latDeg, lonDeg) = GeoMath.FromMercator(camera.CenterX, camera.CenterY);
+        var centre = CentreReadout.Describe(latDeg, lonDeg, camera.MetersPerPixel, _settings.Locations);
+
+        CentreCoords.Text = centre.Coordinates;
+        CentrePlace.Text = centre.Relation;
+        CentrePlace.Visibility = centre.Relation.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+
+        var emphasis = (System.Windows.Media.Brush)FindResource(centre.OnPlace ? "Accent" : "TextDim");
+        CentreGlyph.Foreground = emphasis;
+        CentrePlace.Foreground = emphasis;
+        CentreReadoutBox.BorderBrush =
+            (System.Windows.Media.Brush)FindResource(centre.OnPlace ? "Accent" : "Line");
+        RecentreButton.Visibility =
+            _settings.Primary is null ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    /// <summary>
+    /// Put the camera back on your place, and the radar with it.
+    ///
+    /// The site follows because the search box beside it already works that way — landing
+    /// somewhere selects the nearest WSR-88D — and because recentring without it leaves the
+    /// map over your house reading a radar that can be hundreds of miles off, which is the
+    /// half-finished version of what the button says it does.
+    ///
+    /// The zoom does *not* reset, which is where this parts company with the search box. You
+    /// press this to fix where you are looking, not how closely; throwing away the scale
+    /// chosen for the storm being watched would make it a worse deal than panning back.
+    /// </summary>
+    private void RecentreButton_Click(object sender, RoutedEventArgs e)
+    {
+        // The primary place, not the nearest one the readout names: this is "put me back
+        // where I live", so it has to land in the same spot every time rather than following
+        // whichever saved place the camera happens to have drifted toward.
+        if (_settings.Primary is not { } place) return;
+
+        // Read the scale *before* touching the combo. Assigning SelectedItem raises
+        // SelectionChanged synchronously, and its FrameSite() already moves the camera to
+        // 250 m/px — so a snapshot taken after it reports 250 and "keeps the zoom" quietly
+        // means "resets it". Worse, it only did so when the site actually changed, so the
+        // button kept your zoom or threw it away depending on where you happened to be.
+        double metresPerPixel = _mapView.Camera.Snapshot().MetersPerPixel;
+
+        var site = RadarSites.Nearest(place.LatDeg, place.LonDeg);
+        SiteCombo.SelectedItem = RadarSites.ByIcao(site.Icao);
+        _mapView.Camera.MoveTo(place.LatDeg, place.LonDeg, metresPerPixel);
+        UpdateCentreReadout();
+    }
+
+    /// <summary>
     /// Rebuild the home marker when the zoom moves materially — the same contract the storm,
     /// lightning and MRMS overlays have, and for the same reason: the triangle is a symbol
     /// sized in screen pixels, so its metre extent is only correct for the zoom it was built
@@ -1553,16 +1625,30 @@ public partial class MainWindow : Window
 
     // ---- layers panel ----
 
-    private void OpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        if (_mapView is not null)
-            _mapView.RadarOpacity = (float)(e.NewValue / 100.0);
-    }
+    private void OpacitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) =>
+        ApplyRadarAppearance();
 
-    private void SmoothSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    private void SmoothSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) =>
+        ApplyRadarAppearance();
+
+    /// <summary>
+    /// Push the two radar-appearance sliders at every pane.
+    ///
+    /// One route for both, because they are read together in three places — the constructor's
+    /// initial apply, each slider's handler, and a pane opened later — and three hand-copied
+    /// versions of "value / 100" is how the renderer and the panel came to disagree in the
+    /// first place. The null guard is for the handlers, which XAML raises during
+    /// `InitializeComponent`, before there is a map to push anything at.
+    /// </summary>
+    private void ApplyRadarAppearance()
     {
-        if (_mapView is not null)
-            _mapView.RadarSmoothing = (float)(e.NewValue / 100.0);
+        if (_mapView is null) return;
+
+        float opacity = (float)(OpacitySlider.Value / 100.0);
+        float smoothing = (float)(SmoothSlider.Value / 100.0);
+        _mapView.RadarOpacity = opacity;
+        _mapView.RadarSmoothing = smoothing;
+        _panes?.ApplyRadarAppearance(opacity, smoothing);
     }
 
     /// <summary>
@@ -2702,23 +2788,39 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Find the strongest cell in the country and point everything at it: browsing
-    /// site, live feed, storm overlay (temporarily overriding the home watch), camera.
-    /// The one-click way to exercise every feature against real weather.
+    /// Find a storm and point everything at it: browsing site, live feed, storm overlay
+    /// (temporarily overriding the home watch), camera.
+    ///
+    /// Plain click goes to the nearest real precipitation to your primary place, which is
+    /// the one people actually want — the weather that is about to be their problem. Shift
+    /// asks for the heaviest in the country instead: that is the fastest way to get real
+    /// weather on screen, so it stays reachable for verifying live features. With no place
+    /// saved there is no "near me" to search from, so that falls back to the same scan.
     /// </summary>
     private async void HotspotButton_Click(object sender, RoutedEventArgs e)
     {
+        var origin = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? null : _settings.Primary;
+
         HotspotButton.IsEnabled = false;
         ShowProgress(0);
         try
         {
-            Report("Scanning every radar site for the heaviest precipitation…");
-            var hotspot = await NationalStormScan.FindHeaviestAsync((done, total) =>
+            Report(origin is { } place
+                ? $"Scanning every radar site for the nearest storm to {place.Name}…"
+                : _settings.Primary is null
+                    ? "No saved place yet — scanning for the heaviest precipitation in the USA…"
+                    : "Scanning every radar site for the heaviest precipitation…");
+
+            void OnProgress(int done, int total) =>
                 Dispatcher.BeginInvoke(() =>
                 {
                     Report($"Scanning storm structure… {done}/{total} sites");
                     ShowProgress(done / (double)Math.Max(total, 1));
-                }));
+                });
+
+            var hotspot = origin is null
+                ? await NationalStormScan.FindHeaviestAsync(OnProgress)
+                : await NationalStormScan.FindNearestAsync(origin.LatDeg, origin.LonDeg, OnProgress);
             if (hotspot is null)
             {
                 Report("No fresh storm cells anywhere in the USA — remarkably quiet.");
@@ -2731,8 +2833,13 @@ public partial class MainWindow : Window
             _storms.Enable(hotspot.Site.Icao); // follow the hotspot (overrides home watch for now)
             _mapView.Camera.MoveTo(hotspot.LatDeg, hotspot.LonDeg, 150);
 
+            // Distance from the place beats distance from the radar when there is a place:
+            // "18 mi from Home" is the answer to what was asked, "64 mi out" is trivia.
+            var distance = hotspot.DistanceKm is { } km
+                ? $"{Units.Distance(km)} from {origin!.Name}"
+                : $"{Units.Distance(hotspot.RangeKm)} out";
             Report($"🎯 Hotspot: VIL {hotspot.MaxVilKgM2:F0} kg/m² near {hotspot.Site.Icao} " +
-                   $"({hotspot.Site.Name}, {hotspot.Site.State}), {Units.Distance(hotspot.RangeKm)} out — " +
+                   $"({hotspot.Site.Name}, {hotspot.Site.State}), {distance} — " +
                    $"as of {hotspot.ProductTimeUtc:HH:mm}Z");
         }
         catch (Exception ex)

@@ -151,10 +151,41 @@ public sealed class PaneManager : IDisposable
             mapView.SetValueFilter(float.NegativeInfinity, float.PositiveInfinity);
     }
 
+    private float _radarOpacity = 0.85f;
+    private float _radarSmoothing;
+
+    /// <summary>
+    /// Apply the radar opacity and smoothing sliders to every pane, not just the one that
+    /// owns them.
+    /// </summary>
+    /// <remarks>
+    /// The same shape as <see cref="ApplyValueFilter"/> and there for the same reason: each
+    /// pane has its own <see cref="MapView"/>, so a slider set on the primary reached nothing
+    /// else. Smoothing hid it for as long as it shipped at 0, which is exactly what a freshly
+    /// built secondary was already at, and it surfaced the moment the default became 50 —
+    /// two panes on the same site and product, one smoothed and one raw, with the panel
+    /// reporting a single number for both.
+    /// </remarks>
+    public void ApplyRadarAppearance(float opacity, float smoothing)
+    {
+        _radarOpacity = opacity;
+        _radarSmoothing = smoothing;
+        foreach (var pane in _secondaries)
+        {
+            pane.MapView.RadarOpacity = opacity;
+            pane.MapView.RadarSmoothing = smoothing;
+        }
+    }
+
     private Pane CreateSecondary(int index)
     {
         var mapView = new MapView(_provider);
         var radar = new RadarDisplayController(mapView);
+
+        // A pane opened later has to start where the sliders already are, not at the
+        // renderer's own field defaults.
+        mapView.RadarOpacity = _radarOpacity;
+        mapView.RadarSmoothing = _radarSmoothing;
 
         // Secondary panes open on complementary products, so four panes are four views
         // rather than four copies.

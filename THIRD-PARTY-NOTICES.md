@@ -17,10 +17,14 @@ OpenWSR uses the following open-source components:
   NEXRAD data carries no use restrictions.
 - **Warnings** — NWS API (`api.weather.gov`), public domain.
 - **Radar site table** — NCEI Historical Observing Metadata Repository (HOMR), public domain.
-- **Basemap tiles** — © OpenStreetMap contributors (ODbL). The default dark style is CARTO's
-  "Dark Matter", which requires attributing CARTO alongside OpenStreetMap and is shown as
-  such in the app; MapTiler when configured with a user-supplied key. Tile imagery is
-  subject to the provider's terms.
+- **Basemap tiles** — © OpenStreetMap contributors (ODbL), from `tile.openstreetmap.org`,
+  and attributed as such in the app. Both the light and the dark style are those same tiles;
+  the dark one is derived locally by `TileToning` rather than fetched, so it introduces no
+  further party. MapTiler is used only when configured with a user-supplied key. Tile imagery
+  is subject to the provider's terms, and OSM's tile usage policy asks that applications send
+  an identifying User-Agent and not bulk-download — this one sends `OpenWSR/0.1` with the
+  project URL and fetches only tiles being viewed. CARTO's "Dark Matter" was the default
+  through 0.1.0 and is no longer used.
 - **Terrain basemap** — USGS topographic maps from The National Map
   (`basemap.nationalmap.gov`), a work of the US government and in the public domain.
 - **Political boundaries** — US Census Bureau cartographic boundary files (2023, 1:500,000),

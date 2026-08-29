@@ -35,8 +35,9 @@ premium tiers elsewhere and two have no commercial equivalent:
   seconds after the radar sweeps it, rather than after the full scan.
 - **Zero-cost product switching** — geometry is generated in the vertex shader, so
   changing moment or palette is a texture swap. Measured 0.7–11 ms.
-- **National hotspot finder** — one click scans all 163 sites and flies to the heaviest
-  cell in the country. No competitor ships this.
+- **National hotspot finder** — one click scans all 163 sites and flies to the nearest cell
+  that is genuinely raining, or with Shift the heaviest in the country. No competitor ships
+  this.
 - **Track-based proximity alerts** — alerts carry a real ETA from the forecast track, not
   just "a warning was issued near you".
 - **No account, no key, no tier** — runs anonymously against public data. Supercell Wx

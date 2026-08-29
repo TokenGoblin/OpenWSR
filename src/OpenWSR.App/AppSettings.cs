@@ -41,11 +41,11 @@ public sealed class SavedLocation
 public sealed class AppSettings
 {
     /// <summary>
-    /// Basemap style: <c>carto-dark</c>, <c>osm</c> or <c>maptiler</c>. Dark by default —
-    /// reflectivity is a bright saturated palette and on the standard OSM style it competes
-    /// with green landcover, blue water and orange roads for the same part of the eye.
+    /// Basemap style: <c>osm-dark</c>, <c>osm</c>, <c>maptiler</c> or <c>usgs-topo</c>. Dark by
+    /// default — reflectivity is a bright saturated palette and on the standard OSM style it
+    /// competes with green landcover, blue water and orange roads for the same part of the eye.
     /// </summary>
-    public string TileProvider { get; set; } = "carto-dark";
+    public string TileProvider { get; set; } = "osm-dark";
     public string? MapTilerKey { get; set; }
 
     /// <summary>Contact info appended to the User-Agent — api.weather.gov requires it.</summary>
@@ -79,6 +79,25 @@ public sealed class AppSettings
 
     /// <summary>This location's alert radius, or the global default where it has none.</summary>
     public double RadiusFor(SavedLocation location) => location.AlertRadiusKm ?? AlertRadiusKm;
+
+    /// <summary>
+    /// Move a settings file off the retired CARTO basemap.
+    ///
+    /// <para>Unconditional, because there is no longer a working way to draw it: CARTO began
+    /// requiring an API key in August 2026 and answers every unkeyed request with a valid PNG
+    /// reading "API KEY REQUIRED". Leaving the saved choice alone would leave anyone who
+    /// installed 0.1.0 staring at that for ever, since a changed default only reaches a file
+    /// that does not have the setting. <c>osm-dark</c> is the nearest thing to what they
+    /// chose — the same near-black ground, derived rather than fetched.</para>
+    ///
+    /// <para>Runs on every load, for the same reason <see cref="MigrateLegacyHome"/> does: an
+    /// older file can appear at any time, restored from a backup or synced from another
+    /// machine. It is a no-op once the value has moved.</para>
+    /// </summary>
+    internal void MigrateRetiredBasemap()
+    {
+        if (TileProvider is "carto-dark") TileProvider = "osm-dark";
+    }
 
     /// <summary>
     /// Fold a pre-list settings file's single home into <see cref="Locations"/>.
@@ -246,8 +265,17 @@ public sealed class AppSettings
     /// </summary>
     public int LoopFrames { get; set; } = ArchivePlaybackController.DefaultLoopFrames;
 
+    /// <summary>
+    /// Sent on every outbound request. The project URL is in it because OSM's tile usage
+    /// policy asks an application to be identifiable, and since the dark basemap stopped being
+    /// CARTO's, <c>tile.openstreetmap.org</c> carries every install — an anonymous User-Agent
+    /// there is one that gets blocked rather than contacted. api.weather.gov and Nominatim
+    /// both require a descriptive one too.
+    /// </summary>
     public string UserAgent =>
-        string.IsNullOrWhiteSpace(Contact) ? "OpenWSR/0.1" : $"OpenWSR/0.1 ({Contact})";
+        string.IsNullOrWhiteSpace(Contact)
+            ? "OpenWSR/0.1 (+https://github.com/TokenGoblin/OpenWSR)"
+            : $"OpenWSR/0.1 (+https://github.com/TokenGoblin/OpenWSR; {Contact})";
 
     public static string SettingsDir => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OpenWSR");
@@ -270,6 +298,7 @@ public sealed class AppSettings
                 var loaded = JsonSerializer.Deserialize<AppSettings>(
                     File.ReadAllText(SettingsPath), JsonOptions) ?? new AppSettings();
                 loaded.MigrateLegacyHome();
+                loaded.MigrateRetiredBasemap();
                 return loaded;
             }
         }

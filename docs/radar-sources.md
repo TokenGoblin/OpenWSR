@@ -131,7 +131,8 @@ not off the Level II you are looking at:
 - **Storm tracks** — `NST` cell positions and forecast paths, joined with `NHI` hail
   probabilities and `NMD` mesocyclone detections, from the radar nearest your home.
 - **Hotspot finder** — scans all 163 sites for peak digital VIL (`DVL`) and flies to the
-  heaviest precipitation in the country.
+  nearest cell clearing 3.5 kg/m², measured from your primary saved place to the cell rather
+  than to its radar. Shift-click ranks by weight instead, giving the heaviest in the country.
 - **Approach alerts** — the storm tracks above, plus warning polygons from api.weather.gov,
   measured against your home location.
 

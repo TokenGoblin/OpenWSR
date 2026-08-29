@@ -336,10 +336,23 @@
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="4">
-                        <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
-                                      VerticalAlignment="Center" />
+                        <!-- Placeholder from Tag, the same convention the ComboBox below
+                             uses. An empty box on a dark ground reads as decoration, not as
+                             something to type in: the search box carried a Tag for exactly
+                             this and nothing drew it, so it sat blank and unexplained. -->
+                        <Grid>
+                            <TextBlock x:Name="Placeholder" Text="{TemplateBinding Tag}"
+                                       Margin="{TemplateBinding Padding}"
+                                       Foreground="{StaticResource TextDim}" VerticalAlignment="Center"
+                                       Visibility="Collapsed" IsHitTestVisible="False" />
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
+                                          VerticalAlignment="Center" />
+                        </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="Text" Value="">
+                            <Setter TargetName="Placeholder" Property="Visibility" Value="Visible" />
+                        </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Bd" Property="BorderBrush" Value="#FF4A5261" />
                         </Trigger>

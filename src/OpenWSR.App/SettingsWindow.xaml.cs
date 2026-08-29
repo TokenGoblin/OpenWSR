@@ -96,12 +96,16 @@ public partial class SettingsWindow : Window
         PlaceList.ItemsSource = _places;
         _places.CollectionChanged += (_, _) => SyncPlaceList();
 
+        // The unknown arm must name whatever MainWindow will actually draw for an unknown
+        // value, which is the default. Disagreeing is worse than either: the map would render
+        // dark, the dialog would show "as published" selected, and saving without touching the
+        // combo would quietly switch the basemap to light.
         ProviderCombo.SelectedIndex = settings.TileProvider switch
         {
-            "carto-dark" => 0,
+            "osm" => 1,
             "maptiler" => 2,
             "usgs-topo" => 3,
-            _ => 1,
+            _ => 0,
         };
         KeyBox.Text = settings.MapTilerKey ?? "";
         ContactBox.Text = settings.Contact;
@@ -253,7 +257,7 @@ public partial class SettingsWindow : Window
     {
         _settings.TileProvider = ProviderCombo.SelectedIndex switch
         {
-            0 => "carto-dark",
+            0 => "osm-dark",
             2 => "maptiler",
             3 => "usgs-topo",
             _ => "osm",

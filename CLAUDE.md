@@ -46,7 +46,7 @@ What is worth writing down is the behaviour, not the address:
 `.github/workflows/ci.yml` runs on every push and pull request, in two jobs that guard
 different things.
 
-**Windows is the real gate** and runs all 637 tests. It is the only platform that can: the
+**Windows is the real gate** and runs all 667 tests. It is the only platform that can: the
 shell is WPF and Direct3D. The shader tests work on a hosted runner because they compile HLSL
 through `d3dcompiler` rather than creating a device, so no GPU is needed.
 
@@ -67,7 +67,7 @@ Forgejo Actions is similar but distinct, and the workflow here is GitHub's forma
 
 ```
 dotnet build OpenWSR.slnx                    # NOTE: .slnx, not .sln
-dotnet test OpenWSR.slnx                     # 621 tests
+dotnet test OpenWSR.slnx                     # 667 tests
 dotnet run --project src/OpenWSR.App
 dotnet publish src/OpenWSR.App -c Release    # single-file self-contained exe
 ```
@@ -95,13 +95,33 @@ references — if you need imaging or HTTP in one of them, that is a signal the 
 belongs somewhere else. `MiniPng` exists inside `Grib2` precisely because of this rule.
 
 **The shell is arranged around five questions**, each with exactly one place on screen
-and never a second: **where** (top bar: search, site) → **what product** (the segmented
-bar above the map) → **when** (the time bar: one `LIVE · ARCHIVE · FORECAST` switcher that
-owns the transport) → **what's on top** (the layers half of the right column, which holds
-layers and nothing else) → **what's coming at me** (the `APPROACHING` panel above it).
-Before adding a control, decide which question it answers and put it there. Set-once
-configuration goes in Settings, not the layers panel; reference material (shortcuts, the
-symbol key, About) goes in `InfoWindow`, not a panel or a MessageBox.
+and never a second: **where** (top bar: search, site, the map-centre readout, `Recenter`) → **what
+product** (the segmented bar above the map) → **when** (the time bar: one
+`LIVE · ARCHIVE · FORECAST` switcher that owns the transport) → **what's on top** (the layers
+half of the right column, which holds layers and nothing else) → **what's coming at me** (the
+`APPROACHING` panel above it). Before adding a control, decide which question it answers and
+put it there. Set-once configuration goes in Settings, not the layers panel; reference
+material (shortcuts, the symbol key, About) goes in `InfoWindow`, not a panel or a MessageBox.
+
+**"Which radar" and "what am I looking at" are different questions, and the site combo only
+answers the first.** After a hotspot jump, a hand pan or a pinned pane the camera can sit
+hundreds of miles from the place being watched with nothing on screen admitting it, so
+`CentreReadout` names the ground under the middle of the map and its offset from the nearest
+saved place. **Centred is judged in screen pixels, not kilometres** — at national zoom a place
+20 km off centre is a pixel from the middle and is centred by any honest reading, while at
+street zoom the same 20 km is off the side of the map, so a fixed ground tolerance is wrong at
+one end or the other. It is painted off the 500 ms status tick rather than a camera event
+because inertial panning settles over about a second after the mouse is released, and a
+one-shot notification would report where the drag ended rather than where the map came to rest.
+
+`Recenter` beside it is the way back, and it moves **the site as well as the camera** — the
+search box two controls to its left already selects the nearest WSR-88D when it lands
+somewhere, so that is the convention here, and recentring without it leaves the map over your
+house reading a radar hundreds of miles away. It parts company with the search box on zoom,
+which it keeps rather than resetting: you press it to fix where you are looking, not how
+closely. It targets `AppSettings.Primary` rather than the nearest saved place the readout
+names — "put me back where I live" has to land in the same spot every time — and with one
+place saved the two are the same question.
 
 **The panel remembers itself, and the walk has to be the logical tree.** `PanelSections`
 holds which sections are open and `LayerToggles`/`LayerSliders` hold the controls inside
@@ -188,14 +208,33 @@ stop upward has both endpoints untouched, so weather is byte-for-byte what it wa
 `ReflectivityPaletteTests` asserts that against a copy of the previous table rather than
 trusting the eye.
 
-**Place names are their own layer, drawn above the weather.** The dark basemap uses CARTO's
-`dark_nolabels` with `dark_only_labels` as a separate tile layer drawn *after* the radar sweep.
-Baked into the basemap they are the first thing an echo covers, and the name of the town a
-storm is over is exactly what wants reading at that moment. They are also boosted: CARTO draws
-them mid-grey — brightest pixel (161,161,161), mean (103,103,103) — so `DrawTiles` takes a
-`boost` that the quad shader applies as its tint, and values above 1 lift toward white and
-clamp. Only the dark style splits its labels out; the other providers bake them in, so drawing
-a second copy would double every name.
+**The dark basemap is derived, not fetched, because the free keyless one ran out.** CARTO's
+"Dark Matter" was the ground the whole colour design rests on, and in August 2026 CARTO began
+requiring an API key — answering every unkeyed request with a valid PNG reading "API KEY
+REQUIRED" — and started retiring its raster basemaps outright. `TileToning` derives the dark
+style instead: OSM's own tiles, desaturated and inverted as they decode. Three things about it
+are worth not relitigating. **Inverting, not darkening** — OSM's ground is near-white with its
+detail above, so scaling flattens everything toward one grey, while inverting puts the ground
+near-black and turns OSM's near-black label text white. **The gamma is set by the ground and
+the labels, not by a mean** — at 1.35 OSM's land lands at 6 and its label text at 189. Mean
+luminance is only a cross-check, and a loose one: over the twelve committed z9 tiles, CARTO's
+own per-tile mean ranges 9.1 to 20.5, so anything from about 1.3 to 1.5 sits inside its spread.
+Do not tune it to a decimal place; `resources/measurements/TileToningMeasurement.cs` reproduces
+the table. **Esri's Dark Gray Canvas is not the answer** and was measured before being ruled
+out — 66.7 against CARTO's 12.2 on the same tiles, and its land/water polarity is inverted, so
+lakes read as holes punched in a grey field. Two things were lost and both are
+acceptable at radar zooms: OSM draws minor roads white, which inverts to black, and it bakes
+place names into the tile.
+
+**Place names used to be their own layer, drawn above the weather.** The idea was right — baked
+in, they are the first thing an echo covers, and the name of the town a storm is over is exactly
+what wants reading at that moment — and `TileProvider.Labels`/`LabelBoost` and the `boost` tint
+`DrawTiles` passes to the quad shader are all still there and still work. Nothing populates them
+now: CARTO was the only style that published its labels separately, and OSM does not. The
+machinery is kept rather than deleted because it is the seam a vector basemap or a future
+labels-only source would attach to, and because splitting them out again is the single biggest
+improvement available to the basemap. Do not wire a second copy of a baked-in style into it —
+that draws every name twice, once shifted.
 
 **Airspace.** The D3D child HWND always draws above WPF content inside its rectangle.
 WPF controls cannot overlay the map. Anything that must appear *over* the map is either
@@ -217,6 +256,14 @@ clicks land somewhere else entirely; prefer UI Automation patterns, and check
 `GetWindowRect` and `CopyFromScreen` return virtualised coordinates and you capture about
 two-thirds of the window — which looks exactly like a broken layout. Always
 `SetProcessDPIAware()` first. Several hours went into chasing a phantom layout bug here.
+
+And `CopyFromScreen` captures *the screen*, so it captures whatever is actually in front —
+another window stealing focus mid-run yields a screenshot of that window, which looks like a
+broken app rather than a lost race. **Use `PrintWindow` with `PW_RENDERFULLCONTENT` (flag 2)
+instead**: it asks the window to draw itself and is immune to occlusion, focus and window
+position, so it needs no `SetForegroundWindow` and no retry loop. The map is a D3D child HWND
+and may come back black that way; the WPF chrome, which is what layout work is usually about,
+comes back correctly.
 
 **WPF's default control templates are unreadable on a dark ground.** `Theme.xaml`
 provides explicit templates for Button, ToggleButton, ComboBox, TextBox, CheckBox,
@@ -389,6 +436,15 @@ persists until dismissed. A failed warning fetch must never look like "no warnin
 **XAML event handlers fire during `InitializeComponent`.** A filter handler that touches
 a control declared later in the file will hit a null. Guard every control it reads.
 
+**And a guarded handler drops the value, which is how a shipped slider default goes missing.**
+`OpacitySlider`/`SmoothSlider` raise `ValueChanged` during `InitializeComponent`, when
+`_mapView` is still null, so their XAML values never reached the renderer — invisible only
+because the two ends were kept equal by hand, `Value="85"` against `_radarOpacity = 0.85f`. A
+coincidence, and one edit from a panel that disagrees with the picture. The constructor now
+pushes both into `_mapView` right after it is built, so **the XAML value is the only place a
+default is written**; the `MapView` field initialisers are fallbacks for a renderer used
+without the shell, not a second opinion. Settings restore runs later and overrides both.
+
 **WinForms is referenced only for `NotifyIcon`.** Its implicit usings are removed in the
 csproj (`<Using Remove="System.Windows.Forms" />` and `System.Drawing`) because they
 collide with WPF on `Application`, `Color`, `Brushes`, `MessageBox` and `Size`.
@@ -522,6 +578,13 @@ the time they were wired up. When something returns HTML instead of data, check
 `https://mesonet.agron.iastate.edu/api/1/openapi.json` for the current path. SPC serves
 GeoJSON with a **UTF-8 BOM**, which `System.Text.Json` rejects outright.
 
+**A tile service can fail as a picture rather than as a status code, and this has now
+happened twice.** CARTO's watermark was HTTP 200, a valid PNG, and *different bytes per tile*
+— so it passed even the two-tile check below, and `BasemapFailure` never fired. It reached a
+release and was invisible on every development machine, because the on-disk tile cache never
+expires and every one of them held tiles from before the change. When a tile source changes
+its terms, a warm cache is not evidence: test with the cache directory moved aside.
+
 **IEM's tile service fails as a picture, not as a status code.** An unknown *layer name* on
 `tile.py` comes back as **HTTP 200 with a valid PNG** reading "Invalid TMS Request", which
 decodes exactly like imagery — the GOES layer painted the map solid red and cached 253 copies
@@ -544,9 +607,11 @@ Write the reference values into the test as literals with a comment naming the s
 When no reference exists — the cross-section, for instance — assert **physics** instead:
 the cone of silence must be empty, beams must climb with range.
 
-Live features are verified against live weather, not mocks. `🎯 Hotspot` finds the
-heaviest precipitation in the country, which is the fastest way to get real data on
-screen. `--soak` runs the live pipeline headless.
+Live features are verified against live weather, not mocks. **Shift**-click `🎯 Hotspot`
+for the heaviest precipitation in the country, which is the fastest way to get real data on
+screen — a plain click goes to the nearest storm to your saved place instead, which on a
+quiet day is exactly the wrong thing to test against. `--soak` runs the live pipeline
+headless.
 
 ## Conventions
 

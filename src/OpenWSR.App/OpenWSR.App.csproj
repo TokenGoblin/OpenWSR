@@ -43,7 +43,7 @@
     <Authors>TokenGoblin</Authors>
     <Copyright>Copyright (c) 2026 TokenGoblin</Copyright>
     <Description>Native Windows NEXRAD radar viewer</Description>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
   </PropertyGroup>
 
   <!-- dotnet publish -c Release -r win-x64 produces a single self-contained exe -->
