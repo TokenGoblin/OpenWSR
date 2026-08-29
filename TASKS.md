@@ -2222,3 +2222,31 @@ introduced by the work above and would have shipped.
       library, 261 shell)
 
 **Gate:** [PASSED] 667/667 tests, 0 warnings.
+
+## The Settings window did not fit on the screen
+
+Reported against 0.2.0: Settings overruns the top and bottom of the display.
+
+- [x] **`SizeToContent="Height"` with no ceiling.** The window grew to whatever its content
+      needed — measured at **1222 px on a 1200 px screen** at 125 % scaling — then
+      `WindowStartupLocation="CenterOwner"` centred that, so it hung 41 px off the top and put
+      its bottom under the taskbar. `ResizeMode="NoResize"` meant nobody could drag it back
+- [x] **The buttons were the first thing to go.** The root was a single `StackPanel` with Save
+      and Cancel at the end, so overflow pushed exactly the two controls a dialog cannot afford
+      to lose off the bottom. They are now docked outside the scroller — content may scroll,
+      the way out may not
+- [x] **`MaxHeight` comes from `SystemParameters.WorkArea`**, not a constant: the usable height
+      is a fact about the machine, and the work area already excludes the taskbar
+- [x] **Measured, per the panel-budget method.** Before: 700×1222 at y=−41, 41 px off the top
+      and 41 px past the work area. After: 700×1080 at y=30, nothing off either edge, Save and
+      Cancel at y=1039–1076, and `ScrollPattern.VerticalViewSize` reporting 70 % of the content
+      visible with the rest scrollable. `ProviderCombo`, `KeyBox`, `ContactBox` and
+      `PaletteButton` all still reachable; Cancel still closes the dialog
+
+Not a bug: **the main window does open maximized.** It measured as `NORMAL` at first, which was
+this session's own screenshot retry loop calling `ShowWindow(SW_RESTORE)` on it. On an untouched
+launch it is `MAXIMIZED` at (−9,−9)–(1929,1149) — the 1920×1140 work area plus the invisible
+resize border. Automation that fights for the foreground can manufacture the bug it is looking
+for; measure on a launch nothing has touched.
+
+**Gate:** [PASSED] 667/667 tests, 0 warnings.

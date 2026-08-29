@@ -21,7 +21,21 @@
         </Style>
     </Window.Resources>
 
-    <StackPanel Margin="20">
+    <!-- SizeToContent="Height" grows this window to whatever the content needs, and the
+         content outgrew the screen: 1222 px of it at 125 % scaling on a 1200 px display, so
+         the window hung 41 px off the top and put Save and Cancel under the taskbar — with
+         ResizeMode="NoResize" leaving no way to recover. The content scrolls now, capped by
+         MaxHeight in the constructor because the usable height is a fact about the screen
+         rather than a layout constant. The buttons are docked outside the scroller: a dialog
+         whose Save button can scroll out of reach is worse than one that is merely too tall. -->
+    <DockPanel Margin="20">
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Content="Cancel" Width="88" Margin="0,0,8,0" IsCancel="True" />
+            <Button Content="Save" Width="88" IsDefault="True" Click="Save_Click" />
+        </StackPanel>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="0,0,8,0">
         <TextBlock Text="MAP" Style="{StaticResource Head}" Margin="0,0,0,6" />
         <TextBlock Text="Basemap tiles" />
         <ComboBox x:Name="ProviderCombo" Margin="0,4,0,0" SelectionChanged="ProviderCombo_SelectionChanged">
@@ -163,9 +177,7 @@
                    Text="The National Weather Service API asks every client to identify itself with a contact address, and may block clients that don't. Your email or a website is fine — it is sent only to weather.gov, with no other data." />
         <TextBlock x:Name="UaPreview" Style="{StaticResource Hint}" FontStyle="Normal" FontFamily="Consolas" />
 
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,22,0,0">
-            <Button Content="Cancel" Width="88" Margin="0,0,8,0" IsCancel="True" />
-            <Button Content="Save" Width="88" IsDefault="True" Click="Save_Click" />
         </StackPanel>
-    </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
 </Window>
