@@ -90,6 +90,14 @@ public partial class SettingsWindow : Window
     {
         InitializeComponent();
         DarkTitleBar.Apply(this);
+
+        // Never taller than the screen it has to fit on. SizeToContent="Height" otherwise grows
+        // this window past the display — measured at 1222 px against a 1200 px screen — and
+        // ResizeMode="NoResize" means nobody can drag it back. Read from the work area rather
+        // than hardcoded, because that is a fact about the machine, and it excludes the taskbar.
+        // The 48 leaves room for the title bar and a margin at each end.
+        MaxHeight = SystemParameters.WorkArea.Height - 48;
+
         _settings = settings;
 
         foreach (var location in settings.Locations) _places.Add(new PlaceRow(location));

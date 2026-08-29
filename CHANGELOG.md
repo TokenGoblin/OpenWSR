@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1
+
+**The Settings window fits on the screen again.** It sized itself to its content with no
+ceiling, so on a 1200-pixel display at 125 % scaling it wanted 1222 pixels, centred itself, and
+hung off the top with **Save and Cancel below the bottom edge** — and because the window is not
+resizable there was no way to drag it back. It is now capped to the usable height of your
+screen and scrolls, with the buttons pinned outside the scrolling area so they cannot be pushed
+out of reach. Anyone on a smaller or scaled display could not change settings at all in 0.2.0.
+
 ## 0.2.0
 
 **The dark basemap works again.** CARTO began requiring an API key in August 2026 and answered
