@@ -85,7 +85,7 @@ public sealed class TileFetcher : IDisposable
                 await File.WriteAllBytesAsync(diskPath, encoded, _cts.Token).ConfigureAwait(false);
             }
 
-            _completed.Enqueue((key, DecodeToBgra(encoded)));
+            _completed.Enqueue((key, DecodeToBgra(encoded, _provider.Tone)));
             _failed.TryRemove(key, out _);
         }
         catch (OperationCanceledException)
@@ -105,7 +105,14 @@ public sealed class TileFetcher : IDisposable
         }
     }
 
-    private static byte[] DecodeToBgra(byte[] encoded)
+    /// <summary>
+    /// Decode to BGRA, applying the provider's tone on the way.
+    ///
+    /// <para>Toning here rather than on the way to disk keeps the cache holding the bytes as
+    /// the service sent them, so the light and dark styles share one copy of every tile and a
+    /// change to the curve does not strand what is already downloaded.</para>
+    /// </summary>
+    private static byte[] DecodeToBgra(byte[] encoded, TileTone tone)
     {
         using var ms = new MemoryStream(encoded);
         var decoder = BitmapDecoder.Create(ms, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
@@ -118,6 +125,7 @@ public sealed class TileFetcher : IDisposable
                 TileMath.TilePixels / (double)frame.PixelHeight));
         var pixels = new byte[TileMath.TilePixels * TileMath.TilePixels * 4];
         frame.CopyPixels(pixels, TileMath.TilePixels * 4, 0);
+        TileToning.Apply(pixels, tone);
         return pixels;
     }
 

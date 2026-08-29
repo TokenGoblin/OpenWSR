@@ -11,7 +11,8 @@ they live here rather than there.
 
 ## Running one
 
-Copy the file into `tests/OpenWSR.Nexrad.Tests/`, then:
+Copy the file into `tests/OpenWSR.Nexrad.Tests/` (or `tests/OpenWSR.App.Tests/`,
+which is where the tile one belongs), then:
 
 ```
 OWSR_OUT=<some-file> dotnet test tests/OpenWSR.Nexrad.Tests \
@@ -27,6 +28,7 @@ committed volume and print numbers, which is a slow way to assert nothing.
 | `ShearQualityMeasurement.cs` | The reflectivity-threshold sweep behind `GateQuality.DefaultMinReflectivityDbz`, the 88.8 % figure, and the correlation-coefficient numbers that argue *against* a CC mask |
 | `ClutterDiscriminationMeasurement.cs` | The stage table behind `GateQuality.MaskClutter` — what the echo mask and then the clutter mask do to a tornado volume and to a clear-air coastal one |
 | `SmoothingMeasurement.cs` | The mean-vs-median comparison in `RotationTracks.Smooth` |
+| `TileToningMeasurement.cs` | The gamma table behind `TileToning`, and how the derived dark basemap compares to the CARTO tiles it replaced |
 
 ## A note on comparing against an old implementation
 

@@ -23,6 +23,13 @@ public sealed record TileProvider(string Name, string UrlTemplate, string UserAg
     /// </summary>
     public float LabelBoost { get; init; } = 1f;
 
+    /// <summary>
+    /// A transform applied to every tile between decode and draw. It is a property of the
+    /// style rather than of the source, which is why <see cref="OsmDark"/> can share both
+    /// the disk cache and the attribution of <see cref="Osm"/>.
+    /// </summary>
+    public TileTone Tone { get; init; } = TileTone.AsPublished;
+
     public string UrlFor(TileKey key) => UrlTemplate
         .Replace("{z}", key.Z.ToString())
         .Replace("{x}", key.X.ToString())
@@ -32,46 +39,27 @@ public sealed record TileProvider(string Name, string UrlTemplate, string UserAg
         "osm", "https://tile.openstreetmap.org/{z}/{x}/{y}.png", userAgent);
 
     /// <summary>
-    /// CARTO's "Dark Matter" — OpenStreetMap data rendered near-black.
-    ///
-    /// The point is contrast. Reflectivity is a bright, saturated palette, and on the standard
-    /// OSM style it competes with green landcover, blue water and orange roads for the same
-    /// part of the eye. Against a near-black ground the weather is the only bright thing on
-    /// screen, which is why every broadcast and consumer radar app looks like this.
-    ///
-    /// Free and keyless, unlike the other dark styles worth having — Stadia and MapTiler both
-    /// want an API key, and Esri's dark canvas is a mid-grey that gives up most of the
-    /// contrast. Attribution is required and names CARTO as well as OpenStreetMap.
+    /// The dark basemap: OpenStreetMap's own tiles, inverted to a dark ground as they decode.
     /// </summary>
-    public static TileProvider CartoDark(string userAgent) => new(
-        "carto-dark", "https://basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png", userAgent)
-    {
-        Labels = CartoDarkLabels(userAgent),
-        LabelBoost = 2.2f,
-    };
-
-    /// <summary>
-    /// The place names from the same style, as a transparent layer of their own.
+    /// <remarks>
+    /// <para>The point is contrast. Reflectivity is a bright, saturated palette, and on the
+    /// standard OSM style it competes with green landcover, blue water and orange roads for the
+    /// same part of the eye. Against a near-black ground the weather is the only bright thing on
+    /// screen, which is why every broadcast and consumer radar app looks like this.</para>
     ///
-    /// Split out because labels belong <em>above</em> the weather, not under it. Baked into
-    /// the basemap they are the first thing an echo covers, and the name of the town a storm
-    /// is over is exactly what you want to read at that moment.
+    /// <para>This used to be CARTO's "Dark Matter", which was free and keyless until August 2026
+    /// and is now neither — unkeyed requests come back as a valid PNG reading "API KEY REQUIRED",
+    /// and the raster basemaps are being retired outright. Deriving the dark style here instead
+    /// of fetching one removes the dependency rather than moving it: OSM's tiles are already
+    /// fetched for the light option, and a style nobody can gate cannot be gated. See
+    /// <see cref="TileToning"/> for the transform and what it costs.</para>
     ///
-    /// They also need brightening. CARTO draws them mid-grey — the brightest pixel in a tile
-    /// measures (161, 161, 161) and the mean (103, 103, 103) — which reads as dim against the
-    /// near-black ground and is unreadable over a bright echo. The quad shader multiplies by
-    /// its tint, so a tint above one lifts them toward white and clamps there.
-    /// </summary>
-    public static TileProvider CartoDarkLabels(string userAgent) => new(
-        "carto-dark-labels",
-        "https://basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png",
-        userAgent);
-
-    /// <summary>The same layer for a light ground: dark text instead of mid-grey.</summary>
-    public static TileProvider CartoLightLabels(string userAgent) => new(
-        "carto-light-labels",
-        "https://basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}.png",
-        userAgent);
+    /// <para>It carries <see cref="Osm"/>'s name deliberately. The disk cache holds the bytes as
+    /// downloaded and the toning happens on the way to the texture, so the two styles are the
+    /// same tiles and should share one cache; the attribution is the same for the same reason.</para>
+    /// </remarks>
+    public static TileProvider OsmDark(string userAgent) =>
+        Osm(userAgent) with { Tone = TileTone.InvertedDark };
 
     /// <summary>
     /// USGS topographic maps — the terrain option.

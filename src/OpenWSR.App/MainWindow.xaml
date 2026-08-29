@@ -32,9 +32,9 @@
                                   Style="{StaticResource RailToggle}" Content="◲" FontSize="15"
                                   Checked="Volume_Changed" Unchecked="Volume_Changed"
                                   ToolTip="3D — ray-march the whole volume; drag to orbit, wheel to zoom" />
-                    <Button x:Name="HotspotButton" AutomationProperties.Name="Go to the heaviest precipitation in the USA" Style="{StaticResource RailButton}" Content="🎯"
+                    <Button x:Name="HotspotButton" AutomationProperties.Name="Go to the nearest heavy precipitation; hold Shift for the heaviest in the USA" Style="{StaticResource RailButton}" Content="🎯"
                             Click="HotspotButton_Click"
-                            ToolTip="Go to the heaviest precipitation in the USA right now" />
+                            ToolTip="Go to the nearest heavy precipitation to your place — hold Shift for the heaviest in the USA" />
                     <Button x:Name="PaneButton" AutomationProperties.Name="Map panes" Style="{StaticResource RailButton}" Content="◱"
                             Click="PaneButton_Click" ToolTip="Map panes: 1" />
                     <!-- Collapsed at one pane rather than merely disabled: it held a
@@ -80,16 +80,65 @@
         <!-- ============ WHERE ============ -->
         <Border DockPanel.Dock="Top" Background="{StaticResource Chrome}"
                 BorderBrush="#FF272C35" BorderThickness="0,0,0,1" Padding="8,7">
-            <StackPanel Orientation="Horizontal">
-                <TextBox x:Name="SearchBox" AutomationProperties.Name="Search for a place" Width="200" KeyDown="SearchBox_KeyDown"
-                         Tag="Search"
+            <!-- A WrapPanel, not a StackPanel. The row's fixed parts alone are about 1070 px
+                 and the window's MinWidth is 900 less the 50 px rail, so on a small window a
+                 StackPanel clipped Recenter and half the centre readout off the right edge
+                 with no scrollbar and no overflow affordance — the silent failure the left
+                 rail is already documented for. Wrapping costs nothing at normal widths and
+                 degrades to a second row instead of hiding controls. Children carry 3 px of
+                 vertical margin so a wrapped row does not sit flush against the first. -->
+            <WrapPanel Orientation="Horizontal">
+                <TextBox x:Name="SearchBox" AutomationProperties.Name="Search for a place" Width="248" KeyDown="SearchBox_KeyDown"
+                         Margin="0,3"
+                         Tag="Search a city, ZIP or lat,lon"
                          ToolTip="Find a place: city, ZIP code, or lat,lon — then jump to the nearest radar" />
-                <ComboBox x:Name="SiteCombo" AutomationProperties.Name="Radar site" Width="240" Margin="7,0,0,0"
+                <!-- The combo shows "KMTX — SALT LAKE CITY, UT", which says nothing about what
+                     kind of thing it is picking unless you already know. The label is what
+                     makes the row legible to someone meeting it for the first time. -->
+                <TextBlock Text="Radar station" VerticalAlignment="Center" Margin="14,3,7,3" FontSize="12"
+                           Foreground="{StaticResource TextDim}" />
+                <ComboBox x:Name="SiteCombo" AutomationProperties.Name="Radar station" Width="240" Margin="0,3"
                           SelectionChanged="SiteCombo_SelectionChanged"
-                          ToolTip="The WSR-88D whose data is being shown" />
-                <Button x:Name="NearestButton" Content="Nearest" Margin="7,0,0,0" Click="NearestButton_Click"
-                        ToolTip="Select the WSR-88D closest to the map centre" />
-            </StackPanel>
+                          ToolTip="Which radar station's data is on screen — the 163 WSR-88Ds and 47 terminal (TDWR) radars" />
+                <!-- Not "Nearest radar station": the label two controls back already says what
+                     is being picked, so repeating the noun spends width on nothing. What was
+                     actually ambiguous is nearest to *what* — to you, to the current station,
+                     to the map — and that is what the words now answer. -->
+                <Button x:Name="NearestButton" Content="Nearest to map center" Margin="7,3,0,3" Click="NearestButton_Click"
+                        AutomationProperties.Name="Switch to the radar station nearest the middle of the map"
+                        ToolTip="Switch to the radar station closest to the middle of the map" />
+
+                <!-- Where the camera is actually pointed. The combo to the left names the
+                     radar feeding the screen, which is a different question: after a hotspot
+                     jump, a pan or a pinned pane the map can be hundreds of miles from the
+                     place being watched, and nothing on screen used to admit it. -->
+                <Border x:Name="CentreReadoutBox" Margin="14,3,0,3" Padding="9,3" CornerRadius="3"
+                        VerticalAlignment="Stretch" Background="{StaticResource Surface}"
+                        BorderBrush="{StaticResource Line}" BorderThickness="1"
+                        ToolTip="The ground under the middle of the map, and how far that is from your nearest saved place">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <!-- The glyph carries the label a screen reader needs: a Border gets no
+                             automation peer in WPF, so a name set on the box above would never
+                             reach the tree, and the two TextBlocks beside this one announce as
+                             bare coordinates otherwise. -->
+                        <TextBlock x:Name="CentreGlyph" Text="&#x25CE;" FontSize="13" VerticalAlignment="Center"
+                                   AutomationProperties.Name="Map centre"
+                                   Foreground="{StaticResource TextDim}" />
+                        <TextBlock x:Name="CentreCoords" Margin="6,0,0,0" FontSize="12" FontFamily="Consolas"
+                                   VerticalAlignment="Center" Foreground="{StaticResource Text}" />
+                        <TextBlock x:Name="CentrePlace" Margin="8,0,0,0" FontSize="12"
+                                   VerticalAlignment="Center" Foreground="{StaticResource TextDim}" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Collapsed rather than disabled until a place exists, the same rule the
+                     rail follows: a greyed control still costs a slot and still has to be
+                     read before it can be dismissed. -->
+                <Button x:Name="RecentreButton" Content="Recenter" Margin="7,3,0,3"
+                        Visibility="Collapsed" Click="RecentreButton_Click"
+                        AutomationProperties.Name="Recenter the map on your place"
+                        ToolTip="Put the map back on your place and its nearest radar, keeping the current zoom" />
+            </WrapPanel>
         </Border>
 
         <!-- Errors persist until dismissed. They used to share the status line with the
@@ -352,7 +401,7 @@
                                     ValueChanged="OpacitySlider_ValueChanged" />
                             <TextBlock Text="Smoothing" Margin="0,6,0,0" FontSize="12"
                                        ToolTip="Blend between radar cells: raw gates → soft consumer-style display" />
-                            <Slider x:Name="SmoothSlider" AutomationProperties.Name="Radar smoothing" Minimum="0" Maximum="100" Value="0"
+                            <Slider x:Name="SmoothSlider" AutomationProperties.Name="Radar smoothing" Minimum="0" Maximum="100" Value="50"
                                     ValueChanged="SmoothSlider_ValueChanged" />
                             <TextBlock x:Name="DbzRangeLabel" Text="Show dBZ" Margin="0,8,0,0" FontSize="12"
                                        ToolTip="Hide returns outside this window. 20 dBZ is about 0.026 in/hr — light rain reaching the ground — and below it is mostly insects, birds and dust. Lower it for snow, which returns far less for the same water: 15 dBZ of snow can be accumulating steadily." />

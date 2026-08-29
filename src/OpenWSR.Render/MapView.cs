@@ -465,8 +465,11 @@ public sealed class MapView : IDisposable
         _mosaicFetcher = new TileFetcher(TileProvider.NexradMosaic(provider.UserAgent));
         _satelliteFetcher = new TileFetcher(TileProvider.GoesInfrared(provider.UserAgent));
 
-        // Only the dark style splits its labels out. The others bake them in, and drawing a
-        // second copy over the radar would double every name.
+        // Nothing sets Labels today: CARTO was the only style that published its place names
+        // separately, and it is no longer used. The slot is kept because drawing names above
+        // the weather rather than under it is the biggest improvement left in the basemap, and
+        // this is where a source that splits them out would attach. Do not point it at a style
+        // that bakes them in — that draws every name twice, once shifted.
         if (provider.Labels is { } labels)
         {
             _labelFetcher = new TileFetcher(labels);
@@ -496,10 +499,12 @@ public sealed class MapView : IDisposable
         _fetcher.FailingTiles >= 12 ? _fetcher.FirstFailure : null;
 
     /// <summary>
-    /// How hard the place names are lifted. CARTO draws them mid-grey, which is dim against
-    /// the near-black ground and invisible over a bright echo; 2.2 takes the brightest pixel
-    /// of a label from 161 to white and leaves the anti-aliased edges as a soft falloff
-    /// rather than a hard outline.
+    /// How hard a separate place-name layer is lifted, for a provider that has one. No
+    /// shipping provider sets it, so this is the identity today. The value it was built for
+    /// was 2.2: CARTO drew its labels mid-grey, dim against the near-black ground and
+    /// invisible over a bright echo, and 2.2 took the brightest pixel of a label from 161 to
+    /// white while leaving the anti-aliased edges as a soft falloff rather than a hard
+    /// outline.
     /// </summary>
     private readonly float _labelBoost = 1f;
 

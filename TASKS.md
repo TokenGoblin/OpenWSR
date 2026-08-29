@@ -1974,3 +1974,251 @@ the executable, the installed copy runs live at 60 fps, uninstall removes everyt
 should and nothing it should not.
 
 **Gate:** [PASSED] 637/637 tests, 0 warnings.
+
+## The dark basemap, after CARTO closed the door
+
+Reported against the 0.1.0 release: a fresh install draws "API KEY REQUIRED" across every
+basemap tile. CARTO began requiring an API key in August 2026 and is retiring its raster
+basemaps outright.
+
+- [x] **The bug was invisible here for the same reason it existed.** The tile cache never
+      expires, so every development machine held tiles fetched before the change and drew the
+      map correctly. Nothing in the fetch path could catch it either: the watermark arrives as
+      HTTP 200, a valid PNG, and different bytes for every tile, so it passes even the
+      two-tile check that caught the IEM "Invalid TMS Request" incident. Re-verified by moving
+      the cache directory aside and cold-starting, which is now the documented way to test a
+      tile source
+- [x] **The dark style is derived rather than fetched.** `TileToning` desaturates and inverts
+      OSM's own tiles as they decode. This removes the dependency instead of moving it — the
+      light option already fetched those tiles, and a style nobody serves cannot be gated
+- [x] **Inverting, not darkening, and the difference was measured.** OSM's ground is
+      near-white with its detail above it, so scaling everything down flattens the map toward
+      one grey. Inversion puts the ground near-black and turns OSM's near-black label text
+      white, which is the arrangement the dark style had
+- [x] **Gamma 1.35, set by the ground and the labels rather than by matching a mean.** OSM's
+      land lands at 6 and its label text at 189, legible over an echo. Mean luminance is the
+      cross-check and deliberately a loose one — CARTO's own per-tile mean ranges 9.1 to 20.5
+      over the twelve committed tiles, against 14.70 for the curve, so anything from 1.3 to 1.5
+      sits inside its spread. `TileToningTests` holds the CARTO figure as a literal because it
+      can no longer be re-fetched, and `TileToningMeasurement` reproduces the whole table
+- [x] **Esri's Dark Gray Canvas was measured and rejected**, not assumed. It is the only
+      keyless dark raster style left and it is not a substitute: 66.7 against CARTO's 12.2 on
+      the same tiles, and its land/water polarity is inverted, so lakes read as holes punched in
+      a grey field. Darkening it crushes what little detail it has
+- [x] **Existing installs migrate.** A changed default never reaches a settings file that
+      already has the setting, so anyone who installed 0.1.0 would have kept the watermark for
+      ever. `MigrateRetiredBasemap` moves `carto-dark` to `osm-dark` on every load, alongside
+      the legacy-home migration and for the same reason
+- [x] **What it costs, stated rather than hidden.** OSM draws minor roads white, which inverts
+      to black and takes them out; and it bakes place names into the tile, so they no longer
+      draw above the weather. The label-layer machinery is kept for the source that brings
+      them back
+
+Verified cold — cache moved aside, live KMTX, 60 fps, no watermark, place names readable.
+
+**Gate:** [PASSED] 652/652 tests, 0 warnings.
+
+## The hotspot finder goes to the nearest storm, not the biggest one
+
+Requested: the 🎯 button should find the heaviest precipitation *nearest to you* rather than
+the heaviest in the country.
+
+- [x] **Plain click ranks by distance, Shift-click still ranks by weight.** The national scan
+      is how live features get verified — `CLAUDE.md` names it as the fastest way to get real
+      weather on screen — so removing it would have taken the test rig out with the feature.
+      A modifier costs no rail slot, which matters because the rail budget is spent
+- [x] **A floor of 3.5 kg/m², because "nearest return" is not "nearest storm".** DVL reports
+      something almost everywhere, so ranking on raw proximity reliably lands on an insect
+      swarm or a patch of virga a few miles out. 3.5 is the conventional light/moderate break
+      and is a floor on *existence*, not on severity — an ordinary rain shower still qualifies,
+      which is what the button was asked for
+- [x] **Distance is measured to the cell, not to its radar.** A site 200 km away can hold a
+      storm that is nearly overhead, and ranking on the radar picks the wrong one. Asserted
+      by a test built from exactly that pair
+- [x] **Nothing raining anywhere falls back to the heaviest**, rather than reporting failure.
+      On a genuinely quiet day the strongest echo in the country is still the best answer
+      available, and a button that does nothing reads as broken rather than as calm
+- [x] **No saved place falls back too.** There is no "near me" to search from before the
+      first run has found one, so the plain click behaves as the Shift click and says why
+- [x] **The scan and the choice are now separate.** `ScanAsync` does the 163 fetches;
+      `SelectNearest`/`Heaviest` are pure and carry seven new tests. The ranking decides where
+      the camera lands and was previously untestable without live weather
+
+**Gate:** [PASSED] 659/659 tests, 0 warnings.
+
+## A map-centre readout in the WHERE bar
+
+Requested: next to `Nearest`, show the location the map is centred on, so it is obvious
+whether you are looking at the right ground.
+
+- [x] **It answers a question the site combo beside it does not.** The combo names the radar
+      feeding the screen; after a hotspot jump, a hand pan or a pinned pane the camera can be
+      hundreds of miles from the place being watched, and nothing on screen admitted it.
+      Verified live: the combo reads `KICX — CEDAR CITY, UT` while the readout reads
+      `94.7 mi S of Home`
+- [x] **Centred is judged in screen pixels, not kilometres.** At national zoom a place 20 km
+      off centre is a pixel from the middle and is centred by any honest reading; at street
+      zoom the same 20 km is off the side of the map. A fixed ground tolerance is wrong at one
+      end or the other, and choosing which end to be wrong at is not a choice worth making.
+      12 px, asserted both ways by a test that holds the offset still and moves the zoom
+- [x] **Lit when you are on a place, muted when you are not.** The point is to be readable at
+      a glance while looking at the weather, and a distance that happens to read `0.4 mi` is
+      not something the eye catches. Styled through `Theme.xaml` rather than hardcoded
+- [x] **The nearest saved place, not the primary one.** Being centred on the office answers
+      "am I looking at the right ground" as well as being centred on home does, and with one
+      place saved the two are the same question
+- [x] **Painted off the 500 ms status tick, not a camera event.** Inertial panning settles
+      about a second after the mouse is released, so a one-shot notification would report
+      where the drag ended rather than where the map came to rest
+- [x] **A `Border` gets no automation peer in WPF**, so the composed name first written onto
+      the box never reached the automation tree — dead code that looked like accessibility.
+      The label sits on the glyph instead, where a peer exists; confirmed by walking the tree
+      and reading back `[Map centre] [35.223, -97.440] [on Home]`
+- [x] **Seven tests**, including the one that caught a real crash: `MinBy` over a sequence of
+      value tuples throws on an empty one rather than returning a default, so a fresh install
+      with no place saved would have taken the readout down on the first tick
+
+Verified live at both states — exactly on the saved place, and 94.7 mi off it.
+
+**Gate:** [PASSED] 666/666 tests, 0 warnings.
+
+## A Recenter button beside the readout
+
+Requested: a button to make getting back to your own location easier.
+
+- [x] **It moves the site as well as the camera.** The first cut moved only the camera, on the
+      reasoning that changing which radar you are trusting is too big a thing for a button
+      labelled "Recenter". Watching it run killed that: the bar read `KICX — CEDAR CITY, UT`
+      beside a readout saying `on Home`, which is the map over your house fed by a radar 95
+      miles away. The search box two controls to the left already selects the nearest WSR-88D
+      when it lands somewhere, so following it is the convention here rather than a surprise
+- [x] **The zoom is kept, which is where it parts company with the search box.** That resets
+      to 220 m/px; this keeps what you had. You press it to fix *where* you are looking, not
+      how closely, and throwing away the scale chosen for the storm being watched would make
+      it a worse deal than panning back by hand
+- [x] **It targets the primary place, not the nearest one the readout names.** "Put me back
+      where I live" has to land in the same spot every time rather than following whichever
+      saved place the camera has drifted toward. With one place saved the two are identical
+- [x] **Collapsed until a place exists**, the rule the rail already follows: a greyed control
+      still has to be read before it can be dismissed
+
+Verified live end to end: from `KAMX — MIAMI, FL` at `2080.0 mi E of Home`, one press returns
+both `KMTX — SALT LAKE CITY, UT` and `on Home`.
+
+**Gate:** [PASSED] 666/666 tests, 0 warnings.
+
+## The search box says what it is
+
+Reported: the box at the top of the window does not explain itself.
+
+- [x] **It had a placeholder all along and nothing drew it.** `SearchBox` carried
+      `Tag="Search"`, and the theme's placeholder `TextBlock` lives only in the **ComboBox**
+      template — the `TextBox` one never had it. So the box rendered as an empty rounded
+      rectangle on a dark ground, which reads as decoration rather than as somewhere to type.
+      The `Tag` was written for exactly this and had never once been visible
+- [x] **The placeholder now sits in the `TextBox` template**, bound to `Tag` and shown on a
+      `Text=""` trigger, matching the convention the ComboBox beside it already uses. Nothing
+      else in the app sets `Tag` on a TextBox and no code reads `.Tag`, so no other control
+      changes
+- [x] **It says what the box accepts, not just that it is a box.** "Search a city, ZIP or
+      lat,lon" — the three things `Geocoder` actually takes, one of which (lat,lon) is parsed
+      locally and is the only way to reach a point with no name
+- [x] **Widened 200 → 248 px** so that sentence fits without clipping. The WHERE bar had the
+      room; nothing else on it moved
+
+Verified live: the hint is drawn on an empty box, replaced by the text as soon as anything is
+typed, and the border goes accent on focus.
+
+**Gate:** [PASSED] 666/666 tests, 0 warnings.
+
+## Labelling the radar controls
+
+Reported: the radar dropdown and the `Nearest` button do not say what they are to anyone
+meeting them for the first time.
+
+- [x] **A `Radar station` label before the combo.** It read `KMTX — SALT LAKE CITY, UT`, which
+      names a place and says nothing about what kind of thing is being picked — you have to
+      already know that a four-letter ICAO in the top bar is a radar station. Sentence case,
+      matching every other label in the app
+- [x] **`Nearest` → `Nearest to map center`, deliberately not `Nearest radar station`.** Once
+      the label two controls back names what is being picked, repeating the noun spends width
+      on nothing. The ambiguity actually left in that button was nearest to *what* — to you, to
+      the current station, to the map — and that is the half worth the pixels, especially with
+      the centre readout sitting immediately beside it showing the very point it means
+- [x] **The combo's tooltip was also wrong, not just terse.** It said "The WSR-88D whose data
+      is being shown", but the list has held the 47 TDWRs since terminal radars were added, so
+      it now names both
+- [x] **Explicit `AutomationProperties.Name` on the button**, since the visible label is
+      necessarily compressed and a screen reader has room for the whole sentence
+
+Verified live: `[Search a city, ZIP or lat,lon]  Radar station [KMTX — SALT LAKE CITY, UT]
+[Nearest to map center]  [◎ 35.223, -97.440 on Home]  [Recenter]`, with room to spare at
+1700 px.
+
+**Gate:** [PASSED] 666/666 tests, 0 warnings.
+
+## Smoothing ships at half, and slider defaults now reach the renderer
+
+Requested: make the app's default smoothing the middle of the slider.
+
+- [x] **`SmoothSlider` default 0 → 50.** Raw gates are the honest thing to show a decoder
+      author and the wrong thing to open with for everyone else
+- [x] **Changing the XAML alone would have shipped a slider that lies.** `SmoothSlider_ValueChanged`
+      guards on `_mapView is not null`, and it fires during `InitializeComponent` when
+      `_mapView` is still null — so the XAML value was being dropped on the floor. That was
+      invisible only because both ends were kept equal by hand: `Value="85"` against a
+      `_radarOpacity` of `0.85f`, and `Value="0"` against a `_radarSmoothing` of `0f`. Two
+      hand-synchronised copies of the same constant, in different projects
+- [x] **The constructor now pushes both sliders into `_mapView` once, right after it is
+      built**, so the XAML value is the only place a default is written. The `MapView` field
+      initialisers stay as fallbacks for a renderer used without the shell. Settings restore
+      runs further down and overrides both, unchanged
+- [x] **Verified on a clean profile, not by reading the code.** With `settings.json` moved
+      aside: `SmoothSlider = 50`, `OpacitySlider = 85`. The user's own file was checksummed
+      before and after and restored byte-identical
+
+Worth knowing: anyone who has already moved the slider keeps their value, because
+`LayerSliders` records only changed controls. That is the property that makes revising a
+shipped default possible at all — but it also means this change is invisible to them.
+
+**Gate:** [PASSED] 666/666 tests, 0 warnings.
+
+## Review fixes: seven findings, all real
+
+`/code-review` over the session's working tree. Nothing was dismissed; two were regressions
+introduced by the work above and would have shipped.
+
+- [x] **`Recenter` was resetting the zoom it promised to keep.** Assigning `SiteCombo.SelectedItem`
+      raises `SelectionChanged` synchronously, and `SiteCombo_SelectionChanged` runs `FrameSite`
+      before its first `await` — which calls `Camera.MoveTo(…, 250)`. The snapshot taken on the
+      next line therefore read 250, not the scale the user had. Worse, it was conditional: if the
+      place's nearest site was already selected the assignment was a no-op, no event fired, and
+      the zoom *was* kept — so the button behaved differently depending on where you had been.
+      Fixed by reading `MetersPerPixel` before touching the combo
+- [x] **The new smoothing default reached only the primary pane.** `PaneManager.CreateSecondary`
+      builds its own `MapView` starting at the field default of 0, and the slider handler only
+      ever touched `_mapView`. Two panes on the same product would have drawn smoothed and raw
+      while the panel reported one number. This is the identical failure `ApplyValueFilter` was
+      written for — "invisible while the window defaulted to everything" — and it stayed hidden
+      here for the same reason, that 0 was also what a fresh secondary already had.
+      `ApplyRadarAppearance` now fans both sliders out to every pane, and a pane opened later
+      starts where the sliders are. It fixes opacity's identical latent split at the same time
+- [x] **The WHERE bar overflowed and clipped in silence.** About 1070 px of fixed content
+      against `MinWidth="900"` less the 50 px rail: `Recenter` and half the readout fell off the
+      right edge with no scrollbar and no affordance — the failure mode `CLAUDE.md` already
+      documents for the left rail, reintroduced one bar over. Now a `WrapPanel`. Verified at the
+      900 DIP minimum: it wraps to two rows with nothing hidden
+- [x] **An orphaned `<summary>`.** Inserting `UpdateCentreReadout` above `NotifyHomeViewChanged`
+      left the latter's doc attached to the former, so it carried two summaries and the reason
+      for its 5 % zoom threshold was silently reassigned. The compiler does not warn
+- [x] **The "centred" tolerance mixed ground km with Mercator metres.** `metresPerPixel` is
+      Mercator, which overstates ground metres by `1/cos(lat)`, so a rule stated as 12 px was
+      enforced as ~16 px at 40°N and ~25 px in Alaska. Now multiplied by `cos(lat)`, with a test
+      that pins the same offset and scale at both latitudes
+- [x] **A vacuous assertion.** `Assert.Same(near.Site, pick.Site)` could not fail: the helper
+      defaulted both cells to the same `RadarSite`, so it held whichever was picked. The distant
+      cell now carries its own site
+- [x] **Stale test counts** in `ci.yml` and `CLAUDE.md` — 652 against an actual 667 (406 pure
+      library, 261 shell)
+
+**Gate:** [PASSED] 667/667 tests, 0 warnings.

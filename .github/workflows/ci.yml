@@ -57,8 +57,8 @@ jobs:
             dotnet build "src/OpenWSR.$p" --configuration Release -warnaserror
           done
 
-      # 406 of the 637 tests — every binary decoder, the geodesy, dealiasing, the clutter
-      # mask and the hodograph. The other 231 are the render and UI seam, covered by the
+      # 406 of the 667 tests — every binary decoder, the geodesy, dealiasing, the clutter
+      # mask and the hodograph. The other 261 are the render and UI seam, covered by the
       # Windows job above.
       - name: Test the pure libraries
         run: |

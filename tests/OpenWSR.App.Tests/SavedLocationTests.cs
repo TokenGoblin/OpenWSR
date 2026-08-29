@@ -210,6 +210,37 @@ public class SavedLocationTests
         Assert.Single(settings.Locations);
     }
 
+    // ---- the retired basemap ----
+
+    /// <summary>
+    /// A 0.1.0 settings file names CARTO, which now answers every unkeyed tile request with a
+    /// picture reading "API KEY REQUIRED". A changed default does not reach a file that already
+    /// has the setting, so anyone who installed 0.1.0 would keep the watermark for ever.
+    /// </summary>
+    [Fact]
+    public void ASavedCartoBasemapMovesToTheDerivedDarkOne()
+    {
+        var settings = FromJson("""{"tileProvider": "carto-dark"}""");
+
+        settings.MigrateRetiredBasemap();
+
+        Assert.Equal("osm-dark", settings.TileProvider);
+    }
+
+    [Theory]
+    [InlineData("osm")]
+    [InlineData("usgs-topo")]
+    [InlineData("maptiler")]
+    public void AnyOtherSavedBasemapIsLeftAlone(string provider)
+    {
+        var settings = FromJson($$"""{"tileProvider": "{{provider}}"}""");
+
+        settings.MigrateRetiredBasemap();
+        settings.MigrateRetiredBasemap();
+
+        Assert.Equal(provider, settings.TileProvider);
+    }
+
     // ---- the list ----
 
     [Fact]

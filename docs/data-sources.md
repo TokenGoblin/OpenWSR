@@ -88,8 +88,19 @@ path abandons the tiles the old one wrote rather than serving them for ever.
 
 | Endpoint | Provides |
 |---|---|
-| OpenStreetMap / MapTiler XYZ tiles | Basemap |
+| `tile.openstreetmap.org` XYZ tiles | Basemap, light and dark |
+| `basemap.nationalmap.gov` USGSTopo | Terrain basemap |
+| `api.maptiler.com` (needs a free key) | Optional basemap |
 | `nominatim.openstreetmap.org/search` | City / ZIP geocoding |
+
+**CARTO is gone, and this is the shape of that failure.** `basemaps.cartocdn.com` served the
+dark basemap free and keyless until August 2026, when it began requiring an API key and started
+retiring its raster tiles. Unkeyed requests still return HTTP 200 and a valid PNG — one with
+"API KEY REQUIRED" stamped across it — so nothing in the fetch path could tell it from imagery,
+and because the tile cache never expires it was invisible on every machine that had run the app
+before. A free key (5M tiles/month, no account) would have restored it, but the raster tiles are
+being retired regardless, so the dark style is derived from OSM's own tiles instead. See
+`TileToning`.
 
 Nominatim requires a descriptive User-Agent and rate-limits aggressively. Tile and
 basemap imagery are subject to their providers' terms — see `THIRD-PARTY-NOTICES.md`.

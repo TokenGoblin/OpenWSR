@@ -77,8 +77,8 @@ No account, no API key, no subscription. Everything it reads is public data.
 - **Level III algorithms** — SCIT storm tracks with forecast positions and projection
   cones, hail markers sized by severe-hail probability, mesocyclone detections, and
   per-cell max dBZ / VIL / echo top.
-- **Hotspot finder** — one click scans all 163 WSR-88Ds and flies to the heaviest
-  precipitation in the country.
+- **Hotspot finder** — one click scans all 163 WSR-88Ds and flies to the nearest real
+  precipitation to your saved place; hold Shift for the heaviest in the country.
 - **Hail size swath** — MRMS maximum estimated hail size over the last hour, banded at the
   sizes hail is actually reported in: 0.75 in severe, 1 in a quarter, 1.75 in a golf ball,
   2.75 in a baseball. Where hail fell, rather than where a cell happens to be now.
@@ -100,10 +100,11 @@ No account, no API key, no subscription. Everything it reads is public data.
 
 **Map and overlays**
 
-- **Basemaps** — CARTO Dark Matter by default, because reflectivity is a bright saturated
-  palette and against a near-black ground the weather is the only bright thing on screen.
-  Place names are drawn as their own layer *above* the radar, since the name of the town a
-  storm is over is exactly what you want to read at that moment. OpenStreetMap, USGS
+- **Basemaps** — dark by default, because reflectivity is a bright saturated palette and
+  against a near-black ground the weather is the only bright thing on screen. The dark style
+  is OpenStreetMap's own tiles inverted as they load rather than a second tile service, so it
+  cannot be taken away; the trade is that OSM bakes its place names in, so they sit under the
+  weather. OpenStreetMap as published, USGS
   topographic and MapTiler are also selectable.
 - **Political boundaries** — US Census state and county outlines as a layer you control,
   rather than whatever the basemap happens to bake in. A county line is how a warning is
@@ -204,7 +205,7 @@ the storm symbol key are one click from there.
 
 The window is arranged around the four questions you ask it, each with one place:
 
-| Where | Top bar | Search a place, pick a site, jump to the nearest |
+| Where | Top bar | Search a place, pick a site, jump to the nearest — a readout of the ground under the map centre, lit up when it is one of your saved places, and `Recenter` to put the map and the radar back on your place |
 |---|---|---|
 | **What** | Above the map | `REF VEL SW ZDR PHI CC AZS` and the elevation tilt |
 | **When** | Below the map | `LIVE · ARCHIVE · FORECAST`, and that mode's transport |
@@ -246,7 +247,7 @@ Everything below is public and unauthenticated.
 | Iowa Environmental Mesonet | National radar mosaic and GOES tiles, SPC watches and discussions, storm reports |
 | US Census (cartographic boundary files) | State and county outlines, 1:500,000 |
 | USGS The National Map | Topographic basemap tiles |
-| CARTO / OpenStreetMap / MapTiler | Basemap tiles — dark by default, so the radar palette is the only bright thing on screen |
+| OpenStreetMap (MapTiler optional, with your own key) | Basemap tiles — dark by default, so the radar palette is the only bright thing on screen |
 | NCEI HOMR | Radar site table (embedded) |
 
 NEXRAD data carries no use restrictions. Basemap and tile imagery are subject to their

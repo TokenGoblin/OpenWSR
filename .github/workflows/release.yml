@@ -81,10 +81,32 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
+          # What changed comes from CHANGELOG.md, so the release notes and the repository
+          # cannot drift apart. A version with no section falls back to the standing notes
+          # rather than failing the release — better a thin release than none.
+          $v = '${{ steps.v.outputs.version }}'
+          $changes = ''
+          if (Test-Path CHANGELOG.md) {
+            $lines = Get-Content CHANGELOG.md
+            $start = ($lines | Select-String -Pattern "^## $([regex]::Escape($v))\s*$" |
+                      Select-Object -First 1).LineNumber
+            if ($start) {
+              $body = @()
+              for ($i = $start; $i -lt $lines.Count; $i++) {
+                if ($lines[$i] -match '^## ') { break }
+                $body += $lines[$i]
+              }
+              $changes = ($body -join "`n").Trim()
+            }
+          }
+          if (-not $changes) { Write-Host "::warning::no CHANGELOG.md section for $v" }
+
           $notes = @"
           ## OpenWSR ${{ steps.v.outputs.version }}
 
           A native Windows NEXRAD radar viewer. No account, no API key, no subscription.
+
+          $changes
 
           **Install** — download the ``.msi`` and run it. It installs per-user under
           ``%LocalAppData%\Programs\OpenWSR`` with no administrator prompt, and adds a Start
