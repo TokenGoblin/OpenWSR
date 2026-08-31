@@ -131,6 +131,14 @@ public partial class SettingsWindow : Window
             _ => 3,
         };
 
+        CloseToTrayCheck.IsChecked = settings.CloseToTray;
+        MinimiseToTrayCheck.IsChecked = settings.MinimiseToTray;
+        StartInTrayCheck.IsChecked = settings.StartInTray;
+        // The registry is asked directly rather than a saved copy of the answer being trusted:
+        // login start can be turned off from Task Manager without this app being told, and a
+        // ticked box over a Run key that is not there is a promise the app cannot keep.
+        StartWithWindowsCheck.IsChecked = StartupRegistration.IsEnabled;
+
         RadiusCombo.SelectedIndex = settings.AlertRadiusKm switch
         {
             <= 15 => 0, <= 40 => 1, <= 80 => 2, _ => 3,
@@ -148,6 +156,16 @@ public partial class SettingsWindow : Window
 
     /// <summary>Set when the user asked to move the primary place by clicking the map.</summary>
     public bool WantsHomePicker { get; private set; }
+
+    /// <summary>
+    /// Set when login start could not be written — a policy-locked Run key, most likely.
+    ///
+    /// Reported by the main window rather than shown here, because this dialog is closed by
+    /// the time it is known: the registry is written on Save like everything else, so that
+    /// Cancel undoes it, and Save is also what closes the window. A silently ignored checkbox
+    /// is the one outcome to avoid, since the user would find out at the next login.
+    /// </summary>
+    public string? StartupWarning { get; private set; }
 
     /// <summary>
     /// Set when the user asked to import a colour table. The file picker is opened by the
@@ -296,6 +314,23 @@ public partial class SettingsWindow : Window
         {
             0 => 2, 2 => 16, 3 => _settings.AlertRadiusKm, _ => 8,
         };
+
+        _settings.CloseToTray = CloseToTrayCheck.IsChecked == true;
+        _settings.MinimiseToTray = MinimiseToTrayCheck.IsChecked == true;
+        _settings.StartInTray = StartInTrayCheck.IsChecked == true;
+
+        // Written here, with everything else, rather than when the box was ticked — that is
+        // what makes Cancel mean something, and it is the same reason home is held pending.
+        bool startWithWindows = StartWithWindowsCheck.IsChecked == true;
+        if (startWithWindows != StartupRegistration.IsEnabled
+            && !StartupRegistration.Apply(startWithWindows))
+        {
+            StartupWarning = startWithWindows
+                ? "Windows would not let OpenWSR add itself to startup — this PC may have a "
+                + "policy against it. Everything else was saved."
+                : "Windows would not let OpenWSR remove itself from startup. You can turn it "
+                + "off in Task Manager, under Startup apps.";
+        }
 
         _settings.Locations = [.. _places.Select(p => p.ToSaved())];
         // A list edited down to nothing primary would leave the app with nowhere to open.

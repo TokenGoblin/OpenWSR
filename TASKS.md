@@ -2250,3 +2250,114 @@ resize border. Automation that fights for the foreground can manufacture the bug
 for; measure on a launch nothing has touched.
 
 **Gate:** [PASSED] 667/667 tests, 0 warnings.
+
+
+## Running in the background, in the system tray
+
+The alerting was already built — tracks, tiering, throttling, tray balloons — and it all
+stopped the moment somebody closed the window. Making it survive that was the work.
+
+- [x] **Close leaves it watching; Exit exits.** `MainWindow.OnClosing` cancels the close and
+      hides when `CloseToTray` is set. Three things keep it from being a trap: the tray menu
+      carries Exit (an app that can only be quit from a window it has hidden is a trap), a
+      one-time balloon says where it went the first time it happens, and the behaviour has a
+      switch. Minimise-to-tray exists too but is **off** by default — minimise has a meaning
+      everybody knows, and a vanished taskbar button reads as a crash, whereas a redefined
+      close button gets a notification that explains itself
+- [x] **The renderer idles while hidden, and this was not an optimisation.** `Present(1)`
+      paces the render loop by waiting for a vertical blank — but only while there is
+      something on screen to wait for. Against a hidden swap chain DXGI returns immediately,
+      so a window in the tray left the render thread spinning a core drawing frames nobody
+      could see. `MapView.Paused` sleeps the loop instead, keeping the device, its textures
+      and the staged sweep alive so coming back is a flag rather than a rebuild
+- [x] **The Level II stream stands down; the watch does not.** A volume is ~210 MB as floats
+      and none of it feeds the alarm — threats come from the Level III storm-track poll (2 min)
+      and the api.weather.gov warnings poll (60 s), both already `DispatcherTimer`s that run
+      regardless of what is on screen. Hiding stops the stream and leaves the mode alone, so
+      restoring is a reconnect rather than a reconstruction. `HideToTray` also arms the storm
+      watch: with a window up, whether the storm layer is on is the user's business, but here
+      it is the only reason the process is still running
+- [x] **Measured, not assumed.** Hidden: **1.7 % of one core over 10 s, 364 MB** after a live
+      session; **1.2 % and 230 MB** started straight into the tray. Visible with a live volume:
+      **60 %**. Verified against the running app — window opens, `WM_CLOSE` hides it without
+      exiting, second launch wakes it, window returns
+- [x] **One instance per session.** Only became necessary once the app could hide: with no
+      taskbar button, relaunching from the Start menu is how people ask for the window back,
+      and that used to start a second copy — two tray icons, two Level II streams, and two
+      notifications for every storm. A named mutex decides who is first and a named event
+      carries the "come back". A blocked mutex must never stop the app starting, so the guard
+      failing is treated as "run unguarded"
+- [x] **Start with Windows lives in the registry and nowhere else.** `HKCU\...\Run`, launching
+      with `--tray`. Deliberately not mirrored into settings.json: it can be turned off from
+      Task Manager's Startup tab without this app being told, and a ticked box over a Run key
+      that is not there is a promise the app cannot keep. `SyncPath` repoints a stale entry,
+      since it holds an absolute path and fails silently at login when the app moves
+- [x] **Cancel still means cancel.** The registry is written in `Save_Click` with everything
+      else, not when the box is ticked — the same rule that put home in pending fields. The
+      failure case is reported by the main window rather than the dialog, because the dialog
+      is closed by the time it is known
+- [x] **Started-into-the-tray opens minimised, then hides.** The D3D surface is an `HwndHost`
+      and only builds its child window once its parent has been laid out, so a window hidden
+      before its first layout has no renderer to come back to. Minimised and unactivated is
+      what stops it flashing on screen in between
+- [x] **The tray line is the whole UI while it is hidden.** `TrayStatus` builds it — a threat
+      always outranks the watch list, and "not watching anywhere" is said out loud, because an
+      app with no place saved looks exactly like one that is watching and has nothing to
+      report. Capped at 63 characters, which is a hard limit rather than a style rule: WinForms
+      throws above it, and an over-long place name would take the tray icon down and the
+      alerting with it
+
+**Gate:** [PASSED] 675/675 tests, 0 warnings.
+
+
+## Review of the tray work, and what it found
+
+Ten findings against the change above. Four were substantive.
+
+- [x] **The single-instance guard did not cover the door WPF actually uses.** `StartupUri`
+      navigates *after* `OnStartup` returns and `Shutdown()` only queues a callback, so a
+      second launch that had already decided to leave still ran the whole `MainWindow`
+      constructor on its way out — a second tray icon, a second warnings fetch, a second set
+      of timers. The window is created explicitly after the claim now and `StartupUri` is
+      gone, which makes the early return structurally sufficient rather than dependent on
+      dispatcher ordering. Second launch measured at **0.18 s**
+- [x] **A tray start could watch nothing at all.** `HideToTray` arms the storm watch and
+      `RestoreLayerState` replays the saved layer toggles; with the hide running first, anyone
+      who had ever unticked "Track storms" got it switched straight back off — leaving the app
+      in the tray reporting "Watching Home" with no storm poll running. The watch is re-armed
+      after the restore now
+- [x] **Only the Level II stream stood down; six other clocks kept running.** Satellite
+      (61 MB every four minutes), both MRMS layers, lightning, placefiles, SPC outlooks and
+      the archive loop all kept fetching and decoding into a paused renderer, while the
+      release notes claimed a hidden OpenWSR cost almost nothing. `ITimedLayer` stops them.
+      Suspension is a **latch, not a snapshot**: the first attempt only stopped clocks that
+      were already running, so a layer switched on by the restore started fetching anyway —
+      a 61 MB granule landed 71 s after a hide. `Enable` now takes the state without starting
+      the clock. Verified by soaking a tray start for five minutes and categorising every log
+      line: **zero satellite, lightning or MRMS fetches**, six warnings polls, twelve storm
+      polls
+- [x] **Logging off spent the one-time "still watching" balloon.** Windows ends a session
+      through `Application.Shutdown`, which still raises `Closing` — so the close-to-tray path
+      ran during sign-out, set `TrayHintShown` and fired the balloon at someone on their way
+      out. The next genuine close would then have hidden the window with no explanation, which
+      is the exact trap the hint exists to prevent. `SessionEnding` sets `_exiting` now
+- [x] **Resuming yanked the camera back to the radar.** `StartLiveAsync` frames the site,
+      which is right when you pick one and wrong when the feed is merely being picked back up.
+      It takes a `frameSite` flag
+- [x] Also: `ShowActivated` was left false after a tray start, so later restores came back
+      without the foreground; the second instance now hands over its foreground rights, or
+      `Activate()` is refused and the window it was asked for never comes forward; the mutex
+      is claimed after the event is published, closing a race where a second launch found the
+      slot taken and no event to signal and so did nothing at all; `SyncPath` only repoints a
+      Run entry whose target is **gone**, rather than letting one `dotnet run` capture an
+      installed copy's login start; and a null `SystemFonts.MenuFont` no longer takes the
+      whole app down over the weight of one bold menu item
+- [x] **Memory, measured rather than claimed.** The published figure was 230 MB, taken from a
+      tray start and quietly untrue of a hide after a live session — that peaked at **2.0 GB
+      three minutes in**. Hiding now collects, compacting, because every assumption behind
+      "let the runtime decide" has just stopped holding: the volume is dropped, the clocks
+      that would allocate are stopped, and the process is idle for hours. 766 MB of heap to
+      269 MB, and a second pass two minutes later — for work that was still in flight when the
+      window went away — took 285 MB to 78 MB
+
+**Gate:** [PASSED] 675/675 tests, 0 warnings.

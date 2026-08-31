@@ -34,6 +34,41 @@ public partial class MainWindow : Window
     private readonly BoundariesController _boundaries;
     private readonly ShapeImportController _imports;
     private bool _reportedTileFailure;
+
+    /// <summary>
+    /// Set only by Exit, and the difference between hiding and quitting. Without it the
+    /// close-to-tray check in <see cref="OnClosing"/> would cancel the very close that Exit
+    /// asks for, and the app could not be shut down at all.
+    /// </summary>
+    private bool _exiting;
+
+    /// <summary>
+    /// Whether the window is hidden and the app is running as a tray watcher. Read by the
+    /// things that only make sense with a window on screen — the Level II stream, the
+    /// in-window toast — so they can stand down rather than work for nobody.
+    /// </summary>
+    private bool _inTray;
+
+    /// <summary>
+    /// The state to come back to. Tracked as the window changes rather than read on the way
+    /// out, because minimise-to-tray hides from the minimised state — by which point
+    /// <see cref="Window.WindowState"/> reads Minimized and no longer remembers that the
+    /// window was maximised, so restoring would quietly un-maximise it. Starts at Maximized
+    /// because that is what the XAML opens with.
+    /// </summary>
+    private WindowState _restoreState = WindowState.Maximized;
+
+    /// <summary>
+    /// When to collect for the second time after hiding, or null when none is due.
+    ///
+    /// Hiding collects immediately, but a fetch that was already in flight lands after that
+    /// and re-inflates the heap — measured at 2.0 GB three minutes after a hide, from a 61 MB
+    /// satellite granule whose decode was underway when the window went away. One more pass,
+    /// once the stragglers have finished, catches exactly that. It is deliberately not a
+    /// recurring sweep: with the drawing clocks stopped nothing else allocates, so there
+    /// would be nothing for a second one to find.
+    /// </summary>
+    private DateTime? _traySettleDueUtc;
     private bool _settingsSaveDue;
     private DateTime _settingsChangedAtUtc;
 
@@ -49,6 +84,35 @@ public partial class MainWindow : Window
     {
         _settingsSaveDue = true;
         _settingsChangedAtUtc = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Everything that runs on a clock to *draw* something, as opposed to the two polls that
+    /// watch for threats. These stop while OpenWSR is in the tray; see <see cref="ITimedLayer"/>
+    /// for why that is not the same as switching them off.
+    /// </summary>
+    private IEnumerable<ITimedLayer> TimedLayers
+    {
+        get
+        {
+            if (_satellite is not null) yield return _satellite;
+            yield return _mrms;
+            yield return _hailField;
+            yield return _lightning;
+            yield return _placefiles;
+            yield return _outlooks;
+            yield return _future;
+            yield return _playback;
+        }
+    }
+
+    /// <summary>Write settings down once the flurry has settled, rather than per tick.</summary>
+    private void FlushSettingsIfDue()
+    {
+        if (!_settingsSaveDue) return;
+        if (DateTime.UtcNow - _settingsChangedAtUtc <= TimeSpan.FromSeconds(1)) return;
+        _settingsSaveDue = false;
+        _settings.Save();
     }
     private readonly LightningController _lightning;
     private readonly MrmsController _mrms;
@@ -80,6 +144,17 @@ public partial class MainWindow : Window
         LinkToggle.Visibility = Visibility.Collapsed; // appears with the second pane
 
         var settings = _settings = AppSettings.Load();
+        if (App.StartInTray || settings.StartInTray)
+        {
+            // Minimised and unactivated rather than hidden, because the D3D surface is an
+            // HwndHost and only builds its child window once the window it sits in has been
+            // laid out — hide before that and there is no renderer to come back to. The
+            // Loaded handler does the actual hiding, a frame later; this is what stops the
+            // window appearing on screen in the meantime.
+            WindowState = WindowState.Minimized;
+            ShowActivated = false;
+            ShowInTaskbar = false;
+        }
         Units.System = settings.Units;
         _geocoder = new Geocoder(settings.UserAgent);
         var provider = settings.TileProvider switch
@@ -293,11 +368,24 @@ public partial class MainWindow : Window
         _hailField.ErrorRaised += text => Dispatcher.BeginInvoke(() => ReportError(text));
 
         _tray = new TrayNotifier();
-        _tray.Activated += () => Dispatcher.BeginInvoke(() =>
+        _tray.Activated += () => Dispatcher.BeginInvoke(RestoreFromTray);
+        _tray.SettingsRequested += () => Dispatcher.BeginInvoke(() =>
         {
-            if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
-            Activate();
+            // Settings is modal on this window, so the window has to exist on screen first —
+            // a modal dialog owned by a hidden window is one nobody can find.
+            RestoreFromTray();
+            SettingsButton_Click(this, new RoutedEventArgs());
         });
+        _tray.ExitRequested += () => Dispatcher.BeginInvoke(ExitApplication);
+        // Windows ends the session by calling Application.Shutdown, which still raises
+        // Closing — so without this, logging off would run the close-to-tray path: it would
+        // spend the one-time "OpenWSR is still watching" balloon on someone who is signing
+        // out, and the next time they genuinely closed the window it would vanish with no
+        // explanation at all.
+        Application.Current.SessionEnding += (_, _) => _exiting = true;
+        // A second launch is how someone asks for a window they cannot see. Bring this one
+        // back rather than letting a duplicate start; see SingleInstance.
+        App.ActivationRequested += () => Dispatcher.BeginInvoke(RestoreFromTray);
 
         _storms = new StormOverlayController(_mapView);
         _storms.GeometryChanged += () => Dispatcher.BeginInvoke(ComposeOverlay);
@@ -364,15 +452,26 @@ public partial class MainWindow : Window
         };
         _statusTimer.Tick += (_, _) =>
         {
+            // In the tray there is no panel to paint and no camera to follow, so the whole
+            // tick is work for nobody — bar the two parts that are about data rather than
+            // pixels: writing down a pending settings change, and dropping warnings that have
+            // run out from the set the tray line reports.
+            if (_inTray)
+            {
+                FlushSettingsIfDue();
+                _threats.ExpireStale(DateTimeOffset.UtcNow);
+                if (_traySettleDueUtc is { } due && DateTime.UtcNow > due)
+                {
+                    _traySettleDueUtc = null;
+                    CollectIdleMemory("settled");
+                }
+                return;
+            }
+
             FpsText.Text = $"{_mapView.FramesPerSecond:F0} fps · sweep upload {_mapView.LastSweepUploadMs:F1} ms";
             UpdateCentreReadout();
 
-            // Write settings down once the flurry has settled rather than per tick.
-            if (_settingsSaveDue && DateTime.UtcNow - _settingsChangedAtUtc > TimeSpan.FromSeconds(1))
-            {
-                _settingsSaveDue = false;
-                _settings.Save();
-            }
+            FlushSettingsIfDue();
 
             // A basemap whose tiles all fail leaves a blank map, which reads as "still
             // loading" for ever. Say so once.
@@ -413,8 +512,21 @@ public partial class MainWindow : Window
                 (int)_mapView.Camera.Snapshot().ViewportWidth,
                 (int)_mapView.Camera.Snapshot().ViewportHeight);
 
+            // Straight to the tray when Windows started us at login, or when the user asked
+            // for it. Before the restore, so that the layers it switches on find polling
+            // already suspended and never fetch at all — a tray start with the satellite layer
+            // ticked would otherwise pull a 61 MB granule to paint a hidden window.
+            if (App.StartInTray || settings.StartInTray) HideToTray();
+
             RestorePanelSections();
             RestoreLayerState();
+
+            // And the storm watch is re-armed after it, because the restore replays the saved
+            // toggles and can switch the storm layer straight back off — which left the app
+            // sitting in the tray reporting that it was watching while no storm poll ran at
+            // all. Cheap and idempotent: it re-points an already-armed watch.
+            if (_inTray) EnsureStormWatchForHome();
+
             foreach (var source in settings.Placefiles.ToList())
                 await _placefiles.AddAsync(source);
             foreach (var path in settings.ImportedShapes.ToList())
@@ -423,7 +535,9 @@ public partial class MainWindow : Window
                 else if (settings.ImportedShapes.Remove(path)) settings.Save();
             }
             await LoadStartupAsync();
-            if (!settings.WelcomeShown)
+            // Not while hidden: it would open on the bare desktop, and marking it shown
+            // would spend the first-run guide on somebody who never saw it.
+            if (!settings.WelcomeShown && !_inTray)
             {
                 settings.WelcomeShown = true;
                 settings.Save();
@@ -453,6 +567,166 @@ public partial class MainWindow : Window
             _panes.Dispose();
             _mapView.Dispose();
         };
+    }
+
+    // ---- running in the tray ----
+    //
+    // OpenWSR is a watchman as much as a viewer, and a watchman that only works while its
+    // window is open is not much of one. Hidden, it keeps the two polls the alarm is actually
+    // built on — Level III storm tracks every two minutes and api.weather.gov warnings every
+    // minute — and stands everything else down.
+
+    /// <summary>
+    /// Closing leaves OpenWSR watching in the tray rather than exiting.
+    ///
+    /// This redefines the close button, which is not a thing to do lightly, and it is done for
+    /// a specific reason: the alerting is worth nothing while the process is not running, and
+    /// the close button is how people tidy a desktop rather than how they decide to stop being
+    /// warned about tornadoes. Three things keep it from being a trap — a one-time
+    /// notification the first time it happens saying where the app went, Exit in the tray
+    /// menu, and <see cref="AppSettings.CloseToTray"/> for anyone who disagrees.
+    /// </summary>
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        if (!_exiting && _settings.CloseToTray)
+        {
+            e.Cancel = true;
+            HideToTray();
+            return;
+        }
+        base.OnClosing(e);
+    }
+
+    /// <summary>
+    /// Minimising can hide to the tray too, but only if asked. Minimise already has a meaning
+    /// everybody knows, and quietly taking the taskbar button away with it is a worse surprise
+    /// than the close button being redefined: there a notification explains itself, whereas a
+    /// vanished taskbar button reads as a crash.
+    /// </summary>
+    protected override void OnStateChanged(EventArgs e)
+    {
+        base.OnStateChanged(e);
+        if (WindowState != WindowState.Minimized) _restoreState = WindowState;
+        else if (!_exiting && _settings.MinimiseToTray) HideToTray();
+    }
+
+    /// <summary>
+    /// Become a tray watcher: hide the window, stop everything whose only purpose is putting
+    /// pixels on it, and make sure the watch is actually armed.
+    /// </summary>
+    private void HideToTray()
+    {
+        if (_inTray) return;
+        _inTray = true;
+
+        Hide();
+        ShowInTaskbar = false;
+        _mapView.Paused = true;
+
+        // The Level II stream is the most expensive thing this app does — a volume is about
+        // 210 MB once decoded to floats, and the working set sawtooths to 1.45 GB with it
+        // running — and not one byte of it feeds the alarm. Threats come from the Level III
+        // storm-track poll and the warnings poll, a few kilobytes a minute between them. So
+        // the stream stands down while the watch does not. The mode is deliberately left as
+        // it was, so coming back is a matter of starting it again rather than reconstructing
+        // what the user was looking at.
+        if (_vm.IsLive) _ = _liveFeed.StopAsync();
+
+        // Everything else on a clock draws rather than watches, and drawing is what has
+        // stopped. Satellite is the one that makes this necessary rather than tidy: a
+        // multiband ABI granule is about 57 MB every four minutes, so a hidden window with
+        // that layer ticked would pull the better part of a gigabyte an hour to paint a
+        // surface nobody is looking at.
+        foreach (var layer in TimedLayers) layer.SuspendPolling();
+
+        // Nothing is watched at all unless the storm poll is pointed at a radar. With the
+        // window up, whether the storm layer is on is the user's business; here it is the
+        // entire reason the process is still running.
+        EnsureStormWatchForHome();
+        _tray.SetStatus(_threats.Places, _threats.Current);
+
+        Serilog.Log.Information(
+            "Hidden to the tray, watching {Places} place(s)", _threats.Places.Count);
+        CollectIdleMemory("hidden");
+        _traySettleDueUtc = DateTime.UtcNow + TimeSpan.FromMinutes(2);
+
+        if (_settings.TrayHintShown) return;
+        // Said once, the first time the window disappears. Someone who does not know where the
+        // app went concludes it crashed, and the people who conclude that are exactly the ones
+        // who will not be there to read the storm alert an hour later.
+        _settings.TrayHintShown = true;
+        _settings.Save();
+        _tray.Notify(
+            "OpenWSR is still watching",
+            _threats.IsArmed
+                ? "It is down in the notification area, and will alert you if a storm heads "
+                + "your way. Right-click the icon to open it again, or to exit."
+                : "It is down in the notification area. Add a place in Settings to arm "
+                + "proximity alerts. Right-click the icon to open it again, or to exit.",
+            urgent: false);
+    }
+
+    /// <summary>
+    /// Ask for the memory back rather than waiting for a collection that may never come.
+    ///
+    /// Normally the wrong instinct — the runtime tunes this better than a guess does — but
+    /// every assumption behind that advice has just stopped holding. A live volume's worth of
+    /// decoded floats has been dropped, the clocks that would allocate again are stopped, and
+    /// the process is about to sit idle for hours rather than seconds; left alone it simply
+    /// keeps the peak, because there is no pressure to make it do otherwise. The pause it
+    /// costs lands on a window that is already hidden. Compaction is the part that matters:
+    /// a decoded sweep is large-object-heap sized, and without it the address space stays
+    /// booked even once the objects are gone.
+    /// </summary>
+    private void CollectIdleMemory(string reason)
+    {
+        long before = GC.GetTotalMemory(false);
+        System.Runtime.GCSettings.LargeObjectHeapCompactionMode =
+            System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+        GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+        GC.WaitForPendingFinalizers();
+        GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+        Serilog.Log.Information(
+            "Idle collection ({Reason}): heap {Before} MB -> {After} MB",
+            reason, before >> 20, GC.GetTotalMemory(false) >> 20);
+    }
+
+    /// <summary>Come back: show the window, resume drawing, and pick the live feed up again.</summary>
+    private void RestoreFromTray()
+    {
+        bool wasHidden = _inTray;
+        _inTray = false;
+        _traySettleDueUtc = null;   // about to allocate again; the pass would be wasted
+
+        ShowInTaskbar = true;
+        // Cleared in the constructor for a tray start, and never restored otherwise — every
+        // later Show() would come back without taking the foreground.
+        ShowActivated = true;
+        if (!IsVisible) Show();
+        if (WindowState == WindowState.Minimized) WindowState = _restoreState;
+        _mapView.Paused = false;
+        Activate();
+
+        foreach (var layer in TimedLayers) layer.ResumePolling();
+
+        // The mode was left alone on the way in, so "still live" only has to be made true
+        // again. Not conditional on how long it was away: a volume from before the pause is
+        // stale by definition, and reconnecting is what stops the age indicator lying.
+        //
+        // Without a site to frame, though: StartLiveAsync normally moves the camera to the
+        // radar, which is right when you pick a site and wrong here — coming back from the
+        // tray would throw away wherever you had panned and zoomed to.
+        if (wasHidden && _vm.IsLive) StartLiveAsync(frameSite: false);
+    }
+
+    /// <summary>
+    /// Quit for real. The only way out once the window is hidden, which is why it is in the
+    /// tray menu — an app that can only be exited from a window it has put away is a trap.
+    /// </summary>
+    private void ExitApplication()
+    {
+        _exiting = true;
+        Close();
     }
 
     // ---- messaging: transient status, persistent errors, determinate progress ----
@@ -717,7 +991,12 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void StartLiveAsync()
+    /// <param name="frameSite">
+    /// Whether to move the camera onto the site. True when the user has chosen a radar or a
+    /// mode, false when the feed is merely being picked back up — resuming from the tray must
+    /// not discard where they were looking.
+    /// </param>
+    private async void StartLiveAsync(bool frameSite = true)
     {
         if (SiteCombo.SelectedItem is not RadarSite site)
         {
@@ -725,7 +1004,16 @@ public partial class MainWindow : Window
             ApplyMode(DataMode.Archive);
             return;
         }
-        FrameSite(site);
+        if (frameSite) FrameSite(site);
+
+        // Hidden in the tray there is nobody to show a volume to, and this stream is the whole
+        // difference between a background watcher and a gigabyte of resident radar decode. The
+        // alarm does not use it — see HideToTray.
+        if (_inTray)
+        {
+            LiveStateText.Text = "Live radar paused while OpenWSR is in the tray.";
+            return;
+        }
 
         if (site.IsTdwr)
         {
@@ -1433,6 +1721,9 @@ public partial class MainWindow : Window
             .Select(l => new WatchedPlace(l.Name, l.LatDeg, l.LonDeg, _settings.RadiusFor(l)))
             .ToList();
         _threats.Configure(places, _settings.DirectHitRadiusKm);
+        // Configure only publishes when something changed, and "no places saved" has to reach
+        // the tray on the run where nothing changed too — that is the state worth saying.
+        _tray.SetStatus(_threats.Places, _threats.Current);
     }
 
     /// <summary>
@@ -1525,6 +1816,11 @@ public partial class MainWindow : Window
         _vm.Threats.Clear();
         foreach (var threat in threats) _vm.Threats.Add(threat);
 
+        // The tray line says the same thing to someone with no panel to look at, so it is
+        // updated on every evaluation — including the one that clears the list, which is the
+        // update that says the sky is clear again.
+        _tray.SetStatus(_threats.Places, threats);
+
         ThreatPanel.Visibility = threats.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         SyncRightColumn();
         if (threats.Count == 0) return;
@@ -1570,6 +1866,11 @@ public partial class MainWindow : Window
         // A toast inside the window is invisible when the window is not. Always send a
         // tray notification too — this is the case proximity alerts exist for.
         _tray.Notify(threat.Title, threat.Detail, threat.IsTornado);
+
+        // A Popup owns its own HWND, so with the window hidden it is not hidden along with it:
+        // it would open on the bare desktop, anchored to a MapHost that is nowhere on screen.
+        // The balloon above is the entire notification in that case, which is what it is for.
+        if (_inTray) return;
 
         if (_toast is not null) _toast.IsOpen = false;
         var panel = new StackPanel { MaxWidth = 360, Margin = new Thickness(12) };
@@ -2868,6 +3169,8 @@ public partial class MainWindow : Window
         RebuildHomeGeometry();
         ComposeOverlay();
         _radar.Refresh();
+
+        if (dialog.StartupWarning is { } startupWarning) ReportError(startupWarning);
 
         if (dialog.WantsHomePicker)
         {

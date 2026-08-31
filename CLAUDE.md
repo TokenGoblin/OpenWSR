@@ -46,7 +46,7 @@ What is worth writing down is the behaviour, not the address:
 `.github/workflows/ci.yml` runs on every push and pull request, in two jobs that guard
 different things.
 
-**Windows is the real gate** and runs all 667 tests. It is the only platform that can: the
+**Windows is the real gate** and runs all 675 tests. It is the only platform that can: the
 shell is WPF and Direct3D. The shader tests work on a hosted runner because they compile HLSL
 through `d3dcompiler` rather than creating a device, so no GPU is needed.
 
@@ -67,7 +67,7 @@ Forgejo Actions is similar but distinct, and the workflow here is GitHub's forma
 
 ```
 dotnet build OpenWSR.slnx                    # NOTE: .slnx, not .sln
-dotnet test OpenWSR.slnx                     # 667 tests
+dotnet test OpenWSR.slnx                     # 675 tests
 dotnet run --project src/OpenWSR.App
 dotnet publish src/OpenWSR.App -c Release    # single-file self-contained exe
 ```
@@ -171,6 +171,53 @@ when. `ShowGuide` answers that in prose, with the alerting rules first, and link
 keyboard card and the symbol key. The first run shows it too. Anything explaining a *feature*
 belongs there; a panel is for operating one, not for describing it.
 
+**The app has a second life with no window, and the rules there are different.** Closing
+hides to the tray and keeps watching, because the alerting is worth nothing while the process
+is not running. `MainWindow._inTray` is the flag, and three things read it: the status tick
+drops everything but the settings flush and `ExpireStale`, `StartLiveAsync` refuses to connect,
+and `OnThreat` skips the in-window toast — a `Popup` owns its own HWND, so with the window
+hidden it is not hidden along with it and would open on the bare desktop. What keeps running is
+exactly what the alarm is built on: the Level III storm poll and the warnings poll, both
+`DispatcherTimer`s that never cared what was on screen. **Every other clock in the app draws
+rather than watches, and stops** — that is what `ITimedLayer` is for. Anything new with a timer
+belongs on one side of that line or the other, and the default is the drawing side.
+
+**`ITimedLayer` suspension is a latch, not a snapshot, and that distinction was a bug.** The
+first version only stopped clocks that were already running, which is wrong on a tray start:
+`RestoreLayerState` switches layers on *after* the hide, and their own `Enable` starts the
+fetch — a 61 MB satellite granule landed 71 seconds after the window disappeared. `Enable` now
+checks the latch and takes the state without starting the clock. Test it by soaking a
+`--tray` start and categorising the log: anything but `alerts/active` and `Level3` is a leak
+of this kind. Measured over five minutes: 0.9 % of one core, 179 MB, and nothing else on the
+wire at all.
+
+**Hiding collects, twice, and this is the one place in the app where that is right.** Not
+because the runtime needs help in general, but because every assumption behind leaving it
+alone has just stopped holding: a live volume's worth of floats has been dropped, the clocks
+that would allocate are stopped, and the process is idle for hours rather than seconds — so
+left alone it simply keeps the peak, measured at **2.0 GB three minutes after a hide**. The
+collect is compacting, because a decoded sweep is large-object-heap sized. The second pass,
+two minutes later, exists for one specific thing: a fetch already in flight when the window
+went away, which lands after the first pass. It is not a recurring sweep, and should not
+become one — with the drawing clocks stopped there is nothing for a third to find.
+
+**The single-instance guard has to own window creation, or it guards nothing.** `App.xaml`
+deliberately has **no `StartupUri`**: it navigates after `OnStartup` returns, while
+`Shutdown()` only queues a callback, so a second launch that had already decided to exit still
+ran the entire `MainWindow` constructor on the way out — second tray icon, second warnings
+fetch, second set of timers. `OnStartup` creates and shows the window itself, after the claim
+succeeds. Do not reintroduce `StartupUri`.
+
+**A session ending is not a user closing the window.** Windows logs off by calling
+`Application.Shutdown`, which still raises `Closing` — so close-to-tray ran during sign-out and
+spent the one-time "OpenWSR is still watching" balloon on somebody who never saw it, leaving
+the next genuine close unexplained. `SessionEnding` sets `_exiting`.
+
+**Login start lives in the registry and is not mirrored into settings.json.** It can be turned
+off from Task Manager without this app being told, so a saved copy of the answer would be a
+second spelling of the same fact — the same reason `MigrateLegacyHome` nulls the fields it
+folds in. `StartupRegistration.IsEnabled` asks the Run key every time.
+
 `MainViewModel` holds the state the layout is built from — mode, product, tilt, armed map
 tool. Keep it there rather than in control properties, or moving a control between
 containers means rewriting the logic that reads it.
@@ -235,6 +282,22 @@ machinery is kept rather than deleted because it is the seam a vector basemap or
 labels-only source would attach to, and because splitting them out again is the single biggest
 improvement available to the basemap. Do not wire a second copy of a baked-in style into it —
 that draws every name twice, once shifted.
+
+**A hidden swap chain does not throttle, so hiding the window used to spin a core.**
+`Present(1)` is what paces the render loop, and it only waits for a vertical blank while there
+is something on screen to wait for — occluded or hidden, DXGI returns immediately and the loop
+runs as fast as the GPU will take it, drawing frames nobody can see. `MapView.Paused` sleeps
+the loop instead of tearing the device down, so the device, its textures and the staged sweep
+survive and coming back is a flag rather than a rebuild. Do not "fix" it by stopping the render
+thread: `Stop()` disposes the device, and `_pendingSweep` is a single slot rather than a queue
+precisely so a paused loop accumulates nothing.
+
+**A window that is hidden before its first layout has no renderer.** `D3DHostControl` is an
+`HwndHost`, and `BuildWindowCore` — which is what calls `MapView.Start` — only runs once the
+window it sits in has been laid out. So starting into the tray opens the window **minimised and
+unactivated** and hides it from the `Loaded` handler a frame later, rather than hiding it in
+the constructor. It looks like an extra step and is the difference between a tray watcher that
+can show you the map and one that comes back blank.
 
 **Airspace.** The D3D child HWND always draws above WPF content inside its rectangle.
 WPF controls cannot overlay the map. Anything that must appear *over* the map is either

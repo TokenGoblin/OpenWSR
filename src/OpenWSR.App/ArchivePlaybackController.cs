@@ -13,7 +13,7 @@ namespace OpenWSR.App;
 /// CPU geometry work) for the last N volumes.
 /// </summary>
 public sealed class ArchivePlaybackController(
-    MapView mapView, RadarDisplayController radar) : IDisposable
+    MapView mapView, RadarDisplayController radar) : IDisposable, ITimedLayer
 {
     /// <summary>Two and a half hours of a five-minute VCP — a storm's life, without a long wait.</summary>
     public const int DefaultLoopFrames = 30;
@@ -278,6 +278,28 @@ public sealed class ArchivePlaybackController(
             IsPlaying = false;
             PlayingChanged?.Invoke(false);
         }
+    }
+
+    private bool _pollingSuspended;
+
+    /// <summary>
+    /// See <see cref="ITimedLayer"/>. The loop stages a texture per frame, up to ten times a
+    /// second, so it is the most wasteful clock in the app to leave running against a paused
+    /// renderer. <see cref="PauseLoop"/> keeps the built frames, so resuming is free.
+    /// </summary>
+    public void SuspendPolling()
+    {
+        // PauseLoop clears IsPlaying, so whether to come back playing has to be recorded here.
+        _pollingSuspended = IsPlaying;
+        if (IsPlaying) PauseLoop();
+    }
+
+    /// <inheritdoc />
+    public void ResumePolling()
+    {
+        if (!_pollingSuspended) return;
+        _pollingSuspended = false;
+        _ = PlayAsync();
     }
 
     /// <summary>Stop cycling and discard the frames — the selection they were built for is gone.</summary>

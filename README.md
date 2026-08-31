@@ -98,6 +98,20 @@ No account, no API key, no subscription. Everything it reads is public data.
   nears one of them. A storm that comes close but misses is listed and named, not alarmed
   about; one that is leaving is not listed at all.
 
+- **Runs in the background** — closing the window leaves OpenWSR watching from the
+  notification area rather than exiting, because a proximity alarm that stops when you tidy
+  your desktop is off when the weather arrives. Hidden, it keeps the two polls the alarm is
+  built on — storm tracks every two minutes, warnings every minute — and notifies exactly as
+  it would with the window open. Every other clock in the app stops, because they all draw
+  rather than watch: the Level II stream, the satellite (a 61 MB granule every four minutes),
+  the mosaics, lightning, placefiles and the archive loop. Measured over a five-minute soak
+  started into the tray: **0.9 % of one core, 179 MB, and no network traffic at all beyond
+  those two polls** — against 60 % of a core and up to 2 GB with a live volume on screen.
+  Hover the tray icon
+  for what is being watched or what is coming; right-click for Open, Settings and Exit.
+  Optionally starts with Windows, straight into the tray. Second launches wake the copy that
+  is already running instead of starting a duplicate that would alert you twice.
+
 **Map and overlays**
 
 - **Basemaps** — dark by default, because reflectivity is a bright saturated palette and

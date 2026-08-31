@@ -10,7 +10,7 @@ namespace OpenWSR.App;
 /// local storm reports. Refreshes every 5 minutes; layers rebuild from cache when a
 /// filter changes.
 /// </summary>
-public sealed class OutlookOverlayController : IDisposable
+public sealed class OutlookOverlayController : IDisposable, ITimedLayer
 {
     private readonly OutlookClient _client;
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMinutes(5) };
@@ -52,11 +52,35 @@ public sealed class OutlookOverlayController : IDisposable
         if (!_started)
         {
             _started = true;
+            if (_pollingSuspended) return;   // hidden: this starts when the window comes back
             _timer.Start();
             await RefreshAsync();
             return;
         }
         Rebuild();
+    }
+
+    private bool _pollingSuspended;
+
+    /// <summary>
+    /// See <see cref="ITimedLayer"/>. A latch, not a snapshot: it stays set until the window
+    /// comes back, so a layer switched *on* while hidden — which is what restoring the saved
+    /// toggles does on a tray start — takes its state without starting to fetch.
+    /// </summary>
+    public void SuspendPolling()
+    {
+        _pollingSuspended = true;
+        _timer.Stop();
+    }
+
+    /// <inheritdoc />
+    public void ResumePolling()
+    {
+        if (!_pollingSuspended) return;
+        _pollingSuspended = false;
+        if (!_started) return;
+        _timer.Start();
+        _ = RefreshAsync();   // what it holds is at least as old as the pause
     }
 
     private async Task RefreshAsync()

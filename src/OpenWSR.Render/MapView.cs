@@ -54,6 +54,24 @@ public sealed class MapView : IDisposable
     public double FramesPerSecond { get; private set; }
     public double LastSweepUploadMs { get; private set; }
 
+    private volatile bool _paused;
+
+    /// <summary>
+    /// Stop drawing without tearing the device down, for when the window is hidden.
+    ///
+    /// Not merely an optimisation. <c>Present(1)</c> is what paces this loop, and it only
+    /// waits for a vertical blank while there is something on screen to wait for: against an
+    /// occluded or hidden swap chain DXGI returns immediately, so a window sent to the tray
+    /// would leave the render thread spinning a core rendering frames nobody can see. Idling
+    /// here keeps the device, its textures and the sweep alive, so coming back is a flag
+    /// rather than a rebuild.
+    /// </summary>
+    public bool Paused
+    {
+        get => _paused;
+        set => _paused = value;
+    }
+
     private volatile float _radarOpacity = 0.85f;
     private volatile float _radarSmoothing;
 
@@ -671,6 +689,19 @@ public sealed class MapView : IDisposable
 
         while (_running)
         {
+            if (_paused)
+            {
+                // Nothing is on screen to draw for. Sleeping rather than presenting also
+                // keeps the camera from integrating inertia across the pause, which would
+                // otherwise fling the map on the frame after it comes back.
+                Thread.Sleep(200);
+                lastTicks = Stopwatch.GetTimestamp();
+                fpsWindowStart = lastTicks;
+                fpsFrames = 0;
+                FramesPerSecond = 0;
+                continue;
+            }
+
             if (_pendingWidth != device.Width || _pendingHeight != device.Height)
                 device.Resize(_pendingWidth, _pendingHeight);
 

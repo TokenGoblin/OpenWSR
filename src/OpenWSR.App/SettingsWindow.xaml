@@ -164,6 +164,22 @@
         <TextBlock Style="{StaticResource Hint}"
                    Text="A storm that comes inside a place's alert radius but misses by more than this still appears in the APPROACHING list, saying which side it passes — it just does not raise a notification. A storm already moving away raises nothing at all. Warnings and rotating cells always interrupt, whichever way they are going." />
 
+        <!-- Alerting is only worth anything while the process is running, so how OpenWSR
+             stays running belongs directly under the two radii that decide what it alerts
+             about. Set-once configuration, which is why it is here and not in the layers
+             panel. -->
+        <TextBlock Text="RUNNING IN THE BACKGROUND" Style="{StaticResource Head}" />
+        <CheckBox x:Name="CloseToTrayCheck" Content="Closing the window keeps watching, in the tray"
+                  Margin="0,2,0,0" />
+        <CheckBox x:Name="MinimiseToTrayCheck" Content="Minimising hides it to the tray as well"
+                  Margin="0,6,0,0" />
+        <CheckBox x:Name="StartInTrayCheck" Content="Start in the tray, without opening the window"
+                  Margin="0,6,0,0" />
+        <CheckBox x:Name="StartWithWindowsCheck" Content="Start OpenWSR when I sign in to Windows"
+                  Margin="0,6,0,0" />
+        <TextBlock Style="{StaticResource Hint}"
+                   Text="In the tray OpenWSR keeps checking storm tracks every two minutes and warnings every minute, and notifies you the same way it would with the window open. Everything else stops while it is hidden — the live radar stream, the satellite, the mosaics, lightning — because those draw the map rather than watch for storms, and they start again when you open the window. Right-click the tray icon to open it or to exit." />
+
         <TextBlock Text="COLOUR TABLES" Style="{StaticResource Head}" />
         <Button x:Name="PaletteButton" Content="Import a .pal file…" Click="Palette_Click"
                 HorizontalAlignment="Left" />

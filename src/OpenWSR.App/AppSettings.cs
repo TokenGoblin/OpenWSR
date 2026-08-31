@@ -178,6 +178,43 @@ public sealed class AppSettings
     /// <summary>The shortcuts card is shown once, on the first run, and never nags again.</summary>
     public bool WelcomeShown { get; set; }
 
+    // ---- running in the tray ----
+    //
+    // The alerting this app does is only worth anything while it is running, and a window is
+    // a poor place to keep a watchman: it takes a screen, a taskbar button and a decision to
+    // leave open. These three decide when OpenWSR stops being a window and becomes a tray
+    // icon that is still watching.
+
+    /// <summary>
+    /// Closing the window leaves OpenWSR watching in the tray rather than exiting.
+    ///
+    /// On by default, which is a deliberate choice about what the close button means for this
+    /// kind of app: a proximity alarm that quits when you tidy your desktop is a proximity
+    /// alarm that is off when the weather arrives. It is made safe by the two things that
+    /// always accompany it — a one-time notification saying where the app went and how to
+    /// quit it (see <see cref="TrayHintShown"/>), and Exit in the tray menu — and by this
+    /// switch, for anyone who wants the close button to mean close.
+    /// </summary>
+    public bool CloseToTray { get; set; } = true;
+
+    /// <summary>
+    /// Minimising hides to the tray too, taking the taskbar button with it. Off by default:
+    /// minimise has a well-understood meaning and quietly redefining it is worse than
+    /// offering it, whereas the close button is being redefined for a reason.
+    /// </summary>
+    public bool MinimiseToTray { get; set; }
+
+    /// <summary>Start straight into the tray, without showing the window.</summary>
+    public bool StartInTray { get; set; }
+
+    /// <summary>
+    /// Whether the "OpenWSR is still running" balloon has been shown. The first time the
+    /// window disappears into the tray is the only time it needs explaining; after that the
+    /// user knows where it went, and repeating it is the app talking about itself while
+    /// someone is trying to watch the weather.
+    /// </summary>
+    public bool TrayHintShown { get; set; }
+
     /// <summary>
     /// Whether the app has already asked Windows where this machine is.
     /// </summary>

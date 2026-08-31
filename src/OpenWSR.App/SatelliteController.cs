@@ -16,7 +16,7 @@ namespace OpenWSR.App;
 /// the real five-minute cadence. The tile layer stays as the fallback for when the bucket is
 /// unreachable, which is why <see cref="MapView.SatelliteEnabled"/> is still here.
 /// </summary>
-public sealed class SatelliteController : IDisposable
+public sealed class SatelliteController : IDisposable, ITimedLayer
 {
     /// <summary>
     /// Output raster edge. The CONUS sector is 2500 px across at 2 km; 2048 keeps most of
@@ -52,6 +52,7 @@ public sealed class SatelliteController : IDisposable
     {
         if (_enabled) return;
         _enabled = true;
+        if (_pollingSuspended) return;   // hidden: this starts when the window comes back
         _timer.Start();
         _ = RefreshAsync();
     }
@@ -63,6 +64,29 @@ public sealed class SatelliteController : IDisposable
         _generation++;                 // strand any fetch already in flight
         ValidUtc = null;
         _mapView.SetImageOverlay(MapView.OverlaySlot.Satellite, null);
+    }
+
+    private bool _pollingSuspended;
+
+    /// <summary>
+    /// See <see cref="ITimedLayer"/>. A latch, not a snapshot: it stays set until the window
+    /// comes back, so a layer switched *on* while hidden — which is what restoring the saved
+    /// toggles does on a tray start — takes its state without starting to fetch.
+    /// </summary>
+    public void SuspendPolling()
+    {
+        _pollingSuspended = true;
+        _timer.Stop();
+    }
+
+    /// <inheritdoc />
+    public void ResumePolling()
+    {
+        if (!_pollingSuspended) return;
+        _pollingSuspended = false;
+        if (!IsEnabled) return;
+        _timer.Start();
+        _ = RefreshAsync();   // what it holds is at least as old as the pause
     }
 
     public void SetOpacity(float opacity)

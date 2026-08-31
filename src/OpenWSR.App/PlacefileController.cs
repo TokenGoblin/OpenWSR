@@ -27,7 +27,7 @@ public sealed class LoadedPlacefile
 /// refreshes on the interval it declares, and items obey their own Threshold, so detail
 /// appears as you zoom in exactly as the author intended.
 /// </summary>
-public sealed class PlacefileController : IDisposable
+public sealed class PlacefileController : IDisposable, ITimedLayer
 {
     private static readonly ILogger Log = Serilog.Log.ForContext<PlacefileController>();
 
@@ -61,6 +61,24 @@ public sealed class PlacefileController : IDisposable
         _http.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
         _timer.Tick += async (_, _) => await TickAsync();
         _timer.Start();
+    }
+
+    private bool _pollingSuspended;
+
+    /// <summary>See <see cref="ITimedLayer"/>: stop the clock, keep the loaded files.</summary>
+    public void SuspendPolling()
+    {
+        _pollingSuspended = true;
+        _timer.Stop();
+    }
+
+    /// <inheritdoc />
+    public void ResumePolling()
+    {
+        if (!_pollingSuspended) return;
+        _pollingSuspended = false;
+        _timer.Start();
+        _ = TickAsync();   // a placefile refreshes on its own schedule; it is due by now
     }
 
     public async Task AddAsync(string source)

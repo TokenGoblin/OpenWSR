@@ -115,6 +115,20 @@ public static class InfoWindow
           + "your places is two separate notifications, at two distances and two arrival times, "
           + "because hearing about it at home should not use up the alert for the office.");
 
+        AddHeading(panel, "Leaving it watching");
+        AddParagraph(panel,
+            "None of the above happens while OpenWSR is not running, so closing the window puts "
+          + "it in the notification area rather than shutting it down. It keeps checking there — "
+          + "storm tracks every two minutes, warnings every minute — and notifies you exactly as "
+          + "it would with the window open. The live radar stream stops meanwhile — it is by "
+          + "far the expensive part and the alerting does not use it — and so does every other "
+          + "layer that refreshes itself, satellite and the mosaics included. A hidden OpenWSR "
+          + "does nothing but watch. Opening the window starts them all again.");
+        AddRows(panel,
+            ("The tray icon", "Hover it for what is being watched, or what is coming. Double-click to open the window."),
+            ("Right-click it", "Open, Settings, or Exit — and Exit is how you actually quit once the window is hidden."),
+            ("Settings", "RUNNING IN THE BACKGROUND has switches for what closing and minimising do, for starting straight into the tray, and for starting with Windows."));
+
         AddHeading(panel, "What the panel is telling you");
         AddRows(panel,
             ("APPROACHING", "Something is on course. The heading turns orange."),

@@ -14,7 +14,7 @@ namespace OpenWSR.App;
 /// that actually happened, at a place and a time. It is also the fastest read on whether a
 /// storm is intensifying, which is why every commercial viewer has it.
 /// </summary>
-public sealed class LightningController : IDisposable
+public sealed class LightningController : IDisposable, ITimedLayer
 {
     /// <summary>How far back to keep flashes. Ten minutes is the usual operational window.</summary>
     public const int WindowMinutes = 10;
@@ -43,6 +43,7 @@ public sealed class LightningController : IDisposable
     public void Enable()
     {
         IsEnabled = true;
+        if (_pollingSuspended) return;   // hidden: this starts when the window comes back
         _timer.Start();
         _ = RefreshAsync();
     }
@@ -54,6 +55,29 @@ public sealed class LightningController : IDisposable
         _flashes = [];
         Geometry = null;
         GeometryChanged?.Invoke();
+    }
+
+    private bool _pollingSuspended;
+
+    /// <summary>
+    /// See <see cref="ITimedLayer"/>. A latch, not a snapshot: it stays set until the window
+    /// comes back, so a layer switched *on* while hidden — which is what restoring the saved
+    /// toggles does on a tray start — takes its state without starting to fetch.
+    /// </summary>
+    public void SuspendPolling()
+    {
+        _pollingSuspended = true;
+        _timer.Stop();
+    }
+
+    /// <inheritdoc />
+    public void ResumePolling()
+    {
+        if (!_pollingSuspended) return;
+        _pollingSuspended = false;
+        if (!IsEnabled) return;
+        _timer.Start();
+        _ = RefreshAsync();   // what it holds is at least as old as the pause
     }
 
     /// <summary>Crosses are drawn at a fixed pixel size, so a zoom change means new geometry.</summary>

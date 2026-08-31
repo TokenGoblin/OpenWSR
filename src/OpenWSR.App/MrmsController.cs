@@ -51,7 +51,7 @@ public sealed record MrmsLayer(
 /// the same colour table as the radar display, and does not depend on a third party
 /// continuing to render tiles.
 /// </summary>
-public sealed class MrmsController : IDisposable
+public sealed class MrmsController : IDisposable, ITimedLayer
 {
     /// <summary>Output raster edge. Oversampling a 1400-pixel viewport keeps it crisp while panning.</summary>
     private const int RasterSize = 2048;
@@ -107,6 +107,7 @@ public sealed class MrmsController : IDisposable
     public void Enable()
     {
         IsEnabled = true;
+        if (_pollingSuspended) return;   // hidden: this starts when the window comes back
         _timer.Start();
         _ = RefreshAsync();
     }
@@ -118,6 +119,29 @@ public sealed class MrmsController : IDisposable
         _levels = null;
         _grid = null;
         _mapView.SetImageOverlay(_layer.Slot, null);
+    }
+
+    private bool _pollingSuspended;
+
+    /// <summary>
+    /// See <see cref="ITimedLayer"/>. A latch, not a snapshot: it stays set until the window
+    /// comes back, so a layer switched *on* while hidden — which is what restoring the saved
+    /// toggles does on a tray start — takes its state without starting to fetch.
+    /// </summary>
+    public void SuspendPolling()
+    {
+        _pollingSuspended = true;
+        _timer.Stop();
+    }
+
+    /// <inheritdoc />
+    public void ResumePolling()
+    {
+        if (!_pollingSuspended) return;
+        _pollingSuspended = false;
+        if (!IsEnabled) return;
+        _timer.Start();
+        _ = RefreshAsync();   // what it holds is at least as old as the pause
     }
 
     /// <summary>

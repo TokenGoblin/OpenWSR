@@ -12,7 +12,7 @@ namespace OpenWSR.App;
 /// into a Web Mercator raster once per frame at load time, then cycled like a loop.
 /// Answers "will it rain on me in two hours", which the archive and live feeds cannot.
 /// </summary>
-public sealed class FutureRadarController : IDisposable
+public sealed class FutureRadarController : IDisposable, ITimedLayer
 {
     /// <summary>Resolution of the resampled CONUS raster. 2048 is ~2.5 km per pixel.</summary>
     private const int RasterSize = 2048;
@@ -164,6 +164,28 @@ public sealed class FutureRadarController : IDisposable
     {
         IsPlaying = false;
         _timer.Stop();
+    }
+
+    private bool _pollingSuspended;
+
+    /// <summary>
+    /// See <see cref="ITimedLayer"/>. This clock animates rather than fetches, so nothing is
+    /// stale on the way back and there is nothing to refresh — but stepping frames into a
+    /// paused renderer is still work for nobody.
+    /// </summary>
+    public void SuspendPolling()
+    {
+        if (!_timer.IsEnabled) return;
+        _pollingSuspended = true;
+        _timer.Stop();
+    }
+
+    /// <inheritdoc />
+    public void ResumePolling()
+    {
+        if (!_pollingSuspended) return;
+        _pollingSuspended = false;
+        _timer.Start();
     }
 
     private void Advance() => Step(1);
