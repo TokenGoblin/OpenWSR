@@ -59,15 +59,34 @@ happens, because that is where the measurements go.
 ring, the coordinate readout, or a saved place's name in the site bar. Check the top bar and the
 map before committing an image; better, capture with no place saved.
 
-**Scan the staged diff before every commit**, not just the files you think you touched — and
-scan `git rev-list --all` before publishing anywhere new, because a value removed at HEAD is
-still served from the commit that introduced it.
+**This is enforced, not remembered.** `tools/check-privacy.sh` blocks a commit that adds any of
+it, and `tools/githooks/pre-commit` runs it. A clone enables the hook once:
 
-> **Known outstanding:** the audit on 2026-09-07 found the current tree still carries a real
-> home location in four `TASKS.md` lines, and four commits from 2026-08-27 still carry a real
-> name in `LICENSE` (corrected at HEAD, present in history). Cleaning history means a force push
-> and a support request to purge orphaned objects, so it is the repository owner's decision and
-> was left open deliberately. Do not quietly rewrite history to fix it.
+```
+git config core.hooksPath tools/githooks     # once per clone
+tools/check-privacy.sh --tree                # every tracked file
+tools/check-privacy.sh --history             # every commit, before publishing anywhere new
+```
+
+Two things about it are load-bearing. It **fails closed**: git grep answers 0 for a match and 1
+for none, so anything above that is the search itself failing, and the script exits 2 rather
+than reporting clean — an unreadable pattern file once aborted the whole scan and it still
+printed "clean", which is the single outcome a guard must never produce. And its patterns are
+**POSIX ERE**, because `git grep -E` rejects an inline `(?i)` or a `\b` outright and takes the
+scan down with it.
+
+It only sees added lines, so existing content does not block an unrelated commit — which is why
+`--tree` and `--history` exist and why a value removed at HEAD is still served from the commit
+that introduced it. `git commit --no-verify` bypasses it; say so when you do.
+
+> **Known outstanding — history only.** The working tree is clean: the audit on 2026-09-07
+> found a real home location in four `TASKS.md` lines and they have been replaced with the
+> Norman fixture point. What remains is in **history**, where it cannot be fixed by an ordinary
+> commit: four commits from 2026-08-27 carry a real name in `LICENSE` (corrected at HEAD), and
+> the old `TASKS.md` coordinates are served from the commits that introduced them. Cleaning that
+> needs a rewrite, a force push, and a support request to purge orphaned objects — and even then
+> existing clones and forks keep their copies. It is the repository owner's decision. **Do not
+> quietly rewrite history to fix it.**
 
 ## Git hosting
 
