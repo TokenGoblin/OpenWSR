@@ -21,6 +21,54 @@ disagree. The other reference docs:
 Anything worth keeping goes in `docs/` or `resources/`, not in a scratch directory.
 Scratch directories are session-scoped and get lost.
 
+## Never leak personal information
+
+This repository is public and is published **pseudonymously**. Nothing identifying the author,
+the machine, or where they live may enter it — not in code, comments, tests, fixtures, docs,
+commit messages, or screenshots. This rule outranks convenience every time.
+
+Never commit any of:
+
+- a real name or email address — in `LICENSE`, in prose, or as the git identity a commit is
+  authored with
+- a home or work location: its address, its coordinates, or the name of the town
+- the machine's Windows username, or any absolute path containing it
+- the development Forgejo hostname, its ports, or anything about reaching it
+- an API key of any kind, including one pasted in while testing
+
+**This file is in the repository too**, so it must describe what to look for without spelling
+any of it out. A checklist naming the values would itself be the leak. Derive them from the
+machine at check time: the username from the environment, the saved coordinates from
+`%LOCALAPPDATA%\OpenWSR\settings.json`, the git identity from `git config user.email`.
+
+Three routes it has actually taken, none of them through code:
+
+**Test fixtures default to wherever the developer is.** Writing a test against the point the
+app happened to be pointed at means writing your own address into a public repo. **Location
+fixtures use Norman, Oklahoma — 35.2226, -97.4395** — which is the ground the committed Level II
+golden volumes and the api.weather.gov fixtures already cover, so it is free and keeps the suite
+consistent. This has gone wrong once, in the station-network tests, and was caught by a
+pre-commit scan rather than by review.
+
+**Prose that quotes the running app is a transcript of a real screen.** A verification note
+reading "the bar showed …" copies whatever was on it, and the centre readout displays the saved
+place's coordinates by design. Paraphrase the shape, never the values. `TASKS.md` is where this
+happens, because that is where the measurements go.
+
+**Screenshots carry it invisibly.** Anything captured after the places feature can show the home
+ring, the coordinate readout, or a saved place's name in the site bar. Check the top bar and the
+map before committing an image; better, capture with no place saved.
+
+**Scan the staged diff before every commit**, not just the files you think you touched — and
+scan `git rev-list --all` before publishing anywhere new, because a value removed at HEAD is
+still served from the commit that introduced it.
+
+> **Known outstanding:** the audit on 2026-09-07 found the current tree still carries a real
+> home location in four `TASKS.md` lines, and four commits from 2026-08-27 still carry a real
+> name in `LICENSE` (corrected at HEAD, present in history). Cleaning history means a force push
+> and a support request to purge orphaned objects, so it is the repository owner's decision and
+> was left open deliberately. Do not quietly rewrite history to fix it.
+
 ## Git hosting
 
 Development happens against a **self-hosted Forgejo instance on a private network**. Its
