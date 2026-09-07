@@ -7,7 +7,11 @@ rendering via Vortice, and its own Web Mercator tile engine — so radar composi
 the same GPU scene as the basemap, drawn in its native polar geometry rather than as a
 pre-rendered image.
 
-No account, no API key, no subscription. Everything it reads is public data.
+No account and no subscription. Every radar, satellite, model and warning product it draws is
+public data fetched without credentials, and the app is complete without a key of any kind.
+Two optional keys — both yours, both off by default — buy extras that have no keyless
+equivalent: **MapTiler** for an alternative basemap, **Weather Underground** for reading nearby
+personal weather stations, and **Ambient Weather** for reading a station you own yourself.
 
 > **Not for life-safety decisions.** Use official National Weather Service products and
 > local warning systems for protective action.
@@ -71,6 +75,18 @@ No account, no API key, no subscription. Everything it reads is public data.
 - **Lightning** — GOES-19 Lightning Mapper flashes from the last ten minutes, fading with
   age. The one layer that is not inferred: reflectivity says what the beam scattered off,
   but a flash is a discharge that actually happened.
+- **Forecast page** — the week ahead for your saved place, in the NWS forecaster's own
+  words, alongside current conditions from a real instrument. The card names the station
+  and how far away it is, because "75° here" and "75° at an airport sixteen miles away"
+  are different claims. Nearby stations are listed nearest-first and the closest one that
+  is actually reporting is picked for you — and that list is not airports only, so an RWIS
+  or mesonet site up the road usually wins.
+
+- **Surface stations** — a dot per weather station on the map with what it is reading, so
+  the ground can be read against the sky: behind a squall line the useful number is often not
+  the reflectivity but the ten-degree temperature drop. Official stations need no key and are
+  drawn straight away; personal ones and your own join them when their keys are set, coloured
+  apart so a nearer reading is never mistaken for an official one.
 
 **Storm analysis**
 
@@ -256,7 +272,9 @@ Everything below is public and unauthenticated.
 | `noaa-hrrr-bdp-pds` (AWS) | HRRR model output for future radar |
 | `noaa-mrms-pds` (AWS) | MRMS national composite and MESH hail size, decoded natively from GRIB2 |
 | `noaa-goes19` (AWS) | GOES-East ABI cloud imagery and GLM lightning |
-| `api.weather.gov` | Active warnings |
+| `api.weather.gov` | Active warnings; the forecast and the surface observations behind the forecast page |
+| `api.weather.com` (needs your own key) | Optional: personal weather stations for the forecast page |
+| `rt.ambientweather.net` (needs your own keys) | Optional: your own Ambient Weather station, read directly |
 | `spc.noaa.gov` | Day 1 convective outlooks |
 | Iowa Environmental Mesonet | National radar mosaic and GOES tiles, SPC watches and discussions, storm reports |
 | US Census (cartographic boundary files) | State and county outlines, 1:500,000 |
@@ -282,7 +300,7 @@ src/OpenWSR.Render      D3D11 device, map/radar/overlay renderers, HwndHost
 src/OpenWSR.Ingest      S3 clients, caches, alerts, geocoding, site table
 src/OpenWSR.App         WPF shell
 src/OpenWSR.Harness     Console decoder harness and live soak
-tests/                  513 tests
+tests/                  767 tests
 docs/                   Format notes, verification, endpoints, parity, screenshots
 resources/              Cross-check scripts, sample placefiles, reference tables
 ```
@@ -340,6 +358,17 @@ real-time corpus spanning a volume boundary and its archive ground truth.
 - **Velocity dealiasing reaches 85–92 % of Py-ART's correction rate.** The gap is genuine
   judgement-call difference on marginal folds, and two plausible fixes were measured and
   rejected — see `docs/verification.md`.
+- **Station readings beyond the official network need your own keys.** By default, current
+  conditions come from the nearest *reporting* NWS station, which is often several miles
+  away — and the forecast page always says which station and how far. There is no keyless
+  way to do better, and that was probed rather than assumed: aprs.fi and Synoptic want
+  tokens, findu.com's TLS is broken, and NOAA's own keyless CWOP feed is a 33 MB nationwide
+  file published an hour in arrears. The table is in `docs/data-sources.md`. Two opt-in keys
+  close the gap. **Weather Underground** reads the personal stations near you — free keys go
+  only to people running a station themselves, and they expire. **Ambient Weather** reads a
+  station *you* own, which is the closest reading there is and the only one that can tell you
+  whether it is raining on your own roof. Every source is labelled on screen, so a nearer
+  reading is never mistaken for an official one.
 - **Placefile icon sheets** are fetched and drawn, but `Triangles` and `Image` blocks are
   skipped and reported.
 - **Ground clutter at coastal sites** is suppressed on rotation products but not on plain

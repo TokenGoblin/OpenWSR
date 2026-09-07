@@ -59,6 +59,36 @@
         <TextBlock Style="{StaticResource Hint}"
                    Text="Applies to the inspector readout, the measuring tool, storm details and alerts." />
 
+        <!-- The one place this app reads anything that is not public and unauthenticated, and
+             it is off unless somebody opts in. It sits here rather than on the forecast page
+             for the same reason home does: a key is pasted once and never touched again. -->
+        <TextBlock Text="PERSONAL WEATHER STATIONS" Style="{StaticResource Head}" />
+        <TextBlock Text="Weather Underground key (optional)" />
+        <TextBox x:Name="PwsKeyBox" Margin="0,4,0,0" Background="#22252B" Foreground="#C8CCD4"
+                 BorderBrush="#3A3F4A" Padding="4,3"
+                 AutomationProperties.Name="Weather Underground API key"
+                 ToolTip="Optional. With a key, the forecast page can read personal weather stations, which are usually far closer than the nearest NWS one." />
+        <TextBlock Style="{StaticResource Hint}"
+                   Text="Current conditions normally come from the nearest reporting National Weather Service station, which can be twenty miles away. A key lets the forecast page read personal weather stations instead — usually one within a mile or two. There is no keyless way to do this: every alternative was tested and none works. Weather Underground only issues free keys to people running a station of their own and uploading to it; if that is you, yours is at wunderground.com/member/api-keys. Note that these keys expire and have to be regenerated there — the forecast page will say so if it stops being accepted. The key is sent to api.weather.com and nowhere else, everything works without one, and clearing this box goes straight back to NWS stations. A personal station is somebody's garden — closer, but with no calibration behind it — so the forecast page always says which kind it is reading." />
+
+        <!-- Your own station is a different question from the one above, and gets its own
+             section rather than a third box under it: Weather Underground finds stations near
+             a point, Ambient reads the station you own. Ambient has no way to look up anyone
+             else's, so these two are not alternatives — someone may well want both. -->
+        <TextBlock Text="MY WEATHER STATION" Style="{StaticResource Head}" />
+        <TextBlock Text="Ambient Weather API key (optional)" />
+        <TextBox x:Name="AmbientApiKeyBox" Margin="0,4,0,0" Background="#22252B" Foreground="#C8CCD4"
+                 BorderBrush="#3A3F4A" Padding="4,3"
+                 AutomationProperties.Name="Ambient Weather API key"
+                 ToolTip="Grants access to the devices on your Ambient Weather account." />
+        <TextBlock Text="Ambient Weather application key" Margin="0,8,0,0" />
+        <TextBox x:Name="AmbientAppKeyBox" Margin="0,4,0,0" Background="#22252B" Foreground="#C8CCD4"
+                 BorderBrush="#3A3F4A" Padding="4,3"
+                 AutomationProperties.Name="Ambient Weather application key"
+                 ToolTip="Identifies the program to Ambient Weather. Created on the same page as the API key." />
+        <TextBlock Style="{StaticResource Hint}"
+                   Text="If you own an Ambient Weather station, this reads it directly — the closest reading there is, because it is your garden rather than an airport. Create both keys at ambientweather.net/account: the API key grants access to your devices, the application key identifies the program asking, and you need both. They are sent to ambientweather.net and nowhere else. Your own station is preferred over every other source when it is reporting, and the forecast page says so; it is also the only source that can tell you whether it is raining on your own roof." />
+
         <TextBlock Text="ARCHIVE LOOP" Style="{StaticResource Head}" />
         <ComboBox x:Name="LoopFramesCombo" AutomationProperties.Name="Loop length">
             <ComboBoxItem Content="12 volumes — about 1 hour" Tag="12" />

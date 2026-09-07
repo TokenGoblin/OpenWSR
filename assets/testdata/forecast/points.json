@@ -1,0 +1,112 @@
+{
+    "@context": [
+        "https://geojson.org/geojson-ld/geojson-context.jsonld",
+        {
+            "@version": "1.1",
+            "wx": "https://api.weather.gov/ontology#",
+            "s": "https://schema.org/",
+            "geo": "http://www.opengis.net/ont/geosparql#",
+            "unit": "http://codes.wmo.int/common/unit/",
+            "@vocab": "https://api.weather.gov/ontology#",
+            "geometry": {
+                "@id": "s:GeoCoordinates",
+                "@type": "geo:wktLiteral"
+            },
+            "city": "s:addressLocality",
+            "state": "s:addressRegion",
+            "distance": {
+                "@id": "s:Distance",
+                "@type": "s:QuantitativeValue"
+            },
+            "bearing": {
+                "@type": "s:QuantitativeValue"
+            },
+            "value": {
+                "@id": "s:value"
+            },
+            "unitCode": {
+                "@id": "s:unitCode",
+                "@type": "@id"
+            },
+            "forecastOffice": {
+                "@type": "@id"
+            },
+            "forecastGridData": {
+                "@type": "@id"
+            },
+            "publicZone": {
+                "@type": "@id"
+            },
+            "county": {
+                "@type": "@id"
+            }
+        }
+    ],
+    "id": "https://api.weather.gov/points/35.2226,-97.4395",
+    "type": "Feature",
+    "geometry": {
+        "type": "Point",
+        "coordinates": [
+            -97.4395,
+            35.2226
+        ]
+    },
+    "properties": {
+        "@id": "https://api.weather.gov/points/35.2226,-97.4395",
+        "@type": "wx:Point",
+        "cwa": "OUN",
+        "type": "land",
+        "forecastOffice": "https://api.weather.gov/offices/OUN",
+        "gridId": "OUN",
+        "gridX": 100,
+        "gridY": 83,
+        "forecast": "https://api.weather.gov/gridpoints/OUN/100,83/forecast",
+        "forecastHourly": "https://api.weather.gov/gridpoints/OUN/100,83/forecast/hourly",
+        "forecastGridData": "https://api.weather.gov/gridpoints/OUN/100,83",
+        "observationStations": "https://api.weather.gov/gridpoints/OUN/100,83/stations",
+        "relativeLocation": {
+            "type": "Feature",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    -97.3452994,
+                    35.240569
+                ]
+            },
+            "properties": {
+                "city": "Norman",
+                "state": "OK",
+                "distance": {
+                    "unitCode": "wmoUnit:m",
+                    "value": 0
+                },
+                "bearing": {
+                    "unitCode": "wmoUnit:degree_(angle)",
+                    "value": 0
+                }
+            }
+        },
+        "forecastZone": "https://api.weather.gov/zones/forecast/OKZ029",
+        "county": "https://api.weather.gov/zones/county/OKC027",
+        "fireWeatherZone": "https://api.weather.gov/zones/fire/OKZ029",
+        "timeZone": "America/Chicago",
+        "radarStation": "KTLX",
+        "astronomicalData": {
+            "sunrise": "2026-09-07T07:06:54-05:00",
+            "sunset": "2026-09-07T19:48:27-05:00",
+            "transit": "2026-09-07T13:27:40-05:00",
+            "civilTwilightBegin": "2026-09-07T06:41:18-05:00",
+            "civilTwilightEnd": "2026-09-07T20:14:02-05:00",
+            "nauticalTwilightBegin": "2026-09-07T06:11:03-05:00",
+            "nauticalTwilightEnd": "2026-09-07T20:44:18-05:00",
+            "astronomicalTwilightBegin": "2026-09-07T05:40:02-05:00",
+            "astronomicalTwilightEnd": "2026-09-07T21:15:18-05:00"
+        },
+        "nwr": {
+            "transmitter": "KJY94",
+            "sameCode": "040027",
+            "areaBroadcast": "https://api.weather.gov/radio/KJY94/broadcast",
+            "pointBroadcast": "https://api.weather.gov/points/35.2226,-97.4395/radio"
+        }
+    }
+}

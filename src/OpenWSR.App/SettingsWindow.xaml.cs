@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using OpenWSR.Ingest;
 
 namespace OpenWSR.App;
 
@@ -116,6 +117,9 @@ public partial class SettingsWindow : Window
             _ => 0,
         };
         KeyBox.Text = settings.MapTilerKey ?? "";
+        PwsKeyBox.Text = settings.WeatherUndergroundKey ?? "";
+        AmbientApiKeyBox.Text = settings.AmbientApiKey ?? "";
+        AmbientAppKeyBox.Text = settings.AmbientApplicationKey ?? "";
         ContactBox.Text = settings.Contact;
         UnitsCombo.SelectedIndex = settings.Units switch
         {
@@ -156,6 +160,14 @@ public partial class SettingsWindow : Window
 
     /// <summary>Set when the user asked to move the primary place by clicking the map.</summary>
     public bool WantsHomePicker { get; private set; }
+
+    /// <summary>
+    /// Set when any station key — Weather Underground or either Ambient one — was added,
+    /// changed or cleared. The forecast page caches the station list it was built with, so a
+    /// key that arrives while it is open would otherwise show nothing new until it was closed
+    /// and reopened, which reads exactly like a key that did not work.
+    /// </summary>
+    public bool StationKeysChanged { get; private set; }
 
     /// <summary>
     /// Set when login start could not be written — a policy-locked Run key, most likely.
@@ -289,6 +301,42 @@ public partial class SettingsWindow : Window
             _ => "osm",
         };
         _settings.MapTilerKey = string.IsNullOrWhiteSpace(KeyBox.Text) ? null : KeyBox.Text.Trim();
+
+        // Read on save like everything else here, which is what makes Cancel mean
+        // something. Clearing the box has to reach null rather than "": the empty
+        // string would be sent as a key and rejected, turning "I want NWS stations"
+        // into an authentication error.
+        var pwsKey = PwsKeyBox.Text.Trim();
+        var previousPwsKey = _settings.WeatherUndergroundKey;
+        _settings.WeatherUndergroundKey = pwsKey.Length == 0 ? null : pwsKey;
+
+        // A pinned personal station is meaningless without the key that reads it, and
+        // would otherwise sit in settings.json pointing at a network this app can no
+        // longer reach — so removing the key releases the pin back to "nearest
+        // reporting", which is what someone clearing the box is asking for.
+        if (_settings.WeatherUndergroundKey is null
+            && _settings.ObservationStationSource == StationSource.Personal)
+        {
+            _settings.ObservationStationId = null;
+            _settings.ObservationStationSource = StationSource.Nws;
+        }
+        var ambientApi = AmbientApiKeyBox.Text.Trim();
+        var ambientApp = AmbientAppKeyBox.Text.Trim();
+        var previousAmbient = (_settings.AmbientApiKey, _settings.AmbientApplicationKey);
+        _settings.AmbientApiKey = ambientApi.Length == 0 ? null : ambientApi;
+        _settings.AmbientApplicationKey = ambientApp.Length == 0 ? null : ambientApp;
+
+        // Same release as above, for the same reason: a pinned station on a network
+        // the app can no longer reach is a pin at nothing.
+        if (!_settings.HasAmbientKeys
+            && _settings.ObservationStationSource == StationSource.Own)
+        {
+            _settings.ObservationStationId = null;
+            _settings.ObservationStationSource = StationSource.Nws;
+        }
+
+        StationKeysChanged = previousPwsKey != _settings.WeatherUndergroundKey
+            || previousAmbient != (_settings.AmbientApiKey, _settings.AmbientApplicationKey);
         _settings.Contact = ContactBox.Text.Trim();
         _settings.Units = UnitsCombo.SelectedIndex switch
         {

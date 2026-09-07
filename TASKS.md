@@ -2361,3 +2361,359 @@ Ten findings against the change above. Four were substantive.
       window went away — took 285 MB to 78 MB
 
 **Gate:** [PASSED] 675/675 tests, 0 warnings.
+
+
+## A forecast page, and the hyperlocal question answered by measuring
+
+The app could say what the weather *is* doing, in echoes, and had no answer at all for what it
+will do — which is the question a weather app is opened for on the days when nothing is
+happening. The cloud button at the foot of the rail opens `ForecastWindow`.
+
+- [x] **`ForecastClient` — three requests, and only the first is cacheable.** `/points` is a
+      grid lookup that does not change and is cached for the session; the forecast and station
+      list come from the URLs it returns rather than paths built by hand. 14 half-day periods,
+      grouped into calendar days **in the forecast's own offset** — converting to the machine's
+      local time files an evening period on the west coast under the following day, and looking
+      at somebody else's weather is exactly what the search box is for
+- [x] **Current conditions are a station reading, and the page says whose.** The card names the
+      station and its distance, because "75° here" and "75° at an airport sixteen miles away"
+      are different claims. `gridpoints/.../stations` is deliberately not filtered to airports —
+      NWS carries RWIS and other mesonet sites in the same list, and one is frequently nearer.
+      Sorted by our own geodesy, and the client walks out to the sixth-nearest before giving
+      up, because `observations/latest` answering **404** is an ordinary state of the world
+      rather than a failure
+- [x] **Every observation field is null far more often than not**, and NWS sends the
+      measurement object anyway with `"value": null` and `qualityControl: "Z"` — so the
+      presence of the property proves nothing. A missing reading draws as an em dash rather
+      than as zero. The two committed observation fixtures were chosen for what they are
+      *missing*: KOUN reports a temperature and no icon, description, dew point or pressure
+- [x] **The icon URL is the only machine-readable condition in the response** —
+      `shortForecast` is a sentence written for a person — so the sky glyph is picked from its
+      token. A split period carries two conditions and a rain chance
+      (`night/tsra_sct,50/tsra_sct,30`) and the leading one describes the period
+- [x] **Temperatures are normalised to Celsius on the way in.** The API reports Fahrenheit from
+      every US office; storing the raw number with its unit would push that branch into every
+      caller. `Units.Temperature` and `Units.Pressure` render them, so the forecast obeys the
+      unit setting like everything else. Nautical follows Imperial: choosing knots for radar
+      ranges is not a request to read the outside temperature in Celsius
+- [x] **It forecasts for your place, not for the camera** — the same reason `Recenter` targets
+      `AppSettings.Primary`. After a hotspot jump the map is routinely a thousand miles from
+      where you live. With no place saved it falls back to the middle of the map and says so
+- [x] **Modeless, with its own ten-minute clock, closed by `HideToTray`.** A dialog would blank
+      the map to say it might rain on Thursday. It is neither an `ITimedLayer` nor hidden when
+      its owner is — an owned window whose owner is hidden stays on the desktop — so hiding
+      closes it outright, which is also what stops the timer
+
+**The hyperlocal question — Weather Underground and friends — was answered by measuring, and
+the answer is that there is no keyless path.** Every candidate probed live: WU returns
+`401 CDN-0004 Missing apiKey` and issues keys only to people who contribute a station; aprs.fi
+and Synoptic need tokens; findu.com's TLS handshake fails outright; IEM carries no CWOP network
+among its 600. MADIS *is* keyless and does carry CWOP — at **33 MB gzipped per hourly file,
+nationwide, published about an hour in arrears**, which is not current conditions by any
+reading. The shipped answer is the nearest *reporting* NWS station with its distance on screen.
+A user-supplied WU key would change the project's "public, unauthenticated data only" charter
+and the README claim with it, so it is a decision rather than an enhancement. The table is in
+`docs/data-sources.md`.
+
+Three things the screenshot caught that the code did not:
+
+- [x] The wind conditions mapped to a wind-blowing-face glyph, which at 46 px is an
+      unrecognisable blob. They draw their **sky** now — the wind speed is a stat six lines
+      below, so the symbol was saying it twice anyway — and the glyph font is named explicitly
+      rather than left to a fallback chain that picked a different weight per symbol
+- [x] A night-only day drew a bright em dash in the high slot and the one real temperature it
+      had in the dim one, which is backwards. The placeholder is disabled-grey now and an
+      only-temperature is drawn as the primary
+- [x] The detailed text was prefixed with its period name even on rows that have only one,
+      repeating the heading directly above it
+
+**Rail budget:** fourteen visible controls, **663 px against 1096** — added into the headroom
+the earlier removals bought rather than by taking something out. Verified by UI Automation:
+`BoundingRectangle` 0,619,61,55, on screen.
+
+**Gate:** [PASSED] 700/700 tests, 0 warnings. Verified against live weather at 125 % display
+scaling — 14 periods, 26 stations, and the nearest reporting one 16.4 mi away chosen
+automatically.
+
+
+## Review of the forecast page: ten findings, and the rail budget was the real one
+
+Two were caught by measuring rather than reading, and both had been asserted the other way.
+
+- [x] **The refresh clock could start on a closed window, and then never stop.** `Closed` runs
+      synchronously inside `Close()`, so closing during the first fetch stopped a timer that
+      had not started yet — and the awaited `LoadAsync` then resumed and started it. A
+      `DispatcherTimer` belongs to the dispatcher rather than to the window, so it would tick
+      every ten minutes for the life of the process, holding the window alive and fetching
+      through a disposed `HttpClient`. It is the exact clock `HideToTray` closes this window to
+      stop, so a hide during the opening fetch left a tray-hidden OpenWSR with a live one. A
+      `_closed` latch now guards the start and every other resume-after-await
+- [x] **An HTTP timeout was swallowed and the page sat on "Fetching the forecast…" for ever.**
+      `HttpClient.Timeout` surfaces as `TaskCanceledException`, which *is* an
+      `OperationCanceledException`, so it landed in the "a refresh overtaken by another one —
+      neither is news" branch. Thirty seconds later the status line still read "Fetching",
+      Refresh was re-enabled, and nothing said to try again. The catch is filtered on
+      `cts.IsCancellationRequested` now, so only our own cancellation is silent
+- [x] **The map-centre fallback reported "check your internet" for a question with no answer.**
+      `/points` answers **404** outside NWS coverage, and with no place saved the camera over
+      the Gulf, the Pacific, Canada or Mexico is an ordinary pan away. `OutsideForecastAreaException`
+      carries its own wording — the NWS covers the US and its territories — because a 404 from
+      the forecast or a station means something else entirely and only `/points` answers this
+      question
+- [x] **Three ways the feed could take the whole load down.** `TryGetProperty` answers **true**
+      for a JSON null and reading a property off one throws, so a station answering 200 with a
+      null body aborted the load that a 404 from the same station survives; `TryGetDateTimeOffset`
+      throws rather than returning false on a non-string, which the null-timestamp test found
+      after the first fix; and `coordinates` was dereferenced unguarded one line below a guard
+      that says this feed is not trusted, so one malformed feature in fifty-five cost the
+      forecast. All three skip the station now
+- [x] Also: the station re-read was uncancellable and drew into a closed window; superseded
+      `CancellationTokenSource`es were never disposed; and `_fillingStations` — a latch that
+      suppresses the station picker — was set without `try/finally`, so anything throwing
+      during a repopulate disabled the picker silently for the life of the window
+
+**The rail budget was over, and the number in the last entry was the wrong number.** "663 px
+against 1096" is the maximised case and it is the one that misleads. The budget that binds is
+`MinHeight`: at the window's own declared 900 × 600 the rail has about 570 px, so it has been
+over for some time, and Forecast is merely what pushed `Help` off — **measured at a bottom of
+904 px against a window bottom of 850**, exactly the silent failure the note in `CLAUDE.md`
+warns about.
+
+The fix is **declaration order**, not a removal. A `DockPanel` gives each child the space it
+asks for in declaration order, so the tools being declared first took everything and left the
+bottom group the remainder — backwards, since Settings and Help are the two you least want to
+lose. They are declared first now, and the tools follow in a `ScrollViewer` set to `Auto`.
+Re-measured at 900 × 600: every button on screen, Settings 724–779 and Help 779–834 against a
+window bottom of 850, with a scrollbar on the tools. At a comfortable height there is no
+scrollbar and the rail is pixel-identical to before. **Visible degradation instead of silent.**
+
+- [x] **`Units.Temperature` printed "-0 °C".** .NET's formatting is IEEE-correct, so −0.4
+      rounds to negative zero and `F0` renders it with the sign. Confirmed on .NET 10 rather
+      than assumed — Windows PowerShell runs .NET Framework and gives "0", which would have
+      dismissed it. Rounding is deliberately left to the same `F0`, so nothing else moves; only
+      the negative zero is normalised, and the comparison is against a *formatted* zero so a
+      culture with its own minus sign is handled
+
+**Gate:** [PASSED] 712/712 tests, 0 warnings.
+
+
+## Personal weather stations, behind the user's own key
+
+The forecast page reads the nearest *reporting* NWS station, which around here is sixteen miles
+away. The obvious wish is to read the one down the street, and the previous entry recorded that
+there is no keyless way to do it — so the way to do it is the user's own key.
+
+**This changes the charter, deliberately and narrowly**, and `MapTilerKey` is the precedent it
+copies: optional, null by default, pasted into Settings, sent to one host, and the app is
+complete without it. The README's opening claim was rewritten rather than quietly left standing
+— "no account, no API key, no subscription" is no longer the whole truth, and the honest version
+names both optional keys and says what each buys.
+
+- [x] **`PwsClient`** — `/v3/location/near?product=pws` for stations near a point,
+      `/v2/pws/observations/current` for one reading. Both endpoints and their auth behaviour
+      verified live: unkeyed is `401 CDN-0004 Missing apiKey`, a bad key is `401 CDN-0001
+      Invalid apiKey`, and the two get different advice because one is a bug here and the other
+      is a typo in Settings
+- [x] **The key is a credential and it rides in the query string**, so anything that formats
+      the URL formats the key — including an exception message, which on this page lands in an
+      error bar somebody may be screen-sharing. `StationAuthException` carries wording this code
+      owns, and the logs record status codes rather than URLs
+- [x] **Clearing the box has to reach `null`, not `""`.** An empty key is *sent* and rejected,
+      which turns "I want NWS stations back" into an authentication error. Clearing it also
+      releases a pinned personal station, which would otherwise sit in settings.json pointing at
+      a network the app can no longer reach
+- [x] **The choice stays visible.** Personal and NWS stations interleave in one distance-sorted
+      list, so each entry is labelled with its network and the observed-at line says "personal
+      station" beside the age. A personal station is nearer and has no calibration behind it;
+      closer must never quietly become official
+- [x] **Four shape traps, all handled.** The location service answers in **parallel arrays**
+      rather than an array of objects, and a ragged response is not an error. Readings are split
+      across two levels — temperature and pressure inside `metric`, wind direction and humidity
+      at the top. `heatIndex` and `windChill` **restate the air temperature when neither
+      applies** rather than being omitted, so every mild day would otherwise claim a "feels
+      like" that says nothing. And `qcStatus` is 1/0/−1 where 0 is *not checked* — which is not
+      the same as passed, though only an explicit failure keeps a station out of the auto-pick
+- [x] **A personal station has no observer and no ceilometer**, so it reports numbers and never
+      a sky or a visibility. The description falls back to the forecast's own wording for the
+      current period; visibility is left absent rather than zero
+- [x] A key pasted while the page is open reaches it immediately — `SettingsWindow.PwsKeyChanged`
+      calls `ForecastWindow.Reload()`. Without that the page keeps the station list it was built
+      with, and a key that is working looks exactly like one that is not
+
+**Honesty about the tests.** `PwsClientTests` is the only fixture set in this repository that is
+**not a live capture** — a Weather Underground key requires contributing a station and there was
+none to test with, so the response bodies are built from the published shapes. The endpoints,
+the auth codes and the failure behaviour were verified live; the field names were not. Both the
+test file and `docs/data-sources.md` say so at the top, and the first thing to do with a real
+key is re-capture them.
+
+**Gate:** [PASSED] 729/729 tests, 0 warnings. Settings section verified on screen at 125 %
+display scaling; the window still fits.
+
+### Checked who can actually get a key, and it changed three things
+
+The claim "keys are issued to people who contribute a station" was written from background
+knowledge rather than verified — only the 401 codes had been tested live. Checking it properly
+turned up two facts and one bug.
+
+- [x] **The URL was wrong.** Keys live at `wunderground.com/member/api-keys`;
+      `/member/devices` is where the *stations* are. The wrong address was in the rejection
+      message and the Settings hint, which is the worst place for it — it is read by somebody
+      who is already stuck
+- [x] **Keys expire and have to be regenerated.** So a rejected key is far more often lapsed
+      than mistyped, and the message led with "check it", which sends someone to re-read
+      characters they pasted correctly. It leads with regenerating now
+- [x] **An expired key blanked the entire forecast page.** `StationAuthException` was caught around
+      the whole load, so a stale credential took the NWS forecast and observation down with it
+      — and since these keys lapse on a schedule, that was not a rare path but the eventual
+      one. Caught around the merge instead: the forecast draws, with the key problem noted
+      above it and a line saying the forecast itself is unaffected
+- [x] The requirement is stated exactly as Weather Underground states it — free keys for
+      "registered and active" PWS users, meaning running a station **and** uploading to it. The
+      community workaround of registering a device you do not own is noted in
+      `docs/data-sources.md` as something not to design around: it uploads nothing, so the
+      station is not active, and WU has publicly discussed turning off PWS-associated keys
+
+**Gate:** [PASSED] 729/729 tests, 0 warnings.
+
+
+## Reading the station you own, through Ambient Weather
+
+Weather Underground answers "what stations are near this point". **Ambient has no geolocation
+endpoint at all** — it answers "what stations does this account own" — so this is a different
+feature rather than a second spelling of the last one, and someone may well want both. Reading
+your own station is the better reading anyway: it is the actual ground the forecast is for, and
+you know whether it sits in the sun or under a tree.
+
+- [x] **`AmbientClient`, one request for both jobs.** `/v1/devices` returns every device on the
+      account *with* its `lastData` embedded, so there is no separate observation call and
+      nothing to walk. `StationSource.Own` is a third source rather than a flavour of
+      `Personal`, because the claim is different in kind — and it wins the automatic pick
+      outright, though only while it is actually reporting: a station off its batteries for a
+      week must not outrank a working airport
+- [x] **Everything Ambient sends is imperial and there is no way to ask otherwise** — °F, mph,
+      inHg, inches — unlike Weather Underground's `units=m`. Every reading therefore crosses a
+      unit boundary on the way in, which is why `AmbientClientTests` tests the factors hardest:
+      a wrong one is a plausible-looking number rather than a crash
+- [x] **`baromrelin` beats `baromabsin`.** Relative is the sea-level-corrected figure a weather
+      report means; absolute is the raw sensor reading, and preferring it is wrong by however
+      high the station sits — hundreds of hectopascals at altitude. Also `dateutc` is
+      **milliseconds**, and `feelsLike` restates the air temperature outside its own range, the
+      same trap as Weather Underground's and handled the same way
+- [x] **Coordinates are optional and both shapes must work.** The published REST example omits
+      `info.coords` entirely while real accounts include it. A device that does not say where it
+      is, is at the place being forecast for — the only assumption available, and the right one
+      for a device you installed yourself
+- [x] **The application key is deliberately not baked into the build.** The repository is
+      public, so a key committed here would be a key published here, and every copy of the app
+      would then share one rate limit. Both keys are the user's and both come from the same
+      account page, so the setup is still one visit
+- [x] **Rainfall, the one reading no airport can give you.** `CurrentConditions` gained
+      `PrecipitationLastHourMm` and `Units.Rainfall`, and the row appears only when a source
+      fills it in — an em dash there would be a permanent empty cell on every setup that reads
+      an airport, which is most of them. **The NWS side is deliberately left null**: it publishes
+      `precipitationLastHour`, but every observation captured for the fixtures reports it null,
+      so its declared unit has never been seen, and a rainfall figure wrong by a factor of a
+      thousand is worse than an absent one
+
+**Each network is guarded separately, and it caught a bug while being written.** The first
+wiring ran both merges under one `try`, which would have let a stale Weather Underground key
+suppress the station in your own garden — the same shape as the expired-key bug fixed in the
+previous entry, one level down. `TryMergeAsync` runs one merge and keeps the forecast if that
+network's key is refused; two problems at once are both reported.
+
+`StationAuthException` replaced `PwsAuthException` now that two networks raise it, and
+Ambient's body names which key is at fault (`apiKey-missing` against `applicationKey-invalid`) —
+with two keys in play that is the difference between useful advice and "something is wrong with
+one of your keys".
+
+**Same honesty as last time:** `AmbientClientTests` is built from Ambient's published Device
+Data Specs, not a live capture, because the API needs an account that owns a station. The
+endpoint and its auth behaviour *were* verified live. Search results twice exposed what looked
+like other people's live keys; those were not used.
+
+**Gate:** [PASSED] 751/751 tests, 0 warnings. Settings section verified on screen at 125 %
+display scaling; the window still fits.
+
+### Review of the station work: six findings, three of them serious
+
+- [x] **The user's own station was the one entry in the picker that could not be selected.**
+      The routing ternary sent everything but `Personal` at the NWS client, so choosing your
+      Ambient station put a MAC address in `api.weather.gov/stations/{id}/observations/latest`,
+      which 404s — and the 404 handler then reported "has no current observation" about a
+      station that was reporting fine. Its reading was already in hand and never consulted. A
+      `switch` per source now, plus `AmbientClient.GetDeviceAsync`, because Ambient has no
+      per-device endpoint and a caller should not have to know that
+- [x] **`TryMergeAsync` caught only `StationAuthException`, and the gap was the interesting
+      half.** A refused key is the *rare* case; a timeout to api.weather.com, a 404 from the
+      nearby lookup, a body that does not parse are the ordinary ones — and every one of them
+      escaped to the general handler, which returns before the forecast is drawn. The result
+      was a blank page reading "Could not reach the National Weather Service" when the NWS had
+      been reached perfectly well and a third party was down. Exactly the failure the method's
+      own doc comment claimed to prevent. It catches everything but cancellation now, which
+      stays excluded or a superseded refresh carries on drawing
+- [x] **The 204 arm was unreachable and the case it was written for crashed the page.** 204 is
+      a success, so `EnsureSuccessStatusCode` never throws and no `HttpRequestException` ever
+      carries that status — while the empty body then threw `JsonException` out of
+      `JsonDocument.ParseAsync`, straight past the filter. Weather Underground answers 204 for
+      a station with nothing current, so this was the normal path for an offline station.
+      Handled in `GetJsonAsync` where it actually arrives, and a zero-length 200 with it
+- [x] **A dead pin suppressed every automatic pick, for ever.** A pinned personal station gone
+      from the nearby list matched neither branch of its own merge and then, being non-null,
+      stopped the Ambient merge preferring the station in your own garden — silently, across
+      launches, with nothing on screen to explain it. `_pin` is a per-load copy that each merge
+      releases when it cannot resolve it. Deliberately not cleared in settings: a station can
+      drop out of a list for a scan or two without being gone, so it self-heals
+- [x] Also: `coordinates` was guarded for array kind and length but not element kind, so
+      `[null, null]` threw past the guard and aborted the load — the one thing the guard and
+      its test exist to prevent; and a stray `<summary>` left over from inserting
+      `Units.Rainfall` gave that method two doc comments and `Whole` none, which becomes a
+      build break the day XML docs are switched on
+
+**Gate:** [PASSED] 756/756 tests, 0 warnings.
+
+
+## Surface stations on the map
+
+The station work so far answered "what is it doing at my house" one number at a time, on a page
+that is not the map. This puts the whole field on the map: a dot per station with its
+temperature. Behind a squall line the useful number is often not the reflectivity but the
+ten-degree temperature drop, and no radar product shows that.
+
+- [x] **`StationLayerController`, and it needs no key to be worth ticking.** The NWS station
+      list is public, so the layer works the moment it is switched on; Weather Underground
+      stations and the user's own Ambient station join it when their keys are set — which is
+      the point of the layer, since those are the ones actually near you. Coloured by who runs
+      the instrument, drawn official-first so the one you would act on lands on top
+- [x] **Each source is gathered independently.** Written that way from the start this time
+      rather than after a review: the NWS half needs no key at all, so a refused Weather
+      Underground key taking the whole layer down would break the part that cannot fail for
+      that reason. A source that does not answer is named in the caption instead of quietly
+      missing, because a key set but a network down otherwise looks exactly like no key
+- [x] **There is no bulk observation endpoint**, so every NWS station is its own request and
+      the count is capped at twelve — which caps the clutter as well: fifty temperatures over
+      one state is a wall, not a display. Stations are gathered around a point, so the layer
+      refetches once the camera has drifted past 60 km rather than on every camera event
+- [x] **An `ITimedLayer`**, because it draws rather than watches — five-minute clock, stopped
+      in the tray with the rest
+
+**Two things the screenshot caught that the tests could not.**
+
+- [x] **Labels were "73 °F" and sprawled.** The glyph atlas is a fixed-cell monospace grid with
+      wide tracking, so the unit letter nearly doubles the label and it starts colliding with
+      the place names baked into the basemap. `Units.TemperatureShort` gives "73°" and the panel
+      caption names the scale once — the app's rule is that `Units` decides how a quantity
+      reads, so the short form is a formatter rather than a hardcoded string at the call site
+- [x] **Every temperature carried a shard of a warning triangle.** Consolas has no `⚠`, so font
+      fallback returned it wider than the 14 px cell, centring spilled it into both neighbours,
+      and `°` sits immediately to its left in `Charset`. A pre-existing bug in shared code that
+      nothing had drawn `°` often enough to expose. `GlyphAtlas` shrinks an oversized glyph to
+      fit and clips to the cell regardless; `GlyphAtlasTests` asserts that **no** glyph reaches
+      its cell edge, so adding a character to the charset is checked against its new neighbours
+
+Verified against live observations rather than a mock: **11 stations reporting**, drawn with
+their temperatures. The panel toggle also confirmed that `LayerToggles`
+picks up a new checkbox with no wiring — the second run found it already on, because the panel
+had remembered it.
+
+**Gate:** [PASSED] 767/767 tests, 0 warnings.

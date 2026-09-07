@@ -50,6 +50,14 @@ public partial class MainWindow : Window
     private bool _inTray;
 
     /// <summary>
+    /// The forecast page while it is open. Held so a second click on the rail raises it
+    /// rather than opening another, and so hiding to the tray can close it — it owns a
+    /// ten-minute refresh clock, which is exactly the kind of thing that must not survive
+    /// into a hidden process.
+    /// </summary>
+    private ForecastWindow? _forecastWindow;
+
+    /// <summary>
     /// The state to come back to. Tracked as the window changes rather than read on the way
     /// out, because minimise-to-tray hides from the minimised state — by which point
     /// <see cref="Window.WindowState"/> reads Minimized and no longer remembers that the
@@ -99,6 +107,7 @@ public partial class MainWindow : Window
             yield return _mrms;
             yield return _hailField;
             yield return _lightning;
+            yield return _stations;
             yield return _placefiles;
             yield return _outlooks;
             yield return _future;
@@ -115,6 +124,7 @@ public partial class MainWindow : Window
         _settings.Save();
     }
     private readonly LightningController _lightning;
+    private readonly StationLayerController _stations;
     private readonly MrmsController _mrms;
     private readonly MrmsController _hailField;
     private readonly TrayNotifier _tray;
@@ -343,6 +353,14 @@ public partial class MainWindow : Window
         });
         _lightning.ErrorRaised += text => Dispatcher.BeginInvoke(() => ReportError(text));
 
+        _stations = new StationLayerController(_mapView, settings);
+        _stations.GeometryChanged += () => Dispatcher.BeginInvoke(ComposeOverlay);
+        _stations.StatusChanged += text => Dispatcher.BeginInvoke(() =>
+        {
+            if (StationsNoteText is not null) StationsNoteText.Text = text;
+        });
+        _stations.ErrorRaised += text => Dispatcher.BeginInvoke(() => ReportError(text));
+
         _satellite = new SatelliteController(_mapView);
         _satellite.StatusChanged += text => Dispatcher.BeginInvoke(() =>
         {
@@ -486,6 +504,7 @@ public partial class MainWindow : Window
             _boundaries.NotifyViewChanged();
             _imports.NotifyViewChanged();
             _lightning.NotifyViewChanged();
+            _stations.NotifyViewChanged();
             _mrms.NotifyViewChanged();
             _hailField.NotifyViewChanged();
             NotifyHomeViewChanged();
@@ -555,6 +574,7 @@ public partial class MainWindow : Window
             _tracks.Dispose();
             _boundaries.Dispose();
             _lightning.Dispose();
+            _stations.Dispose();
             _mrms.Dispose();
             _hailField.Dispose();
             _satellite?.Dispose();
@@ -638,6 +658,13 @@ public partial class MainWindow : Window
         // that layer ticked would pull the better part of a gigabyte an hour to paint a
         // surface nobody is looking at.
         foreach (var layer in TimedLayers) layer.SuspendPolling();
+
+        // The forecast page carries its own clock and its own window, so it is neither an
+        // ITimedLayer nor hidden by hiding this one — an owned window whose owner is hidden
+        // stays on the desktop, which would leave a weather page floating over nothing.
+        // Closing it stops the timer, and it is a page you open rather than a state to
+        // preserve, so there is nothing to restore on the way back.
+        _forecastWindow?.Close();
 
         // Nothing is watched at all unless the storm poll is pointed at a radar. With the
         // window up, whether the storm layer is on is the user's business; here it is the
@@ -1449,13 +1476,16 @@ public partial class MainWindow : Window
             labels.AddRange(placefileLabels);
         if (_drawing.Labels is { Count: > 0 } drawnLabels)
             labels.AddRange(drawnLabels);
+        if (_stations.Labels is { Count: > 0 } stationLabels)
+            labels.AddRange(stationLabels);
         _mapView.SetLabels(labels);
 
         OverlayGeometry?[] sources =
         [
             _boundaries.Geometry, _imports.Geometry,
             _outlooks.Geometry, _warnings.Geometry, _placefiles.Geometry,
-            _storms.Geometry, _lightning.Geometry, _homeGeometry, _measureGeometry,
+            _storms.Geometry, _lightning.Geometry, _stations.Geometry,
+            _homeGeometry, _measureGeometry,
             _drawing.Geometry,
         ];
         var active = sources.Where(s => s is not null).Cast<OverlayGeometry>().ToArray();
@@ -2211,6 +2241,21 @@ public partial class MainWindow : Window
         {
             _lightning.Disable();
             LightningNoteText.Text = "";
+        }
+    }
+
+    private void Stations_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_stations is null || FilterStations is null) return;
+        if (FilterStations.IsChecked == true)
+        {
+            StationsNoteText.Text = "Fetching…";
+            _stations.Enable();
+        }
+        else
+        {
+            _stations.Disable();
+            StationsNoteText.Text = "";
         }
     }
 
@@ -3172,6 +3217,17 @@ public partial class MainWindow : Window
 
         if (dialog.StartupWarning is { } startupWarning) ReportError(startupWarning);
 
+        // A key pasted with the forecast page open has to reach it now. It caches the station
+        // list it was built with, so waiting for the next ten-minute tick — or for the window
+        // to be reopened — makes a working key look like a rejected one.
+        if (dialog.StationKeysChanged)
+        {
+            _forecastWindow?.Reload();
+            // The map layer caches its readings too, and its clock is five minutes wide, so a
+            // key pasted with the layer on would otherwise look like a key that did nothing.
+            if (_stations.IsEnabled) _stations.Enable();
+        }
+
         if (dialog.WantsHomePicker)
         {
             _vm.Tool = MapTool.SetHome;
@@ -3193,6 +3249,43 @@ public partial class MainWindow : Window
     /// </summary>
     private void HelpButton_Click(object sender, RoutedEventArgs e) =>
         InfoWindow.ShowGuide(this);
+
+    /// <summary>
+    /// The forecast page. Modeless on purpose — the point of a weather app is to have the
+    /// week ahead beside the echoes rather than instead of them, and a dialog would blank
+    /// the map to say it might rain on Thursday. One window at a time: a second click brings
+    /// the open one forward instead of stacking another fetch behind it.
+    ///
+    /// It forecasts for the saved place, not for the map: "my area" is where you live, and
+    /// after a hotspot jump the camera is routinely a thousand miles from it. With no place
+    /// saved there is no such answer, so it falls back to the middle of the map and the
+    /// heading says which it did.
+    /// </summary>
+    private void ForecastButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_forecastWindow is { IsLoaded: true })
+        {
+            _forecastWindow.Activate();
+            return;
+        }
+
+        double lat, lon;
+        string label;
+        if (_settings.Primary is { } place)
+        {
+            (lat, lon, label) = (place.LatDeg, place.LonDeg, place.Name);
+        }
+        else
+        {
+            var cam = _mapView.Camera.Snapshot();
+            (lat, lon) = GeoMath.FromMercator(cam.CenterX, cam.CenterY);
+            label = "Map centre";
+        }
+
+        _forecastWindow = new ForecastWindow(_settings, lat, lon, label) { Owner = this };
+        _forecastWindow.Closed += (_, _) => _forecastWindow = null;
+        _forecastWindow.Show();
+    }
 
     private string Version =>
         GetType().Assembly.GetName().Version?.ToString(3) ?? "dev";

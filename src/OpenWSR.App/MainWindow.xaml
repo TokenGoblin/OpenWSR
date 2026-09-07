@@ -20,7 +20,28 @@
         <Border DockPanel.Dock="Left" Width="50" Background="{StaticResource Rail}"
                 BorderBrush="#FF272C35" BorderThickness="0,0,1,0">
             <DockPanel>
-                <StackPanel DockPanel.Dock="Top" Margin="0,6,0,0">
+                <!-- Settings and Help are declared FIRST, and that ordering is the fix rather
+                     than a tidy-up. A DockPanel gives each child the space it asks for in
+                     declaration order, so with the tools declared first they took all the
+                     height and the bottom-docked group was left with whatever remained —
+                     which at the window's own MinHeight of 600 was not enough, and Help sat
+                     entirely below the window edge with no scrollbar and nothing to say so.
+                     Measured: bottom 904 px against a window bottom of 850. Reserving the two
+                     controls you least want to lose first, and letting the tools scroll into
+                     what is left, makes the rail degrade visibly instead of silently. -->
+                <StackPanel DockPanel.Dock="Bottom" Margin="0,0,0,6">
+                    <Border Height="1" Background="#FF272C35" Margin="10,4" />
+                    <Button x:Name="SettingsButton" AutomationProperties.Name="Settings" Style="{StaticResource RailButton}" Content="⚙"
+                            Click="SettingsButton_Click" ToolTip="Settings" />
+                    <Button x:Name="HelpButton" AutomationProperties.Name="How this app works" Style="{StaticResource RailButton}" Content="?"
+                            Click="HelpButton_Click" ToolTip="How this app works — including how the storm alarm decides what to interrupt you for  (F1)" />
+                </StackPanel>
+
+                <!-- Auto, so at any ordinary window height there is no scrollbar and the rail
+                     looks exactly as it did. It appears only when the tools genuinely do not
+                     fit, which is the case that used to fail without saying anything. -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="0,6,0,0">
                     <ToggleButton x:Name="LayersToggle" AutomationProperties.Name="Show or hide the layers panel" Style="{StaticResource RailToggle}" IsChecked="True"
                                   Content="▤" Checked="LayersToggle_Changed" Unchecked="LayersToggle_Changed"
                                   ToolTip="Show or hide the layers panel" />
@@ -65,15 +86,17 @@
                     <Button x:Name="CaptureButton" AutomationProperties.Name="Save image or animated GIF" Style="{StaticResource RailButton}" Content="📷"
                             Click="CaptureButton_Click"
                             ToolTip="Save the map as a PNG, or the loop as an animated GIF" />
+                    <!-- The one thing in the rail that is not about the map. Everything above
+                         answers "what is the weather doing", in echoes, now; this answers
+                         "what will it do", in words, for the week — which is the question a
+                         weather app is opened for on the days when nothing is happening. It
+                         sits at the foot of the tools rather than with Settings and Help
+                         because it is a place you go, not a thing you configure or read once. -->
+                    <Button x:Name="ForecastButton" AutomationProperties.Name="Forecast and current conditions for your place" Style="{StaticResource RailButton}" Content="🌤"
+                            Click="ForecastButton_Click"
+                            ToolTip="Forecast — current conditions from the nearest reporting station, and the week ahead for your place" />
                 </StackPanel>
-                <StackPanel DockPanel.Dock="Bottom" Margin="0,0,0,6">
-                    <Border Height="1" Background="#FF272C35" Margin="10,4" />
-                    <Button x:Name="SettingsButton" AutomationProperties.Name="Settings" Style="{StaticResource RailButton}" Content="⚙"
-                            Click="SettingsButton_Click" ToolTip="Settings" />
-                    <Button x:Name="HelpButton" AutomationProperties.Name="How this app works" Style="{StaticResource RailButton}" Content="?"
-                            Click="HelpButton_Click" ToolTip="How this app works — including how the storm alarm decides what to interrupt you for  (F1)" />
-                </StackPanel>
-                <Grid />
+                </ScrollViewer>
             </DockPanel>
         </Border>
 
@@ -472,6 +495,19 @@
                                        TextWrapping="Wrap" Foreground="{StaticResource TextDim}"
                                        Margin="18,0,0,4" Text=""
                                        Visibility="{Binding IsChecked, ElementName=FilterLightning, Converter={StaticResource BoolToVis}}" />
+
+                            <!-- The note is bound to the toggle like every other layer's, so
+                                 it costs a row only while the layer is on. It carries the one
+                                 thing a count cannot: which networks answered, since a key set
+                                 but a network down otherwise looks exactly like no key. -->
+                            <CheckBox x:Name="FilterStations" AutomationProperties.Name="Surface stations"
+                                      Content="Surface stations"
+                                      ToolTip="What the ground is reading — a dot per weather station with its temperature. Official stations need no key; personal and your own appear when their keys are set in Settings."
+                                      Checked="Stations_Changed" Unchecked="Stations_Changed" />
+                            <TextBlock x:Name="StationsNoteText" FontSize="10.5" FontStyle="Italic"
+                                       TextWrapping="Wrap" Foreground="{StaticResource TextDim}"
+                                       Margin="18,0,0,4" Text=""
+                                       Visibility="{Binding IsChecked, ElementName=FilterStations, Converter={StaticResource BoolToVis}}" />
 
                             <Expander Header="ROTATION TRACKS" Style="{StaticResource PanelSection}" IsExpanded="False">
                                 <StackPanel>

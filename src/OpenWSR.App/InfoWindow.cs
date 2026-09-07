@@ -159,6 +159,26 @@ public static class InfoWindow
           + "whole point is seeing it underneath, so it coexists with everything. Clear ground is "
           + "left transparent so the map still reads through it.");
 
+        AddHeading(panel, "The forecast page");
+        AddParagraph(panel,
+            "The cloud button at the foot of the rail is the one screen here that is not radar. "
+          + "It answers the question the map cannot — what the weather will do — with the "
+          + "National Weather Service forecast for your place, in the forecaster's own words, a "
+          + "week ahead.");
+        AddRows(panel,
+            ("Current conditions", "A real reading from a real instrument, not model output. The card names the station and how far away it is, because that distance is the difference between “it is 75° outside” and “it is 75° at the airport”."),
+            ("Observed at", "Which station. The nearest one that is actually reporting is picked for you; the list is every station the NWS carries nearby, nearest first, and stations go quiet often enough that the nearest is frequently not the closest."),
+            ("Your place, not the map", "It forecasts for your saved place wherever the camera has wandered to. With no place saved it uses the middle of the map and says so."),
+            ("Personal stations", "Optional. The nearest official station can be twenty miles off; a neighbour's is usually one or two, but there is no free way to read them — Weather Underground issues keys only to people running a station and uploading to it. These keys also expire; when one lapses the page says so and carries on with the official stations."),
+            ("Your own station", "If you own an Ambient Weather station, its two keys read it directly — the closest reading there is, and the only source that can say whether it is raining on your own roof. It is preferred over everything else while it is reporting. Both keys are made at ambientweather.net/account."));
+        AddParagraph(panel,
+            "It refreshes itself every ten minutes while open, and closes when the app goes to "
+          + "the notification area — a forecast is something you look at, not something worth "
+          + "keeping a clock running for while nobody is there.");
+
+        AddParagraph(panel,
+            "Surface stations is the layer that reads the ground rather than the sky: a dot per weather station with its temperature. Official stations need no key and appear as soon as it is ticked; personal ones and your own join them once their keys are set in Settings, coloured apart. Behind a squall line the ten-degree temperature drop is often the more useful number, and no radar product shows it.");
+
         AddHeading(panel, "When");
         AddRows(panel,
             ("LIVE", "Streamed as the antenna turns — a tilt appears about five seconds after the radar sweeps it."),

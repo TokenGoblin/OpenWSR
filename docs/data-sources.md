@@ -1,8 +1,11 @@
 # Data sources and endpoints
 
-Every source OpenWSR reads is public and unauthenticated. This file records the exact
-endpoints, the specifications behind them, and — importantly — **which endpoints have
-already moved once**, so a future outage can be diagnosed as drift rather than a bug.
+Every source OpenWSR reads by default is public and unauthenticated, and the app is complete
+without a credential of any kind. Two are opt-in and take the user's own key — MapTiler for an
+alternative basemap, Weather Underground for personal weather stations — and both are marked as
+such below. This file records the exact endpoints, the specifications behind them, and —
+importantly — **which endpoints have already moved once**, so a future outage can be diagnosed
+as drift rather than a bug.
 
 ---
 
@@ -25,6 +28,10 @@ this inline. **Do not delete those files.**
 | Endpoint | Provides |
 |---|---|
 | `api.weather.gov/alerts/active` | Active warning polygons |
+| `api.weather.gov/points/{lat},{lon}` | Grid cell, forecast office, town name, station list URL |
+| `api.weather.gov/gridpoints/{office}/{x},{y}/forecast` | 14 half-day periods — seven days, day and night |
+| `api.weather.gov/gridpoints/{office}/{x},{y}/stations` | Surface stations near that cell, GeoJSON |
+| `api.weather.gov/stations/{id}/observations/latest` | Current conditions from one station |
 | `spc.noaa.gov/products/outlook/day1otlk_cat.nolyr.geojson` | Day 1 categorical outlook |
 
 `api.weather.gov` asks every client to identify itself via User-Agent and may block those
@@ -34,6 +41,141 @@ weather.gov.
 
 SPC GeoJSON carries a UTF-8 BOM that `System.Text.Json` rejects — see
 [formats.md](formats.md).
+
+### The forecast chain costs three requests, and the first one is cacheable
+
+`/points` is a grid lookup that does not change, so `ForecastClient` caches it for the
+session; the forecast and the station list come from the URLs it returns rather than from
+paths built by hand, because the office and grid indices are its answer to give. Temperatures
+arrive in **Fahrenheit** from every US office (`temperatureUnit`), and are normalised to
+Celsius on the way in so `Units` decides how they read.
+
+The **icon URL is the only machine-readable condition** in the whole response —
+`shortForecast` is a sentence written for a person. `.../icons/land/night/tsra_sct,50/tsra_sct,30`
+carries the day/night flag, the condition token, and a rain chance, and for a split period a
+second condition after it. The leading token is the one that describes the period.
+
+Observation fields are **null far more often than not**, and NWS sends the measurement object
+anyway with `"value": null` and `qualityControl: "Z"` — so the presence of the property proves
+nothing. A station reporting temperature and nothing else is ordinary. So is a station
+reporting nothing at all: `observations/latest` answers **404**, which is a state of the world
+here rather than a failure, so the client walks out to the sixth-nearest station before giving
+up.
+
+### Hyperlocal stations: no keyless path, so it is an opt-in key
+
+The obvious wish — read the home weather station down the street rather than the airport
+sixteen miles away — was investigated properly rather than assumed. Every candidate, and why
+it is not wired up:
+
+| Source | Result |
+|---|---|
+| **Weather Underground** `api.weather.com/v2/pws/...` | **401 `CDN-0004 Missing apiKey`.** There is no keyless tier. Free keys go only to "registered and active" PWS users — you must be running a station and uploading to it — so this is a per-user credential, not a public endpoint |
+| **aprs.fi** | API key, per user |
+| **Synoptic Data / MesoWest** | Free tier, but a registration token |
+| **findu.com** (CWOP mirror) | TLS handshake fails outright (curl exit 35) |
+| **IEM** | No CWOP/APRSWXNET network among its 600 — checked `api/1/networks.json` |
+| **MADIS** `LDAD/mesonet/netCDF/` | Genuinely keyless and *does* carry CWOP. Also **33 MB gzipped per hourly file**, nationwide, published about an hour in arrears. Fetching 33 MB an hour to read one station, an hour late, is not current conditions |
+
+What ships instead is the honest keyless answer: `gridpoints/.../stations` is **not** limited
+to airports — NWS carries RWIS and other mesonet feeds in the same list, and one of those is
+often much nearer than the ASOS. The page sorts them by our own geodesy, picks the nearest one
+that is actually reporting, and **names the station and its distance on screen**, so "75° at a
+station 16 miles southeast" is never mistaken for "75° in the garden".
+
+### The Weather Underground key path
+
+Since there is no keyless route, the user's own key is the route — the same contract as
+`MapTilerKey`, which set the precedent: optional, off by default, entered in Settings, and the
+app is complete without it. `AppSettings.WeatherUndergroundKey`, `PwsClient`.
+
+**Who can get one:** Weather Underground's own wording is that free keys are issued only to
+"registered and active" PWS users — running a station *and* uploading to it. Registering a
+device you do not own is a known community workaround; it uploads nothing, so the station is not
+active, and WU has publicly discussed turning off PWS-associated keys. Do not design around it.
+**Keys also expire and must be regenerated** at `wunderground.com/member/api-keys`, which is why
+the rejection message leads with that rather than with "check for a typo".
+
+| Endpoint | Provides |
+|---|---|
+| `api.weather.com/v3/location/near?geocode={lat},{lon}&product=pws` | Personal stations near a point |
+| `api.weather.com/v2/pws/observations/current?stationId={id}&units=m` | One station's current reading |
+
+Things worth knowing before touching it:
+
+- **The location service answers in parallel arrays**, one per field indexed together
+  (`stationId[]`, `latitude[]`, `qcStatus[]`, …), not an array of objects. A ragged response is
+  not an error — read by index against the shortest array that matters.
+- **Ask for `units=m`.** Celsius, km/h, hectopascals, millimetres — which is what the rest of
+  the app stores, so no conversion leaks into the parser. Pressure still needs ×100 to reach
+  the pascals api.weather.gov sends.
+- **The readings are split across two levels.** Temperature, dew point, wind speed and pressure
+  are inside `metric`; wind direction and humidity sit at the top level beside the station's
+  identity.
+- **`heatIndex` and `windChill` restate the air temperature when neither applies**, rather than
+  being omitted, so a naive read gives every mild day a "feels like" that says nothing.
+  `PwsClient` drops one within half a degree of the air temperature.
+- **`qcStatus` is 1 passed / 0 not checked / −1 failed.** Not-checked is not passed; only an
+  explicit failure keeps a station out of the automatic pick.
+- **Auth failures distinguish themselves in the body**: `CDN-0004 Missing apiKey` against
+  `CDN-0001 Invalid apiKey`, both under HTTP 401. One is a bug in this app; the other is almost
+  never a typo, because **these keys expire** — the ordinary case is a key that worked for
+  months and has lapsed. The message names regeneration first and points at
+  `wunderground.com/member/api-keys` (*not* `/member/devices`, which is where the stations are).
+- **A rejected key must cost the personal stations and nothing else.** The forecast page catches
+  `StationAuthException` around the merge rather than around the whole load, so an expired key
+  leaves the NWS forecast and observation on screen with a note above them. Caught any wider it
+  blanks the page, which is what it did before this was noticed.
+- **The key must never reach a log line or an exception message.** It rides in the query string,
+  so anything that formats the URL formats the credential — `PwsClient` throws `StationAuthException`
+  with wording it owns and logs status codes rather than URLs.
+- **A personal station has no observer and no ceilometer**, so it reports numbers and never a
+  sky or a visibility. The forecast page borrows the forecast's own wording for the description
+  and leaves visibility absent rather than zero.
+
+### Ambient Weather: your own station, and a different question entirely
+
+`PwsClient` asks "what stations are near this point". **Ambient has no geolocation endpoint at
+all** — its API answers "what stations does this account own" — so `AmbientClient` reads *your*
+station rather than a neighbour's. The two are not alternatives and someone may want both.
+
+| Endpoint | Provides |
+|---|---|
+| `rt.ambientweather.net/v1/devices?applicationKey={app}&apiKey={user}` | Every device on the account, each with its `lastData` |
+
+- **One request does both jobs.** `lastData` comes back inside the device, so there is no
+  separate observation call and nothing to walk.
+- **Two keys, both the user's**, both self-serve at `ambientweather.net/account`: the *API key*
+  grants access to that account's devices, the *application key* identifies the program and
+  carries its own rate budget. The application key is deliberately **not** baked into this
+  build — the repository is public, so a key committed here would be a key published here, and
+  every copy of the app would then share one rate limit.
+- **Everything is imperial and there is no way to ask otherwise** — `tempf`, `windspeedmph`,
+  `baromrelin` (inHg), `hourlyrainin` — unlike Weather Underground's `units=m`. Converted on the
+  way in, and `AmbientClientTests` tests the factors hardest, because a wrong one is a
+  plausible-looking number rather than a crash.
+- **`baromrelin` beats `baromabsin`.** Relative is the sea-level-corrected figure a weather
+  report means; absolute is the raw sensor reading, and preferring it is wrong by however high
+  the station sits — hundreds of hectopascals at altitude.
+- **`dateutc` is milliseconds**, not seconds.
+- **`feelsLike` restates the air temperature** whenever neither wind chill (< 50 °F) nor heat
+  index (> 68 °F) applies — the same trap as Weather Underground's, handled the same way.
+- **`info.coords.coords.lat/lon` is not always there.** The published REST example omits
+  coordinates entirely while real accounts include them, so both shapes must work; a device that
+  does not say where it is, is at the place being forecast for.
+- **Rate limits:** 1 request/second per API key, 3/second per application key. The page refreshes
+  every ten minutes, so this only matters if something else shares the key — hence 429 gets its
+  own message saying exactly that.
+- **Errors name the offending key** in the body: `{"error":"apiKey-missing"}`,
+  `{"error":"applicationKey-invalid"}`. With two keys in play that distinction is the difference
+  between useful advice and "something is wrong with one of your keys".
+
+**The response shapes above are from Weather Underground's and Ambient's published
+documentation, not from live captures** — a key requires contributing a station and there was none to test with. The
+endpoints and their auth behaviour *were* verified live — Ambient answers 401
+`{"error":"apiKey-missing"}` unkeyed and `{"error":"applicationKey-invalid"}` with junk keys.
+`PwsClientTests` and `AmbientClientTests` both say this at the top: re-capture the fixtures
+against a real account before trusting the field names.
 
 ## Iowa Environmental Mesonet
 

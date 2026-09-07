@@ -46,7 +46,7 @@ What is worth writing down is the behaviour, not the address:
 `.github/workflows/ci.yml` runs on every push and pull request, in two jobs that guard
 different things.
 
-**Windows is the real gate** and runs all 675 tests. It is the only platform that can: the
+**Windows is the real gate** and runs all 767 tests. It is the only platform that can: the
 shell is WPF and Direct3D. The shader tests work on a hosted runner because they compile HLSL
 through `d3dcompiler` rather than creating a device, so no GPU is needed.
 
@@ -67,7 +67,7 @@ Forgejo Actions is similar but distinct, and the workflow here is GitHub's forma
 
 ```
 dotnet build OpenWSR.slnx                    # NOTE: .slnx, not .sln
-dotnet test OpenWSR.slnx                     # 675 tests
+dotnet test OpenWSR.slnx                     # 767 tests
 dotnet run --project src/OpenWSR.App
 dotnet publish src/OpenWSR.App -c Release    # single-file self-contained exe
 ```
@@ -158,11 +158,135 @@ set-once actions (`Set home`, palette import) belong in Settings, reference mate
 (`Link panes`) should be **collapsed** rather than merely disabled — a greyed button still
 costs a slot.
 
+Those removals bought room at a maximised window — fourteen controls need **663 px against
+1096** — and that is the number that misleads. **The budget that binds is `MinHeight`, not the
+screen.** At the window's own declared minimum of 900 × 600 the rail has about 570 px, so it
+has been over budget for some time; adding Forecast is merely what pushed `Help` over the edge,
+measured at a bottom of 904 px against a window bottom of 850.
+
+The fix was **declaration order**, not a removal. A `DockPanel` gives each child the space it
+asks for in the order it is declared, so with the tools declared first they took everything and
+the bottom-docked group got the remainder — which is precisely backwards, because Settings and
+Help are the two you least want to lose. They are declared **first** now and the tools follow
+in a `ScrollViewer` with `Auto` visibility, so the rail degrades **visibly** instead of
+silently: no scrollbar at any ordinary height, a scrollbar and an intact bottom group at the
+minimum. Verify by driving the window to 900 × 600 and reading every rail button's
+`BoundingRectangle` — `resources/measurements` has no harness for this, but the check is four
+lines of UI Automation and guessing at it does not work.
+
 The right column carries the last two, and they behave differently on purpose. The layers
 toggle governs **only** the lower half — tidying the layers away must not take a tornado
 warning off the screen with it — and `APPROACHING` collapses on its own whenever nothing is
 threatening, so the column is unchanged from before on a quiet day. `RightColumn` disappears
 only when both halves are hidden.
+
+**The forecast page is the one screen that is not the map, and it is a station reading rather
+than a model.** `ForecastWindow` answers the question the radar cannot — what the weather will
+*do* — from api.weather.gov, keyless, the same host and User-Agent rule as the warnings poll.
+Three things about it are load-bearing. It forecasts for **`AppSettings.Primary`, not the
+camera**, for the same reason `Recenter` does: after a hotspot jump the map is routinely a
+thousand miles from where you live, and "my area" means where you live. Current conditions are
+a **station** measurement and the card names the station and its distance, because "75° here"
+and "75° at an airport sixteen miles away" are different claims and only one of them is true.
+And it is **modeless with its own ten-minute clock**, so `HideToTray` closes it — it is neither
+an `ITimedLayer` nor hidden when its owner is, and an owned window whose owner is hidden stays
+on the desktop.
+
+**Hyperlocal home-station networks have no keyless path — do not re-derive this.** Weather
+Underground answers `401 Missing apiKey` and issues keys only to people who contribute a
+station; aprs.fi and Synoptic need tokens; findu.com's TLS is broken; IEM carries no CWOP
+network. MADIS *is* keyless and does carry CWOP, at **33 MB gzipped per hourly file,
+nationwide, an hour in arrears** — which is not current conditions. `docs/data-sources.md` has
+the table. Without a key the answer is still decent, because `gridpoints/.../stations` is not
+airports-only: NWS carries RWIS and mesonet sites in the same list, so the nearest reporting
+station is often much closer than the ASOS.
+
+**A WU key needs a station of your own, and it expires.** Free keys go only to "registered and
+active" PWS users — running one *and* uploading — so this is not a credential most people can
+get, and the app has to be complete without it. Because they lapse, a rejected key is far more
+often expired than mistyped: the message leads with regenerating at
+`wunderground.com/member/api-keys` (*not* `/member/devices`). And **a bad key must cost the
+personal stations and nothing else** — `StationAuthException` is caught around the merge, not around
+the load, or an expired key blanks the whole forecast page, which is what it did until it was
+caught.
+
+**So personal stations are an opt-in key, and `MapTilerKey` is the precedent to copy.**
+`AppSettings.WeatherUndergroundKey` + `PwsClient`: optional, null by default, pasted into
+Settings, sent to `api.weather.com` and nowhere else, and the app is complete without it. Three
+rules hold it together. **The key is a credential and rides in the query string**, so anything
+that formats the URL formats the key — `PwsClient` owns its own exception type and logs status
+codes rather than URLs, because an exception message reaches the forecast page's error bar.
+**Clearing the box must reach `null`, not `""`** — an empty key is *sent* and rejected, turning
+"go back to NWS" into an auth error — and it also releases a pinned personal station, which
+would otherwise point at a network the app can no longer reach. And **the choice stays visible**:
+personal and NWS stations interleave in one distance-sorted list, so each is labelled with its
+network and the card says which kind it is reading. Closer must never quietly become official.
+
+**Ambient Weather is the third station source and answers a different question.** Weather
+Underground finds stations *near a point*; Ambient has **no geolocation endpoint at all** and
+answers *what this account owns* — so `AmbientClient` reads the user's own station, and
+`StationSource.Own` always wins the automatic pick while it is reporting, on the grounds that it
+is the actual ground the forecast is for rather than merely the nearest. One request does both
+jobs: `/v1/devices` embeds `lastData`. Two keys, both the user's, both self-serve from one
+account page — and the application key is deliberately **not** baked into the build, because a
+public repository would publish it and every copy would share one rate limit. Everything Ambient
+sends is **imperial with no way to ask otherwise**, so every reading crosses a unit boundary on
+the way in; `baromrelin` (sea-level corrected) beats `baromabsin` (raw), and `dateutc` is
+milliseconds. `feelsLike` restates the air temperature outside its own range, the same trap as
+Weather Underground's.
+
+**Each network is guarded separately, and `TryMergeAsync` catches everything except
+cancellation.** A station network failing must cost its own network and nothing else — not the
+forecast (an expired key once blanked the whole page), and not the *other* network, since a
+stale Weather Underground key has nothing to do with the station in your garden. Catching only
+`StationAuthException` was too narrow, and the gap was the interesting half: a refused key is the
+*rare* case, while a timeout, a 404 from the nearby lookup, or a body that does not parse are the
+ordinary ones — and each of those escaped to the general handler, producing a blank page blaming
+the National Weather Service for a third party's outage after the forecast had already arrived.
+Cancellation is excluded deliberately, or a superseded refresh carries on drawing.
+
+**Every station source needs its own read, including the picker.** Routing anything but
+`Personal` at the NWS client sent an Ambient MAC address to `api.weather.gov`, so the user's own
+station — the one that always wins the automatic pick — was the single entry in the list that
+could not be selected. `AmbientClient.GetDeviceAsync` exists for that: Ambient has no per-device
+current endpoint, so reading one station means re-reading the account and picking it out, and a
+caller should not have to know that.
+
+**The station layer draws all three sources and needs no key to be useful.** `StationLayerController`
+puts a dot per surface station on the map with its temperature, coloured by who runs it. The NWS
+list is public, so it works the moment it is ticked; Weather Underground and the user's own
+station join it when their keys are set, which is the point — those are the ones actually near
+you. Three things shape it. **There is no bulk observation endpoint**, so each NWS station is a
+separate request and the count is capped at twelve — which caps the clutter too, since fifty
+temperatures over one state is a wall rather than a display. **Stations are gathered around a
+point**, so the layer refetches when the camera has drifted past 60 km, rather than on every
+camera event or never. And it is an `ITimedLayer`: it draws rather than watches, so it stops in
+the tray like the rest.
+
+**Map labels use `Units.TemperatureShort` — "73°", not "73 °F".** The glyph atlas is a
+fixed-cell monospace grid with wide tracking, so the unit letter nearly doubles the label and it
+starts colliding with the place names baked into the basemap. The scale is named once, in the
+panel caption, rather than on every marker.
+
+**A glyph the atlas font does not carry overflows its cell and lands on its neighbour.** Consolas
+has no `⚠`, so font fallback returned it wider than the 14 px cell, centring spilled it both
+ways, and the degree sign — immediately to its left in `Charset` — put a shard of a warning
+triangle on every temperature the station layer drew. `GlyphAtlas` now shrinks an oversized glyph
+to fit and clips to the cell regardless; `GlyphAtlasTests` asserts no glyph reaches its cell edge.
+Adding a character to `Charset` is adding a neighbour to two existing ones — check that test.
+
+**An unresolvable pin is released for the load, not deleted from settings.** A pinned station
+that has dropped out of its network's list used to match neither branch of its own merge and
+then, being non-null, suppress every *other* source's automatic pick — silently, permanently,
+across launches. `ForecastWindow._pin` is the per-load copy each merge nulls when it cannot find
+it. Not cleared in settings, because a station can drop out of a nearby list for a scan or two
+without being gone, so the pin self-heals if it comes back.
+
+**The PWS and Ambient response shapes are from documentation, not live captures.** A key needs a
+contributed station and there was none to test with; the endpoints and their auth behaviour were
+verified live, the bodies were not — the same for Ambient, which needs an account that owns a
+station. `PwsClientTests` and `AmbientClientTests` carry that warning at the top; re-capture
+against a real account before trusting the field names.
 
 **In-app explanation lives in `InfoWindow`, and `?` opens the guide rather than the shortcut
 table.** Someone presses `?` because they do not know how the thing works, and the first

@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using OpenWSR.Ingest;
 
 namespace OpenWSR.App;
 
@@ -164,6 +165,64 @@ public sealed class AppSettings
 
     /// <summary>Display units for distance, speed and height.</summary>
     public UnitSystem Units { get; set; } = UnitSystem.Imperial;
+
+    /// <summary>
+    /// The surface station the forecast page reads current conditions from, when the user has
+    /// overruled the automatic choice. Null means "the nearest one that is reporting", which
+    /// is the right answer almost always and is re-evaluated on every open — a pinned station
+    /// keeps showing the same site after it goes offline, and that is deliberate, because a
+    /// picker that silently substitutes another station reads as a broken picker.
+    ///
+    /// It is persisted here rather than on the place: the choice is about which instrument
+    /// you trust, and someone who prefers the mesonet site up the road prefers it for the same
+    /// reason wherever the map happens to be pointed. A station too far from the place being
+    /// forecast simply will not appear in the list, so a stale one falls back on its own.
+    /// </summary>
+    public string? ObservationStationId { get; set; }
+
+    /// <summary>
+    /// Which network <see cref="ObservationStationId"/> names. Stored rather than inferred
+    /// from the shape of the id: NWS and Weather Underground both hand out four-letter
+    /// callsigns beginning with K, so an id alone cannot say which list to look in.
+    /// </summary>
+    public StationSource ObservationStationSource { get; set; } = StationSource.Nws;
+
+    /// <summary>
+    /// The user's own Weather Underground API key, or null — the one place this app reads
+    /// anything that is not public and unauthenticated, and it is off unless someone opts in.
+    ///
+    /// It exists because there is no keyless way to read a neighbour's weather station: every
+    /// alternative was probed and the table of dead ends is in <c>docs/data-sources.md</c>.
+    /// Weather Underground issues these keys to people who contribute a station, so anyone
+    /// holding one already publishes to that network. The key is sent to
+    /// <c>api.weather.com</c> and nowhere else, everything works without it, and clearing the
+    /// box returns the app to NWS stations only — the same contract as
+    /// <see cref="MapTilerKey"/>.
+    /// </summary>
+    public string? WeatherUndergroundKey { get; set; }
+
+    /// <summary>
+    /// The user's Ambient Weather application key, or null. Identifies the program to the
+    /// network and carries its own rate budget.
+    ///
+    /// It is the user's rather than this project's on purpose: the repository is public, so a
+    /// key committed here would be a key published here, and it would then be shared by every
+    /// copy of the app against one rate limit. Both keys are created on the same account page,
+    /// which keeps the setup to one visit.
+    /// </summary>
+    public string? AmbientApplicationKey { get; set; }
+
+    /// <summary>
+    /// The user's Ambient Weather API key, or null — the one that grants access to *their*
+    /// devices. Ambient has no way to look up somebody else's station, which is the difference
+    /// between this and <see cref="WeatherUndergroundKey"/>: that one finds stations near a
+    /// point, this one reads the station you own.
+    /// </summary>
+    public string? AmbientApiKey { get; set; }
+
+    /// <summary>Both Ambient keys are present; neither is any use without the other.</summary>
+    public bool HasAmbientKeys =>
+        !string.IsNullOrWhiteSpace(AmbientApplicationKey) && !string.IsNullOrWhiteSpace(AmbientApiKey);
 
     /// <summary>Placefile sources (URLs or local paths) to reload at startup.</summary>
     public List<string> Placefiles { get; set; } = [];
