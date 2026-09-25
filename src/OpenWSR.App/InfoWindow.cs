@@ -129,6 +129,21 @@ public static class InfoWindow
             ("Right-click it", "Open, Settings, or Exit — and Exit is how you actually quit once the window is hidden."),
             ("Settings", "RUNNING IN THE BACKGROUND has switches for what closing and minimising do, for starting straight into the tray, and for starting with Windows."));
 
+        AddHeading(panel, "Watching from another screen");
+        AddParagraph(panel,
+            "OpenWSR can serve a page to the other devices on your network — a phone, a wall "
+          + "tablet, a Home Assistant dashboard — showing the radar, the warnings, the storm "
+          + "cells and the same APPROACHING list as this window. It is off until you switch it "
+          + "on under DASHBOARD ON YOUR NETWORK in Settings, which also lists the addresses to "
+          + "open. It keeps working while OpenWSR is in the tray, because it only shows what "
+          + "the two watching polls have already found. Anyone on your network can open it, "
+          + "with no password, and it shows your saved places.");
+        AddRows(panel,
+            ("Home Assistant", "Add a Webpage card with the address from Settings. Home Assistant opened over https cannot show an http page inside it — open it over http on your network."),
+            ("One part only", "Add ?view=map, ?view=threats or ?view=storms to the address, and &theme=light for a light page."),
+            ("A red bar on the page", "OpenWSR has stopped answering, or the warnings have not refreshed for five minutes. What is shown may be out of date."),
+            ("The radar on the page", "Iowa State's national mosaic, refreshed about every five minutes — not this window's own radar."));
+
         AddHeading(panel, "What the panel is telling you");
         AddRows(panel,
             ("APPROACHING", "Something is on course. The heading turns orange."),

@@ -113,11 +113,11 @@ What is worth writing down is the behaviour, not the address:
 `.github/workflows/ci.yml` runs on every push and pull request, in two jobs that guard
 different things.
 
-**Windows is the real gate** and runs all 767 tests. It is the only platform that can: the
+**Windows is the real gate** and runs all 795 tests. It is the only platform that can: the
 shell is WPF and Direct3D. The shader tests work on a hosted runner because they compile HLSL
 through `d3dcompiler` rather than creating a device, so no GPU is needed.
 
-**Linux builds the eight `net10.0` projects and runs their 406 tests.** That job exists to
+**Linux builds the nine `net10.0` projects and runs their 415 tests.** That job exists to
 guard a property, not a platform: the decoders, geodesy and format readers are meant to stay
 free of Windows, which `PurityTests` asserts in-process but only a build without Windows to
 fall back on actually proves. `OpenWSR.App` and `OpenWSR.Render` are deliberately absent —
@@ -134,7 +134,7 @@ Forgejo Actions is similar but distinct, and the workflow here is GitHub's forma
 
 ```
 dotnet build OpenWSR.slnx                    # NOTE: .slnx, not .sln
-dotnet test OpenWSR.slnx                     # 767 tests
+dotnet test OpenWSR.slnx                     # 795 tests
 dotnet run --project src/OpenWSR.App
 dotnet publish src/OpenWSR.App -c Release    # single-file self-contained exe
 ```
@@ -408,6 +408,25 @@ the next genuine close unexplained. `SessionEnding` sets `_exiting`.
 off from Task Manager without this app being told, so a saved copy of the answer would be a
 second spelling of the same fact — the same reason `MigrateLegacyHome` nulls the fields it
 folds in. `StartupRegistration.IsEnabled` asks the Run key every time.
+
+**The LAN dashboard is on the watching side of the tray line, and must stay there.**
+`OpenWSR.Dashboard` is a Kestrel server (plain `net10.0`, so the Linux job tests it) serving one
+embedded page plus `/api/state`; `DashboardPublisher` republishes on the three events the watch
+already raises — `StormsUpdated`, `AlertsUpdated`, `ThreatsChanged` — and adds **no clock and no
+fetch** of its own, which is why it may keep running while hidden. Four things are load-bearing.
+**Kestrel, not `HttpListener`**: http.sys needs a URL ACL or elevation to listen beyond
+localhost, and a portable exe can arrange neither. **Request threads read one immutable
+`DashboardSnapshot`**, serialised once on publish with an ETag, and never touch a controller —
+the controllers belong to the UI thread. **The radar is the browser's job**: the page loads the
+IEM mosaic itself, because in the tray the renderer is paused and `CaptureFrame` times out, and
+reviving it would undo the tray soak numbers. Anything that makes the host render for the page
+must run only while a client is actually polling. And **stale must never look quiet**: the
+snapshot carries the warnings poll's own success time (`WarningsController.LastRefreshUtc`, not
+the time of publishing), and the page judges age against the server's `Date` header so a
+drifted tablet clock cannot hide it. It is off by default and open on the LAN with no token —
+the user's choice, modelled on what a Home Assistant webpage card embeds — and it shows the
+saved places, so `AppSettings.Contact` and anything else not needed to draw must stay out of the
+snapshot. An https Home Assistant cannot frame it (mixed content); that is documented, not fixed.
 
 `MainViewModel` holds the state the layout is built from — mode, product, tilt, armed map
 tool. Keep it there rather than in control properties, or moving a control between

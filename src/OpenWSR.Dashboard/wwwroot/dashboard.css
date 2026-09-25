@@ -1,0 +1,119 @@
+/* Dark is the default for the same reason it is in the app: the reflectivity palette is
+   bright and saturated, and it reads best against a near-black ground. */
+:root {
+  --bg: #0e1116;
+  --panel: #161b22;
+  --line: #2a313c;
+  --text: #e6e9ee;
+  --muted: #8b95a3;
+  --tornado: #ff2d2d;
+  --overhead: #ff7a1a;
+  --direct: #ffb020;
+  --nearby: #ffd84a;
+  --glancing: #7d8795;
+  --stale-bg: #5a1d1d;
+  --stale-text: #ffd9d9;
+  --basemap-filter: invert(1) grayscale(1) brightness(0.85) contrast(1.1);
+}
+:root[data-theme="light"] {
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --line: #d9dde3;
+  --text: #16191d;
+  --muted: #5d6673;
+  --stale-bg: #fde2e2;
+  --stale-text: #7a1010;
+  --basemap-filter: none;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#layout { flex: 1; display: flex; min-height: 0; }
+#map { flex: 1; min-width: 0; background: var(--bg); }
+#side {
+  width: 300px;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  overflow-y: auto;
+  padding: 8px 10px;
+}
+/* A card too narrow for both halves stacks them rather than squeezing the map to a sliver. */
+@media (max-width: 640px) {
+  #layout { flex-direction: column; }
+  #side { width: auto; max-height: 45%; border-left: 0; border-top: 1px solid var(--line); }
+}
+
+body[data-view="map"] #side,
+body[data-view="map"] #footer { display: none; }
+body[data-view="threats"] #map,
+body[data-view="storms"] #map { display: none; }
+body[data-view="threats"] #storms-section,
+body[data-view="storms"] #threats-section { display: none; }
+/* With the map gone the list is the whole card, whatever its width. */
+body[data-view="threats"] #side,
+body[data-view="storms"] #side { flex: 1; width: auto; max-height: none; border: 0; }
+
+h2 {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 6px 0;
+}
+.muted { color: var(--muted); font-weight: normal; letter-spacing: 0; text-transform: none; }
+
+.rows { list-style: none; margin: 0 0 12px; padding: 0; }
+.rows li {
+  border-left: 4px solid var(--glancing);
+  background: rgba(127, 127, 127, 0.08);
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  border-radius: 3px;
+}
+.rows li.empty { border-left-color: var(--line); color: var(--muted); }
+.rows .head { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; }
+.rows .range { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rows .detail { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+.rank-tornadic { border-left-color: var(--tornado) !important; background: rgba(255, 45, 45, 0.18) !important; }
+.rank-overhead { border-left-color: var(--overhead) !important; }
+.rank-direct { border-left-color: var(--direct) !important; }
+.rank-nearby { border-left-color: var(--nearby) !important; }
+
+.banner {
+  background: var(--stale-bg);
+  color: var(--stale-text);
+  padding: 6px 10px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+#footer {
+  padding: 3px 10px;
+  font-size: 11px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.basemap { filter: var(--basemap-filter); }
+.leaflet-container { background: var(--bg); font: inherit; }
+.leaflet-popup-content { margin: 10px 12px; }
+.storm-label {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: #fff;
+  font-weight: 700;
+  font-size: 11px;
+  text-shadow: 0 0 3px #000, 0 0 3px #000;
+}
+.storm-label::before { display: none; }

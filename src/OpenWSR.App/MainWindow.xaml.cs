@@ -128,6 +128,7 @@ public partial class MainWindow : Window
     private readonly MrmsController _mrms;
     private readonly MrmsController _hailField;
     private readonly TrayNotifier _tray;
+    private readonly DashboardPublisher _dashboard = new();
     private readonly PaneManager _panes;
     private readonly Geocoder _geocoder;
     private readonly AppSettings _settings;
@@ -395,6 +396,8 @@ public partial class MainWindow : Window
             SettingsButton_Click(this, new RoutedEventArgs());
         });
         _tray.ExitRequested += () => Dispatcher.BeginInvoke(ExitApplication);
+        _tray.DashboardRequested += () => Dispatcher.BeginInvoke(OpenDashboardInBrowser);
+        _dashboard.RunningChanged += () => _tray.SetDashboardAvailable(_dashboard.IsRunning);
         // Windows ends the session by calling Application.Shutdown, which still raises
         // Closing — so without this, logging off would run the close-to-tray path: it would
         // spend the one-time "OpenWSR is still watching" balloon on someone who is signing
@@ -413,10 +416,19 @@ public partial class MainWindow : Window
             _threats.EvaluateStorms(storms);
             UpdateStormMotion(storms);
             UpdateStormNote(storms);
+            PublishDashboard();
         });
-        _warnings.AlertsUpdated += alerts => Dispatcher.BeginInvoke(() => _threats.EvaluateWarnings(alerts));
+        _warnings.AlertsUpdated += alerts => Dispatcher.BeginInvoke(() =>
+        {
+            _threats.EvaluateWarnings(alerts);
+            PublishDashboard();
+        });
         _threats.ThreatDetected += threat => Dispatcher.BeginInvoke(() => OnThreat(threat));
-        _threats.ThreatsChanged += list => Dispatcher.BeginInvoke(() => ShowThreatList(list));
+        _threats.ThreatsChanged += list => Dispatcher.BeginInvoke(() =>
+        {
+            ShowThreatList(list);
+            PublishDashboard();
+        });
         _drawing.Changed += () => Dispatcher.BeginInvoke(() =>
         {
             ComposeOverlay();
@@ -546,6 +558,10 @@ public partial class MainWindow : Window
             // all. Cheap and idempotent: it re-points an already-armed watch.
             if (_inTray) EnsureStormWatchForHome();
 
+            // Before the startup loads below, which can take a while on a slow link: a tray
+            // start at login should have the dashboard answering as soon as it can.
+            await ApplyDashboardAsync();
+
             foreach (var source in settings.Placefiles.ToList())
                 await _placefiles.AddAsync(source);
             foreach (var path in settings.ImportedShapes.ToList())
@@ -570,6 +586,9 @@ public partial class MainWindow : Window
 
             _statusTimer.Stop();
             _tray.Dispose();
+            // Not awaited: the process is on its way out, and nothing here may block the UI
+            // thread on I/O. Kestrel's threads are background threads and go with it.
+            _ = _dashboard.DisposeAsync().AsTask();
             _placefiles.Dispose();
             _tracks.Dispose();
             _boundaries.Dispose();
@@ -754,6 +773,55 @@ public partial class MainWindow : Window
     {
         _exiting = true;
         Close();
+    }
+
+    // ---- the LAN dashboard ----
+    //
+    // The same watch, visible from another device. It sits on the watching side of the tray
+    // line — it adds no clock and fetches nothing, it republishes what the two polls produce —
+    // so it keeps serving while the window is hidden, which is when it is most useful.
+
+    /// <summary>
+    /// Start, stop or move the server to match settings. A port that cannot be had is an error
+    /// the user has to act on, so it goes to the error bar, and to a balloon as well when the
+    /// window is hidden and the bar is not on screen.
+    /// </summary>
+    private async Task ApplyDashboardAsync()
+    {
+        try
+        {
+            await _dashboard.ApplyAsync(_settings.DashboardEnabled, _settings.DashboardPort);
+            PublishDashboard();
+        }
+        catch (Exception ex)
+        {
+            // Everything, not only the bind failure: this runs discarded after Settings and
+            // inside the async Loaded handler, where anything uncaught either vanishes or takes
+            // the app down. Only an IOException carries a message written for a person.
+            Serilog.Log.Warning(ex, "Dashboard server could not be applied");
+            var message = ex is IOException ? ex.Message : $"The dashboard could not start: {ex.Message}";
+            ReportError(message);
+            if (_inTray) _tray.Notify("OpenWSR dashboard is off", message, urgent: false);
+        }
+    }
+
+    private void PublishDashboard() => _dashboard.Publish(_threats, _warnings, _storms);
+
+    private void OpenDashboardInBrowser()
+    {
+        if (_dashboard.Port is not { } port) return;
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(DashboardAddresses.Local(port))
+            {
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            Serilog.Log.Warning(ex, "Could not open the dashboard in a browser");
+            if (!_inTray) ReportError($"Could not open a browser. The dashboard is at {DashboardAddresses.Local(port)}");
+        }
     }
 
     // ---- messaging: transient status, persistent errors, determinate progress ----
@@ -3216,6 +3284,7 @@ public partial class MainWindow : Window
         _radar.Refresh();
 
         if (dialog.StartupWarning is { } startupWarning) ReportError(startupWarning);
+        _ = ApplyDashboardAsync();
 
         // A key pasted with the forecast page open has to reach it now. It caches the station
         // list it was built with, so waiting for the next ten-minute tick — or for the window

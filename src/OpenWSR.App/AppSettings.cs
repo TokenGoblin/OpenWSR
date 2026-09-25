@@ -275,6 +275,16 @@ public sealed class AppSettings
     public bool TrayHintShown { get; set; }
 
     /// <summary>
+    /// Serve the radar and alerts page to other devices on the network. Off by default: the
+    /// page is open to anyone who can reach this PC and it shows the saved places, which is
+    /// fine on a home network and is not a thing to switch on for someone.
+    /// </summary>
+    public bool DashboardEnabled { get; set; }
+
+    /// <summary>The port the dashboard listens on. Unregistered with IANA, and above 1024.</summary>
+    public int DashboardPort { get; set; } = DashboardAddresses.DefaultPort;
+
+    /// <summary>
     /// Whether the app has already asked Windows where this machine is.
     /// </summary>
     /// <remarks>

@@ -143,6 +143,16 @@ public partial class SettingsWindow : Window
         // ticked box over a Run key that is not there is a promise the app cannot keep.
         StartWithWindowsCheck.IsChecked = StartupRegistration.IsEnabled;
 
+        // A port the server cannot use — hand-edited, or from a restored file — shows as the
+        // default rather than as a value Save would then refuse.
+        var savedPort = DashboardAddresses.ParsePort(
+            settings.DashboardPort.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            ?? DashboardAddresses.DefaultPort;
+        DashboardPortBox.Text = savedPort.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        DashboardCheck.IsChecked = settings.DashboardEnabled;
+        DashboardPortBox.TextChanged += (_, _) => SyncDashboard();
+        SyncDashboard();
+
         RadiusCombo.SelectedIndex = settings.AlertRadiusKm switch
         {
             <= 15 => 0, <= 40 => 1, <= 80 => 2, _ => 3,
@@ -276,6 +286,29 @@ public partial class SettingsWindow : Window
         Save_Click(sender, e); // save the rest, then hand back to the map
     }
 
+    private void Dashboard_Toggled(object sender, RoutedEventArgs e) => SyncDashboard();
+
+    /// <summary>
+    /// The addresses shown are the ones this machine has right now, worked out each time the
+    /// dialog opens and never saved: a laptop's address changes with the network it is on,
+    /// and a saved copy would be a wrong answer waiting to be copied.
+    /// </summary>
+    private void SyncDashboard()
+    {
+        // Checked fires from InitializeComponent before the port box exists.
+        if (DashboardPortBox is null || DashboardUrls is null) return;
+        bool on = DashboardCheck.IsChecked == true;
+        DashboardPortBox.IsEnabled = on;
+        var port = DashboardAddresses.ParsePort(DashboardPortBox.Text);
+        DashboardUrls.ItemsSource = on && port is { } p ? DashboardAddresses.For(p) : null;
+        DashboardPortError.Visibility = Visibility.Collapsed;
+    }
+
+    private void CopyDashboardUrl_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string url }) Clipboard.SetText(url);
+    }
+
     private void UpdatePreview() =>
         UaPreview.Text = "Sends: " + (string.IsNullOrWhiteSpace(ContactBox.Text)
             ? "OpenWSR/0.1   (no contact — not recommended)"
@@ -293,6 +326,21 @@ public partial class SettingsWindow : Window
 
     private void Save_Click(object sender, RoutedEventArgs e)
     {
+        // Checked before anything is written, so a bad port leaves the dialog open with nothing
+        // half-saved behind it. Only while the dashboard is on: switched off, the box is
+        // disabled, and refusing a value nobody can edit would block every other setting.
+        bool dashboardOn = DashboardCheck.IsChecked == true;
+        var dashboardPort = DashboardAddresses.ParsePort(DashboardPortBox.Text);
+        if (!dashboardOn) dashboardPort ??= DashboardAddresses.DefaultPort;
+        if (dashboardPort is null)
+        {
+            DashboardPortError.Text = $"The dashboard port must be a number from {DashboardAddresses.MinPort} to 65535.";
+            DashboardPortError.Visibility = Visibility.Visible;
+            DashboardPortBox.Focus();
+            WantsHomePicker = WantsPaletteImport = false;
+            return;
+        }
+
         _settings.TileProvider = ProviderCombo.SelectedIndex switch
         {
             0 => "osm-dark",
@@ -366,6 +414,8 @@ public partial class SettingsWindow : Window
         _settings.CloseToTray = CloseToTrayCheck.IsChecked == true;
         _settings.MinimiseToTray = MinimiseToTrayCheck.IsChecked == true;
         _settings.StartInTray = StartInTrayCheck.IsChecked == true;
+        _settings.DashboardEnabled = dashboardOn;
+        _settings.DashboardPort = dashboardPort.Value;
 
         // Written here, with everything else, rather than when the box was ticked — that is
         // what makes Cancel mean something, and it is the same reason home is held pending.

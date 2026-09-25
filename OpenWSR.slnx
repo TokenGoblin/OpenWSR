@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/OpenWSR.App/OpenWSR.App.csproj" />
+    <Project Path="src/OpenWSR.Dashboard/OpenWSR.Dashboard.csproj" />
     <Project Path="src/OpenWSR.Geo/OpenWSR.Geo.csproj" />
     <Project Path="src/OpenWSR.Grib2/OpenWSR.Grib2.csproj" />
     <Project Path="src/OpenWSR.Harness/OpenWSR.Harness.csproj" />
@@ -12,6 +13,7 @@
     <Project Path="src/OpenWSR.Render/OpenWSR.Render.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/OpenWSR.Dashboard.Tests/OpenWSR.Dashboard.Tests.csproj" />
     <Project Path="tests/OpenWSR.Geo.Tests/OpenWSR.Geo.Tests.csproj" />
     <Project Path="tests/OpenWSR.App.Tests/OpenWSR.App.Tests.csproj" />
     <Project Path="tests/OpenWSR.Nexrad.Tests/OpenWSR.Nexrad.Tests.csproj" />

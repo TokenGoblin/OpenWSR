@@ -53,7 +53,7 @@ jobs:
       # EnableWindowsTargeting, but never run, so building them would prove nothing.
       - name: Build the pure libraries
         run: |
-          for p in Geo Grib2 NetCdf Nexrad Palettes Placefiles Ingest Harness; do
+          for p in Geo Grib2 NetCdf Nexrad Palettes Placefiles Ingest Harness Dashboard; do
             dotnet build "src/OpenWSR.$p" --configuration Release -warnaserror
           done
 
@@ -64,3 +64,4 @@ jobs:
         run: |
           dotnet test tests/OpenWSR.Geo.Tests --configuration Release
           dotnet test tests/OpenWSR.Nexrad.Tests --configuration Release
+          dotnet test tests/OpenWSR.Dashboard.Tests --configuration Release

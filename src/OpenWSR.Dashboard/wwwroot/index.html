@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenWSR Dashboard</title>
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+<div id="banner" class="banner" hidden></div>
+<main id="layout">
+  <div id="map" aria-label="Radar map"></div>
+  <aside id="side">
+    <section id="threats-section">
+      <h2>Approaching</h2>
+      <ol id="threats" class="rows"></ol>
+    </section>
+    <section id="storms-section">
+      <h2>Storm cells <span id="storm-site" class="muted"></span></h2>
+      <ol id="storms" class="rows"></ol>
+    </section>
+  </aside>
+</main>
+<footer id="footer"><span id="updated" class="muted"></span></footer>
+<script src="vendor/leaflet.js"></script>
+<script src="dashboard.js"></script>
+</body>
+</html>

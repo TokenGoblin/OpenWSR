@@ -62,6 +62,16 @@ public sealed class StormOverlayController : IDisposable
     public IReadOnlyList<TrackedStorm> Storms { get; private set; } = [];
     public bool IsEnabled => _site is not null;
 
+    /// <summary>The radar being watched, or null when the layer is off.</summary>
+    public string? Site => _site;
+
+    /// <summary>
+    /// When the last poll came back, whatever it found. Null while off or before the first
+    /// answer — and it does not move on a failed poll, which is how a dashboard can tell a
+    /// quiet sky from a broken fetch.
+    /// </summary>
+    public DateTimeOffset? LastRefreshUtc { get; private set; }
+
     public event Action? GeometryChanged;
     public event Action<IReadOnlyList<TrackedStorm>>? StormsUpdated;
     public event Action<string>? StatusChanged;
@@ -87,6 +97,11 @@ public sealed class StormOverlayController : IDisposable
 
     public void Enable(string icao)
     {
+        // Re-pointing at another radar drops what the last one saw. Otherwise its cells stay
+        // on the list under the new site's name, with the old refresh time vouching for them,
+        // until the new site's first poll lands — or for good, if that poll keeps failing.
+        if (_site is not null && !string.Equals(_site, icao, StringComparison.OrdinalIgnoreCase))
+            Clear();
         _site = icao;
         _timer.Start();
         _ = RefreshAsync();
@@ -96,6 +111,12 @@ public sealed class StormOverlayController : IDisposable
     {
         _timer.Stop();
         _site = null;
+        Clear();
+    }
+
+    private void Clear()
+    {
+        LastRefreshUtc = null;
         _fetchGeneration++;
         _nst = _nhi = _nmd = _nss = null;
         Storms = [];
@@ -147,6 +168,7 @@ public sealed class StormOverlayController : IDisposable
             _nhi = nhi.Result;
             _nmd = nmd.Result;
             _nss = nss.Result;
+            LastRefreshUtc = DateTimeOffset.UtcNow;
             BuildStorms();
             BuildGeometry();
             GeometryChanged?.Invoke();

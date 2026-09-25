@@ -127,6 +127,14 @@ personal weather stations, and **Ambient Weather** for reading a station you own
   for what is being watched or what is coming; right-click for Open, Settings and Exit.
   Optionally starts with Windows, straight into the tray. Second launches wake the copy that
   is already running instead of starting a duplicate that would alert you twice.
+- **Dashboard on your network** — off by default; switched on in Settings, OpenWSR serves a
+  page to other devices on the LAN with the radar, warning polygons, storm cells and tracks,
+  and the APPROACHING list, and keeps serving it from the tray. Built to sit in a Home
+  Assistant webpage card: no login, framing allowed, and `?view=map|threats|storms` and
+  `&theme=light` so each card can show one part. The radar is the IEM national mosaic loaded
+  by the viewing browser, so the host does no rendering for it. `/api/state`, `/api/threats`,
+  `/api/alerts` and `/api/storms` serve the same data as JSON. Anyone on the network can
+  open it, and it shows the saved places.
 
 **Map and overlays**
 
@@ -298,9 +306,10 @@ src/OpenWSR.Placefiles  GRLevelX placefile parser
 src/OpenWSR.Palettes    Colour tables and GR2Analyst .pal import
 src/OpenWSR.Render      D3D11 device, map/radar/overlay renderers, HwndHost
 src/OpenWSR.Ingest      S3 clients, caches, alerts, geocoding, site table
+src/OpenWSR.Dashboard   LAN dashboard server (Kestrel) and its embedded page
 src/OpenWSR.App         WPF shell
 src/OpenWSR.Harness     Console decoder harness and live soak
-tests/                  767 tests
+tests/                  795 tests
 docs/                   Format notes, verification, endpoints, parity, screenshots
 resources/              Cross-check scripts, sample placefiles, reference tables
 ```

@@ -2717,3 +2717,78 @@ picks up a new checkbox with no wiring — the second run found it already on, b
 had remembered it.
 
 **Gate:** [PASSED] 767/767 tests, 0 warnings.
+
+## A dashboard for the rest of the network — phase 1
+
+The watch already runs from the tray; the gap was that only this PC could see it. The ask was a
+page other devices could show — a phone, a wall tablet, and above all a Home Assistant webpage
+card — with the radar, the warnings, the storm cells and the APPROACHING list.
+
+- [x] **`OpenWSR.Dashboard`, a Kestrel server in its own `net10.0` project.** Not `HttpListener`:
+      http.sys needs a URL ACL or elevation to listen beyond localhost, and a portable exe can
+      arrange neither. Its own project so the Linux job builds and tests it alongside the other
+      portable libraries. The page, its script and a vendored Leaflet 1.9.4 are embedded
+      resources, so the single-file exe has nothing beside it to lose and a LAN with filtered
+      egress still gets its map library
+- [x] **On the watching side of the tray line.** `DashboardPublisher` republishes on the three
+      events the watch already raises and adds no clock and no fetch. Request threads read one
+      immutable `DashboardSnapshot`, serialised once per publish with an ETag, so a wall of
+      dashboards polling every thirty seconds costs a reference read and a 304
+- [x] **The radar is the browser's job in phase 1.** In the tray the renderer is paused and
+      `CaptureFrame` times out, so the page loads the IEM N0Q mosaic itself — the same URL as
+      `TileProvider.NexradMosaic` — over OSM tiles CSS-inverted for the dark theme, the same
+      idea as `TileToning` with no further tile provider involved
+- [x] **Stale must never look quiet.** The snapshot carries the warnings poll's own success
+      time — `WarningsController.LastRefreshUtc`, not the time of publishing — and the storm
+      poll's, null while no watch is armed. The page judges age against the server's `Date`
+      header rather than its own clock, and raises a red bar when it loses the server or the
+      warnings go five minutes without refreshing, the app's own threshold
+- [x] **Unfiltered warnings, trimmed by distance.** Unticking flood warnings tidies the map
+      and must not take them off a kitchen wall display, so the page gets
+      `WarningsController.AllAlerts` — cut to polygons with a vertex within 500 km of a watched
+      place, because the poll is national and the far side of the country is most of the payload
+- [x] **Off by default, open when on.** No token and framing allowed from anywhere
+      (`frame-ancestors *`, no `X-Frame-Options`), because that is what an HA webpage card
+      embeds; the Settings text says plainly that anyone on the network can open it and that it
+      shows the saved places. `AppSettings.Contact` never enters the snapshot. The addresses
+      shown in Settings are worked out when the dialog opens and never saved
+- [x] **A taken port is a sentence, not a stack trace:** "port N is already in use by another
+      program. Pick a different port in Settings", to the error bar and to a balloon when hidden.
+      The port is validated before anything in the dialog is written
+- [x] Tray menu gains "Open dashboard in browser", shown only while it is being served; the
+      guide gains "Watching from another screen", including the https mixed-content limit
+- [x] `/api/threats`, `/api/alerts` and `/api/storms` as slices, CORS-open, so Home Assistant
+      REST sensors can read them without a second feature
+
+Verified by serving a Norman-fixture snapshot and capturing the page in headless Edge at a
+desktop width, a narrow card width and `?view=threats&theme=light`: polygons, tracks, the
+place ring, live mosaic tiles and the list all drew, and the narrow layout stacks. That caught
+one fault the tests could not — the list-only view inherited the narrow layout's 45 % height
+cap and showed half a card.
+
+**Verified from a second device on the LAN:** the app serving the page to another machine,
+basic rendering confirmed. That needed the host's network profile set to Private and an
+inbound allow rule for the port — a dismissed first-bind prompt leaves a **block** rule for the
+exe on the Public profile, and block rules beat allow rules, so on a network Windows has
+classed as Public the dashboard is unreachable however the prompt is answered afterwards.
+**Not yet verified:** serving while in the tray, and a real Home Assistant card. **Phase 2** — OpenWSR rendering its own
+Level III site radar for the page, demand-gated so an unwatched dashboard costs the tray soak
+nothing — is next.
+
+### Review of the dashboard: three findings, all fixed
+
+- [x] **Overlapping applies started a second server.** Startup and a Settings save can both
+      apply, and the server only counts as running once its bind finishes — so the second call
+      saw it stopped and started another: a false "port in use", or on a different port a
+      leaked listener nothing could stop. `DashboardPublisher.ApplyAsync` is serialised, and
+      the shell now catches every failure rather than only `IOException`, since it runs
+      discarded after Settings and inside the async `Loaded` handler. A test applies two ports
+      at once and asserts the first is released; with the lock removed it fails
+- [x] **Re-pointing the storm watch kept the old radar's cells** under the new site's name, with
+      the old refresh time vouching for them. `StormOverlayController.Enable` clears them when
+      the site changes
+- [x] **A bad saved port blocked every Save**, while the dashboard was off and its port box
+      disabled. The port is only checked while the dashboard is on, and an unusable saved port
+      loads as the default
+
+**Gate:** [PASSED] 795/795 tests, 0 warnings (Debug and Release).

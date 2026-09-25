@@ -9,6 +9,7 @@ OpenWSR uses the following open-source components:
 | [AWS SDK for .NET](https://github.com/aws/aws-sdk-net) (AWSSDK.S3) | Apache-2.0 | Anonymous S3 access to NOAA Open Data |
 | [CommunityToolkit.Mvvm](https://github.com/CommunityToolkit/dotnet) | MIT | MVVM plumbing |
 | [Serilog](https://github.com/serilog/serilog) + Serilog.Sinks.File | Apache-2.0 | Logging |
+| [Leaflet](https://leafletjs.com/) 1.9.4 | BSD-2-Clause | Map on the LAN dashboard page; vendored in `src/OpenWSR.Dashboard/wwwroot/vendor` with its licence |
 
 ## Data sources
 
@@ -30,6 +31,9 @@ OpenWSR uses the following open-source components:
 - **Political boundaries** — US Census Bureau cartographic boundary files (2023, 1:500,000),
   public domain. Downloaded once on demand and cached locally.
 - **Hail size** — NOAA MRMS MESH via AWS Open Data (`noaa-mrms-pds`), public domain.
+- **Dashboard radar** — the Iowa Environmental Mesonet NEXRAD N0Q mosaic tiles
+  (`mesonet.agron.iastate.edu`), fetched by the browser viewing the LAN dashboard rather than
+  by OpenWSR, and attributed on the page.
 
 ## Prior art
 

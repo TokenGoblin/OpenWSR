@@ -21,6 +21,7 @@ public sealed class TrayNotifier : IDisposable
 {
     private readonly NotifyIcon _icon;
     private readonly ToolStripMenuItem _status;
+    private readonly ToolStripMenuItem _dashboard;
     private readonly Icon? _appIcon;
     private readonly Font? _boldMenuFont;
 
@@ -56,6 +57,11 @@ public sealed class TrayNotifier : IDisposable
         menu.Items.Add(open);
         menu.Items.Add(_status);
         menu.Items.Add(new ToolStripSeparator());
+        // Hidden rather than greyed while the server is off: a disabled item would be the app
+        // advertising a feature from a menu that is meant to be about the watch.
+        _dashboard = new ToolStripMenuItem(
+            "Open dashboard in browser", null, (_, _) => DashboardRequested?.Invoke()) { Visible = false };
+        menu.Items.Add(_dashboard);
         menu.Items.Add(new ToolStripMenuItem(
             "Settings…", null, (_, _) => SettingsRequested?.Invoke()));
         menu.Items.Add(new ToolStripSeparator());
@@ -83,6 +89,11 @@ public sealed class TrayNotifier : IDisposable
 
     /// <summary>Raised for the menu's Exit item: the only way out while the window is hidden.</summary>
     public event Action? ExitRequested;
+
+    /// <summary>Raised for "Open dashboard in browser", which shows only while it is being served.</summary>
+    public event Action? DashboardRequested;
+
+    public void SetDashboardAvailable(bool available) => _dashboard.Visible = available;
 
     /// <summary>
     /// What the icon says it is doing, on hover and at the top of its menu. See

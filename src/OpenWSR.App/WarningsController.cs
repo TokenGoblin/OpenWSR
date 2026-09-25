@@ -29,6 +29,16 @@ public sealed class WarningsController : IDisposable
     /// <summary>The active alert set (post type-filter); feeds the threat monitor.</summary>
     public IReadOnlyList<ActiveAlert> ActiveAlerts { get; private set; } = [];
 
+    /// <summary>
+    /// Every alert from the last fetch, before the layer's type filter. The dashboard draws
+    /// these: unticking flood warnings tidies this map, and must not take them off a wall
+    /// display in the kitchen.
+    /// </summary>
+    public IReadOnlyList<ActiveAlert> AllAlerts => _alerts;
+
+    /// <summary>When the last fetch succeeded, or null before the first one has.</summary>
+    public DateTimeOffset? LastRefreshUtc { get; private set; }
+
     // ---- layer filters; Rebuild() applies without refetching ----
     public bool ShowTornado { get; set; } = true;
     public bool ShowSevereThunderstorm { get; set; } = true;
@@ -74,7 +84,7 @@ public sealed class WarningsController : IDisposable
         AlertsUpdated?.Invoke(ActiveAlerts);
     }
 
-    private static (byte R, byte G, byte B) ColorFor(string eventName) => eventName switch
+    internal static (byte R, byte G, byte B) ColorFor(string eventName) => eventName switch
     {
         "Tornado Warning" => (255, 45, 45),
         "Severe Thunderstorm Warning" => (255, 220, 40),
@@ -88,6 +98,7 @@ public sealed class WarningsController : IDisposable
         try
         {
             _alerts = await _client.GetActiveAsync();
+            LastRefreshUtc = DateTimeOffset.UtcNow;
             _consecutiveFailures = 0;
         }
         catch (Exception ex)
